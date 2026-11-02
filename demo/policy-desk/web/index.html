@@ -21,6 +21,14 @@
     />
     <link rel="stylesheet" href="style.css" />
     <script>
+      // Pages on the old hostname are static assets the Worker never sees, so redirect here.
+      if (location.hostname === "mcp-tasks.bharath.sh")
+        location.replace(
+          "https://mcp-tasks.dev" +
+            location.pathname +
+            location.search +
+            location.hash,
+        );
       document.documentElement.classList.add("js");
     </script>
   </head>
