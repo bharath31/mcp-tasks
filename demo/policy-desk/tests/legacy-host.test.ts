@@ -35,6 +35,28 @@ describe("legacy host redirect", () => {
     assert.equal(legacyRedirect(post, env), null);
     assert.equal(legacyRedirect(authed, env), null);
   });
+  it("serves metadata and API GETs in place, even without Authorization", () => {
+    for (const path of [
+      "/.well-known/oauth-protected-resource/mcp",
+      "/.well-known/oauth-authorization-server",
+      "/mcp",
+      "/v1/whatever",
+      "/sandbox/start",
+      "/healthz",
+    ])
+      assert.equal(
+        legacyRedirect(new Request(`https://old.example.com${path}`), env),
+        null,
+        path,
+      );
+    for (const path of ["/", "/reviews", "/admin", "/approve/abc", "/mcpx"])
+      assert.equal(
+        legacyRedirect(new Request(`https://old.example.com${path}`), env)
+          ?.status,
+        301,
+        path,
+      );
+  });
   it("leaves other hosts and unconfigured deployments alone", () => {
     assert.equal(
       legacyRedirect(new Request("https://new.example/"), env),
