@@ -30,6 +30,7 @@
     "build:web": "node demo/tools/build-web.mjs && node demo/policy-desk/web/build.mjs && tsc -p auth0/approval-ui/tsconfig.json && tsc -p demo/refund-desk/web/tsconfig.json && tsc -p demo/policy-desk/web/tsconfig.json",
     "dev:demo": "npm run build:web && node --import tsx demo/refund-desk/src/server.ts",
     "preview:policy-desk": "node demo/policy-desk/web/preview/build.mjs --serve",
+    "og:render": "node --import tsx demo/policy-desk/web/og/render.ts",
     "verify:live": "node --import tsx demo/tools/verify-live.ts",
     "test:fullstack": "node --import tsx --test --test-concurrency=1 --test-timeout=240000 auth0/tests/e2e/fullstack.test.ts",
     "interop:claude-code": "npm run local --",

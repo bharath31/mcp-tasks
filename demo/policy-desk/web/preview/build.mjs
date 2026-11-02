@@ -1,6 +1,6 @@
 // Builds the console against in-memory fixtures (no Auth0, no Worker) for visual checks:
 //   npm run preview:policy-desk, then open http://localhost:8787
-// Open /?scene=busy|empty|new|out&lat=250. Never deployed.
+// Open /?scene=busy|empty|new|out|demo&lat=250. Never deployed.
 import { build } from "esbuild";
 import { copyFile, mkdir, readFile, rm } from "node:fs/promises";
 import { createServer } from "node:http";

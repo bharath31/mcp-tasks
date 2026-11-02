@@ -10,6 +10,7 @@ import type {
   Operation,
   PolicyView,
 } from "../src/types";
+import { demoApi } from "./demo";
 
 export const PENDING_KEY = "policy-desk.pending-decision";
 
@@ -236,6 +237,11 @@ const policy: PolicyView = {
 };
 
 export async function getApi(): Promise<Api> {
+  const api = await fixtureApi();
+  return SCENE === "demo" ? demoApi(api) : api;
+}
+
+async function fixtureApi(): Promise<Api> {
   const later = async <T>(v: T, ms = LAT): Promise<T> => {
     await wait(ms);
     return structuredClone(v);
