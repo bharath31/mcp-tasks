@@ -1,6 +1,7 @@
 // Cloudflare Worker entry. Migrations are bundled as text (see wrangler.jsonc rules).
 import { createApp } from "./app.js";
 import type { Env } from "./env.js";
+import { legacyRedirect } from "./legacy-host.js";
 import policyDesk0001 from "./migrations/0001_policy_desk.sql";
 import policyDesk0002 from "./migrations/0002_dpop_replay.sql";
 import policyDesk0003 from "./migrations/0003_runtime_role.sql";
@@ -42,6 +43,6 @@ export default {
     req: Request,
     env: Env,
     ctx: { waitUntil(p: Promise<unknown>): void },
-  ) => app.fetch(req, env, ctx),
+  ) => legacyRedirect(req, env) ?? app.fetch(req, env, ctx),
   scheduled: (_event: unknown, env: Env) => app.scheduled(env),
 };

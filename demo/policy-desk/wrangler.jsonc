@@ -3,8 +3,11 @@
   "name": "mcp-tasks-policy-desk",
   "main": "src/worker.ts",
   "compatibility_date": "2026-10-09",
-  // Live at the custom domain; replaces the Northstar Worker (mcp-tasks-dogfood-demo) on this hostname.
-  "routes": [{ "pattern": "mcp-tasks.bharath.sh", "custom_domain": true }],
+  // Live at mcp-tasks.dev. The old hostname stays attached so LEGACY_HOSTS can redirect it.
+  "routes": [
+    { "pattern": "mcp-tasks.dev", "custom_domain": true },
+    { "pattern": "mcp-tasks.bharath.sh", "custom_domain": true },
+  ],
   "compatibility_flags": ["nodejs_compat"],
   // Run next to the Supabase database (ap-northeast-1, Tokyo), not next to the visitor. A
   // request makes 5 to 100 sequential Postgres round trips; at the edge each one crossed an
@@ -52,7 +55,10 @@
     // The runtime role cannot run DDL; migrations run out of band (tools/migrate.ts).
     "MIGRATE_ON_REQUEST": "false",
     "AUTH0_DOMAIN": "bharath-okta.us.auth0.com",
+    // An API identifier, not a URL the app serves: it keeps the old hostname so issued tokens stay valid.
     "TASK_AUTHORITY_AUDIENCE": "https://mcp-tasks.bharath.sh/task-authority",
+    "CANONICAL_ORIGIN": "https://mcp-tasks.dev",
+    "LEGACY_HOSTS": "mcp-tasks.bharath.sh",
     "SPA_CLIENT_ID": "SWWlishqOFYa6WBEArV84p5rQgUxbEyG",
     "AUTH0_ORG_ID": "org_WherKsfWoCFrlyAT",
     "AGENT_ID": "agent_returns",

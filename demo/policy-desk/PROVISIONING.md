@@ -168,7 +168,7 @@ The numbered list below documents what the script configures, for review and for
   Order for an existing deployment: create the runtime role, run `tools/migrate.ts` as the owner, set
   `DATABASE_URL` to the runtime role, then deploy.
 
-- Build the UI (`web/dist`), then deploy yourself (`wrangler deploy`). `wrangler.jsonc` attaches the custom domain `mcp-tasks.bharath.sh`; change or remove `routes` for your own deployment.
+- Build the UI (`web/dist`), then deploy yourself (`wrangler deploy`). `wrangler.jsonc` attaches the custom domain `mcp-tasks.dev` (and keeps `mcp-tasks.bharath.sh` as a redirect via `LEGACY_HOSTS`); change or remove `routes`, `CANONICAL_ORIGIN` and `LEGACY_HOSTS` for your own deployment.
 - Worker vars: see `wrangler.jsonc` (`AUTH0_DOMAIN`, `TASK_AUTHORITY_AUDIENCE`, `SPA_CLIENT_ID`, `AUTH0_ORG_ID`,
   `AGENT_ID`, `HIGH_VALUE_QUORUM`, `FGA_API_URL`, `FGA_STORE_ID`).
 - Worker secrets: `wrangler secret put <NAME>` for every secret above and the optional `IP_HASH_SALT`.

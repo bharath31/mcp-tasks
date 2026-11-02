@@ -14,7 +14,7 @@ In scope:
 - Running an operation twice, running one that was not approved, or running one with arguments other than those approved.
 - Crossing a tenant, organization or sandbox boundary.
 - Leaking a secret, token or another user's data.
-- The hosted demo at <https://mcp-tasks.bharath.sh>, as long as you only use your own sandbox. Do not load-test it, and do not touch other people's sandboxes.
+- The hosted demo at <https://mcp-tasks.dev>, as long as you only use your own sandbox. Do not load-test it, and do not touch other people's sandboxes.
 
 Out of scope: the limits listed in [docs/security-model.md](docs/security-model.md) (for example, a compromised worker that holds provider credentials), simulated payments, and rate limits on the demo.
 
