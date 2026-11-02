@@ -18,6 +18,16 @@
     />
     <link rel="stylesheet" href="/style.css" />
     <link rel="stylesheet" href="/admin.css" />
+    <script>
+      // Same as index.html: static pages on the old hostname never reach the Worker.
+      if (location.hostname === "mcp-tasks.bharath.sh")
+        location.replace(
+          "https://mcp-tasks.dev" +
+            location.pathname +
+            location.search +
+            location.hash,
+        );
+    </script>
   </head>
   <body class="a-body">
     <div id="app"></div>
