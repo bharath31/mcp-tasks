@@ -106,6 +106,9 @@ export type Env = {
 
   HIGH_VALUE_QUORUM?: string;
   IP_HASH_SALT?: string;
+  /** Old hostnames (comma separated) whose browser visits redirect to CANONICAL_ORIGIN. */
+  LEGACY_HOSTS?: string;
+  CANONICAL_ORIGIN?: string;
 };
 
 export const RESOURCE_SERVER =

@@ -6,7 +6,7 @@
 <p align="center">
   <a href="https://github.com/bharath31/mcp-tasks/actions/workflows/ci.yml"><img alt="CI" src="https://github.com/bharath31/mcp-tasks/actions/workflows/ci.yml/badge.svg"></a>
   <a href="LICENSE"><img alt="MIT license" src="https://img.shields.io/badge/license-MIT-black"></a>
-  <a href="https://mcp-tasks.bharath.sh"><img alt="Live demo" src="https://img.shields.io/badge/live%20demo-mcp--tasks.bharath.sh-black"></a>
+  <a href="https://mcp-tasks.dev"><img alt="Live demo" src="https://img.shields.io/badge/live%20demo-mcp--tasks.dev-black"></a>
 </p>
 
 # MCP Tasks + human approvals

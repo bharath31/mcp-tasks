@@ -1,4 +1,4 @@
-# Deploys the hosted Policy Desk demo (mcp-tasks.bharath.sh) after CI passes on main.
+# Deploys the hosted Policy Desk demo (mcp-tasks.dev) after CI passes on main.
 # Needs repository secrets CLOUDFLARE_API_TOKEN (Workers edit) and CLOUDFLARE_ACCOUNT_ID.
 # If OWNER_DATABASE_URL is set, migrations run first as the database owner (the live Worker has
 # MIGRATE_ON_REQUEST=false). Worker secrets and Auth0 Actions are not touched here.
@@ -51,7 +51,7 @@ jobs:
       - name: Health check
         run: |
           for i in 1 2 3 4 5 6; do
-            code=$(curl -s -o /tmp/healthz -w "%{http_code}" https://mcp-tasks.bharath.sh/healthz || true)
+            code=$(curl -s -o /tmp/healthz -w "%{http_code}" https://mcp-tasks.dev/healthz || true)
             echo "attempt $i: HTTP $code $(head -c 200 /tmp/healthz)"
             [ "$code" = 200 ] && exit 0
             # Cloudflare's bot challenge blocks GitHub runner IPs; the deploy step already succeeded.

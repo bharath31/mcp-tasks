@@ -8,7 +8,7 @@ The repository's About box (description, website and topics) lives in GitHub set
 
 > Unofficial reference implementation of MCP Tasks with human approvals. An agent's side effects wait until a person approves that exact operation with Auth0, using a passkey for high-value actions.
 
-**Website:** https://mcp-tasks.bharath.sh
+**Website:** https://mcp-tasks.dev
 
 **Topics** (GitHub allows 20):
 
@@ -23,7 +23,7 @@ REPO=bharath31/mcp-tasks
 
 gh repo edit "$REPO" \
   --description "Unofficial reference implementation of MCP Tasks with human approvals. An agent's side effects wait until a person approves that exact operation with Auth0, using a passkey for high-value actions." \
-  --homepage "https://mcp-tasks.bharath.sh"
+  --homepage "https://mcp-tasks.dev"
 
 # Replaces the whole topic list, so it also removes any topic not named here.
 gh api -X PUT "repos/$REPO/topics" -H "Accept: application/vnd.github+json" \
