@@ -286,7 +286,7 @@ export async function requestRefund(
     try {
       if (who.actorType === "agent") requireDelegation(host, s);
       const cfg = approvalConfig(host.env, {
-        appUrl: host.env.APP_URL ?? host.origin,
+        appUrl: host.env.CANONICAL_ORIGIN ?? host.env.APP_URL ?? host.origin,
         clientId: host.env.APPROVAL_CLIENT_ID ?? host.env.AUTH0_CLIENT_ID,
         clientSecret:
           host.env.APPROVAL_CLIENT_SECRET ?? host.env.AUTH0_CLIENT_SECRET,

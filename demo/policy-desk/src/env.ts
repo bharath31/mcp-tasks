@@ -108,6 +108,7 @@ export type Env = {
   IP_HASH_SALT?: string;
   /** Old hostnames (comma separated) whose browser visits redirect to CANONICAL_ORIGIN. */
   LEGACY_HOSTS?: string;
+  /** The app's public origin. Approval links use it ahead of APP_URL and the request origin. */
   CANONICAL_ORIGIN?: string;
 };
 
