@@ -3057,6 +3057,11 @@ details.inline-fold > :not(summary) {
 .composer {
   margin: 12px 20px 16px;
 }
+/* `.panel.chat > * + *` zeroes margin-top and outranks `.composer`, which left the
+   suggestion chips (and their focus ring) touching the box. Keep the gap. */
+.panel.chat > .composer {
+  margin-top: 12px;
+}
 .refunds .meter-row {
   display: grid;
   gap: 6px;
