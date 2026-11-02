@@ -1,0 +1,21 @@
+{
+  "name": "@task-authority/service",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Proposed Auth0 Task Authority service (reference implementation, not an Auth0 product).",
+  "scripts": {
+    "start": "node --import tsx src/server.ts",
+    "migrate": "node --import tsx src/migrate-cli.ts"
+  },
+  "dependencies": {
+    "@task-authority/sdk": "*",
+    "@task-authority/contracts": "*",
+    "jose": "6.2.12",
+    "pg": "8.23.1",
+    "zod": "4.6.7"
+  },
+  "devDependencies": {
+    "@types/pg": "8.23.1"
+  }
+}

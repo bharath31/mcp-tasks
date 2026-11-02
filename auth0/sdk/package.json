@@ -1,0 +1,49 @@
+{
+  "name": "@task-authority/sdk",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Prototype TypeScript SDK for the proposed Auth0 Task Authority service. Local, unpublished working package; not an official Auth0 SDK.",
+  "exports": {
+    ".": {
+      "types": "./src/index.ts",
+      "default": "./src/index.ts"
+    },
+    "./mcp-tasks": {
+      "types": "./src/mcp-tasks.ts",
+      "default": "./src/mcp-tasks.ts"
+    },
+    "./approve": {
+      "types": "./src/approve/index.ts",
+      "default": "./src/approve/index.ts"
+    },
+    "./approve/cloudflare": {
+      "types": "./src/approve/cloudflare.ts",
+      "default": "./src/approve/cloudflare.ts"
+    },
+    "./approve/inngest": {
+      "types": "./src/approve/inngest.ts",
+      "default": "./src/approve/inngest.ts"
+    },
+    "./approve/temporal": {
+      "types": "./src/approve/temporal.ts",
+      "default": "./src/approve/temporal.ts"
+    },
+    "./approve/vercel": {
+      "types": "./src/approve/vercel.ts",
+      "default": "./src/approve/vercel.ts"
+    },
+    "./approve/ledger": {
+      "types": "./src/approve/ledger.ts",
+      "default": "./src/approve/ledger.ts"
+    },
+    "./approve/verify": {
+      "types": "./src/approve/verify.ts",
+      "default": "./src/approve/verify.ts"
+    }
+  },
+  "dependencies": {
+    "@task-authority/contracts": "*",
+    "jose": "6.2.12"
+  }
+}

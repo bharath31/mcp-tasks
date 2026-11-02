@@ -1,0 +1,58 @@
+# Deterministic CI: external services are faked or local. This does NOT cover
+# live gates (Auth0 tenant, FGA SaaS, Stripe test mode, mainstream MCP clients).
+name: ci
+on: [push, pull_request]
+permissions:
+  contents: read
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:17-alpine
+        env:
+          {
+            POSTGRES_USER: dogfood,
+            POSTGRES_PASSWORD: local-only,
+            POSTGRES_DB: postgres,
+          }
+        ports: ["55432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U dogfood" --health-interval 2s --health-timeout 2s --health-retries 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: 22, cache: npm }
+      - run: npm ci
+      - run: npm run check # build, lint, test: the same command developers run
+      # Optional: real OpenFGA run (set OPENFGA_BIN to a downloaded server binary)
+  # Real processes, the official MCP Tasks requester and the reviewer page in real Chromium
+  # (local OIDC provider, OpenFGA-API fake). Separate job: slower, and needs a browser.
+  fullstack:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:17-alpine
+        env:
+          {
+            POSTGRES_USER: dogfood,
+            POSTGRES_PASSWORD: local-only,
+            POSTGRES_DB: postgres,
+          }
+        ports: ["55432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U dogfood" --health-interval 2s --health-timeout 2s --health-retries 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: 22, cache: npm }
+      - run: npm ci
+      - run: npm run build
+      - run: npx playwright-core install --with-deps chromium
+      - run: echo "CHROMIUM_PATH=$(find ~/.cache/ms-playwright -path '*chrome-linux*/chrome' -type f | head -1)" >> "$GITHUB_ENV"
+      - run: test -x "$CHROMIUM_PATH"
+      - run: npm run test:fullstack
+      - run: npm run test:admin

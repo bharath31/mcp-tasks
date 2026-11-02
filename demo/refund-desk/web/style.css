@@ -1,0 +1,246 @@
+:root {
+  --bg: #f7f7f5;
+  --surface: #fff;
+  --text: #1b1b1a;
+  --muted: #5d5d58;
+  --line: #dcdcd6;
+  --accent: #1f5fd1;
+  --ok: #176c3a;
+  --warn: #8a5a00;
+  --bad: #a3231f;
+  --code: #efefea;
+  --customer: #1f5fd1;
+  --authority: #7a2fb5;
+  --provider: #8a5a00;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #131312;
+    --surface: #1c1c1a;
+    --text: #ecece8;
+    --muted: #a5a59d;
+    --line: #34342f;
+    --accent: #7aa7ff;
+    --ok: #5fcf8a;
+    --warn: #e0b04a;
+    --bad: #ff8a84;
+    --code: #262623;
+    --customer: #7aa7ff;
+    --authority: #c79bff;
+    --provider: #e0b04a;
+  }
+}
+* {
+  box-sizing: border-box;
+}
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--text);
+  font:
+    16px/1.5 system-ui,
+    -apple-system,
+    "Segoe UI",
+    sans-serif;
+}
+main {
+  max-width: 980px;
+  margin: 0 auto;
+  padding: 24px 16px 64px;
+}
+h1 {
+  font-size: 1.6rem;
+  margin: 0 0 4px;
+}
+h2 {
+  font-size: 1.2rem;
+  margin: 32px 0 8px;
+}
+h3 {
+  font-size: 1rem;
+  margin: 20px 0 6px;
+}
+p,
+li {
+  max-width: 72ch;
+}
+.sub {
+  color: var(--muted);
+  margin: 0 0 12px;
+}
+.banner {
+  border: 1px solid var(--line);
+  background: var(--surface);
+  border-radius: 8px;
+  padding: 10px 12px;
+  margin: 12px 0;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 16px;
+  align-items: center;
+}
+.pill {
+  display: inline-block;
+  padding: 1px 8px;
+  border-radius: 999px;
+  border: 1px solid var(--line);
+  font-size: 0.8rem;
+  background: var(--code);
+}
+.pill.live {
+  color: var(--ok);
+}
+.pill.fixture {
+  color: var(--warn);
+}
+.pill.off {
+  color: var(--bad);
+}
+nav {
+  display: flex;
+  gap: 4px;
+  flex-wrap: wrap;
+  border-bottom: 1px solid var(--line);
+  margin-top: 16px;
+}
+nav button {
+  background: none;
+  border: 0;
+  border-bottom: 3px solid transparent;
+  padding: 10px 12px;
+  font: inherit;
+  color: var(--muted);
+  cursor: pointer;
+}
+nav button[aria-selected="true"] {
+  color: var(--text);
+  border-color: var(--accent);
+}
+section[hidden] {
+  display: none;
+}
+.card {
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 12px 14px;
+  margin: 10px 0;
+}
+pre,
+code {
+  background: var(--code);
+  border-radius: 6px;
+  font:
+    13px/1.45 ui-monospace,
+    SFMono-Regular,
+    Menlo,
+    monospace;
+}
+pre {
+  padding: 10px 12px;
+  overflow-x: auto;
+  white-space: pre-wrap;
+  word-break: break-word;
+  margin: 6px 0;
+}
+code {
+  padding: 1px 5px;
+}
+button.act,
+a.btn {
+  font: inherit;
+  background: var(--accent);
+  color: #fff;
+  border: 0;
+  border-radius: 6px;
+  padding: 8px 12px;
+  cursor: pointer;
+  text-decoration: none;
+  display: inline-block;
+}
+button.act.secondary {
+  background: transparent;
+  color: var(--accent);
+  border: 1px solid var(--accent);
+}
+button.act.danger {
+  background: var(--bad);
+}
+button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+input {
+  font: inherit;
+  background: var(--surface);
+  color: var(--text);
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  padding: 7px 9px;
+  width: 100%;
+  max-width: 420px;
+}
+label {
+  display: block;
+  font-size: 0.85rem;
+  color: var(--muted);
+  margin: 8px 0 2px;
+}
+.row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+  margin: 8px 0;
+}
+table {
+  border-collapse: collapse;
+  width: 100%;
+  font-size: 0.9rem;
+}
+th,
+td {
+  text-align: left;
+  padding: 6px 8px;
+  border-bottom: 1px solid var(--line);
+  vertical-align: top;
+}
+.layer-customer {
+  color: var(--customer);
+}
+.layer-authority {
+  color: var(--authority);
+}
+.grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+  gap: 10px;
+}
+.deny {
+  border-left: 4px solid var(--bad);
+}
+.allow {
+  border-left: 4px solid var(--ok);
+}
+.note {
+  border-left: 4px solid var(--warn);
+}
+svg text {
+  fill: var(--text);
+  font:
+    12px system-ui,
+    sans-serif;
+}
+svg .box {
+  fill: var(--surface);
+  stroke: var(--line);
+}
+svg .edge {
+  stroke: var(--muted);
+  fill: none;
+}
+@media (max-width: 560px) {
+  main {
+    padding: 16px;
+  }
+}

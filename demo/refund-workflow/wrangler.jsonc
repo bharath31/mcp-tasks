@@ -1,0 +1,25 @@
+{
+  "$schema": "../../node_modules/wrangler/config-schema.json",
+  "name": "refund-workflow",
+  "main": "src/worker.ts",
+  "compatibility_date": "2026-10-09",
+  "workflows": [
+    {
+      "name": "refund-workflow",
+      "binding": "REFUNDS",
+      "class_name": "RefundWorkflow",
+    },
+  ],
+  // Holds each run's approval link so the demo page can show it. A real app emails it.
+  // `wrangler kv namespace create LINKS` prints the id to put here before deploying.
+  "kv_namespaces": [
+    { "binding": "LINKS", "id": "REPLACE_WITH_KV_NAMESPACE_ID" },
+  ],
+  "observability": { "enabled": true },
+  // Public values. Set AUTH0_CLIENT_SECRET with `wrangler secret put AUTH0_CLIENT_SECRET`.
+  "vars": {
+    "AUTH0_DOMAIN": "your-tenant.us.auth0.com",
+    "AUTH0_CLIENT_ID": "your-client-id",
+    "APP_URL": "https://refund-workflow.your-subdomain.workers.dev",
+  },
+}

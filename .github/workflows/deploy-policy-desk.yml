@@ -1,0 +1,64 @@
+# Deploys the hosted Policy Desk demo (mcp-tasks.bharath.sh) after CI passes on main.
+# Needs repository secrets CLOUDFLARE_API_TOKEN (Workers edit) and CLOUDFLARE_ACCOUNT_ID.
+# If OWNER_DATABASE_URL is set, migrations run first as the database owner (the live Worker has
+# MIGRATE_ON_REQUEST=false). Worker secrets and Auth0 Actions are not touched here.
+# Only runs in the maintainer's repository: a copy made by the Deploy button or a fork deploys
+# through Workers Builds (the root wrangler.jsonc), not this workflow.
+name: deploy policy-desk
+on:
+  workflow_run:
+    workflows: [ci]
+    types: [completed]
+    branches: [main]
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: deploy-policy-desk
+  cancel-in-progress: false
+jobs:
+  deploy:
+    if: >-
+      github.repository_owner == 'bharath31' && (
+      github.event_name == 'workflow_dispatch' ||
+      (github.event.workflow_run.conclusion == 'success' &&
+       github.event.workflow_run.event == 'push' &&
+       github.event.workflow_run.head_repository.full_name == github.repository))
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.workflow_run.head_sha || github.sha }}
+      - uses: actions/setup-node@v4
+        with: { node-version: 22, cache: npm }
+      - run: npm ci
+      - name: Migrate (owner role)
+        env:
+          OWNER_DATABASE_URL: ${{ secrets.OWNER_DATABASE_URL }}
+        run: |
+          if [ -z "$OWNER_DATABASE_URL" ]; then echo "OWNER_DATABASE_URL not set; skipping migrations"; exit 0; fi
+          npx tsx demo/policy-desk/tools/migrate.ts
+      - name: Build the web bundle
+        run: node demo/policy-desk/web/build.mjs
+      - name: Deploy the Worker
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          SHA: ${{ github.event.workflow_run.head_sha || github.sha }}
+        run: >-
+          npx wrangler deploy --config demo/policy-desk/wrangler.jsonc
+          --message "main ${SHA::7} via GitHub Actions"
+      - name: Health check
+        run: |
+          for i in 1 2 3 4 5 6; do
+            code=$(curl -s -o /tmp/healthz -w "%{http_code}" https://mcp-tasks.bharath.sh/healthz || true)
+            echo "attempt $i: HTTP $code $(head -c 200 /tmp/healthz)"
+            [ "$code" = 200 ] && exit 0
+            # Cloudflare's bot challenge blocks GitHub runner IPs; the deploy step already succeeded.
+            if [ "$code" = 403 ] && grep -q "Just a moment" /tmp/healthz; then
+              echo "::warning::healthz is behind Cloudflare's bot challenge for runner IPs; not checked"
+              exit 0
+            fi
+            sleep 10
+          done
+          exit 1

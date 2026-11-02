@@ -1,0 +1,8 @@
+# Cloudflare static-asset headers. The approval page approves money movements in one click,
+# so no other site may frame it (clickjacking); the rest are cheap defaults.
+/*
+  Content-Security-Policy: frame-ancestors 'none'; base-uri 'self'; object-src 'none'; form-action 'self'
+  X-Frame-Options: DENY
+  X-Content-Type-Options: nosniff
+  Referrer-Policy: strict-origin-when-cross-origin
+  Permissions-Policy: camera=(), microphone=(), geolocation=()

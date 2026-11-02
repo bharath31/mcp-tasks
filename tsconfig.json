@@ -1,0 +1,23 @@
+{
+  "compilerOptions": {
+    "target": "ES2023",
+    "module": "NodeNext",
+    "moduleResolution": "NodeNext",
+    "strict": true,
+    "esModuleInterop": true,
+    "skipLibCheck": true,
+    "resolveJsonModule": true,
+    "noUncheckedIndexedAccess": true,
+    "outDir": "dist"
+  },
+  "include": ["auth0/**/*.ts", "demo/**/*.ts"],
+  "exclude": [
+    "node_modules",
+    "dist",
+    "**/dist",
+    "demo/refund-desk/web",
+    "demo/policy-desk/web",
+    "auth0/approval-ui",
+    "demo/refund-workflow"
+  ]
+}

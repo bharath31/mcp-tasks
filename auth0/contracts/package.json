@@ -1,0 +1,16 @@
+{
+  "name": "@task-authority/contracts",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Schemas, types and error codes shared by the Task Authority service, SDK and tests. No privileged server logic.",
+  "exports": {
+    ".": {
+      "types": "./src/index.ts",
+      "default": "./src/index.ts"
+    }
+  },
+  "dependencies": {
+    "zod": "4.6.7"
+  }
+}

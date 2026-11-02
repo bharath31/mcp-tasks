@@ -1,0 +1,13 @@
+{
+  "name": "@task-authority/test-fixtures",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Data-only fixtures (people, organizations, relationship tuples). No server logic.",
+  "exports": {
+    ".": {
+      "types": "./index.ts",
+      "default": "./index.ts"
+    }
+  }
+}

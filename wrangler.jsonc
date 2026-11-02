@@ -1,0 +1,58 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  // Deploy-to-Cloudflare target: your own copy of the full stack (Task Authority service,
+  // the refund app with its MCP server, and the approval page) in one Worker.
+  // Same code as demo/policy-desk/wrangler.jsonc, but with no custom domain and no
+  // tenant-specific values: those are Worker secrets that `npm run setup` sets after
+  // the first deploy, so redeploys from your repo never overwrite them.
+  // Guide: docs/deploy-cloudflare.md
+  "name": "mcp-tasks",
+  "main": "demo/policy-desk/src/worker.ts",
+  "compatibility_date": "2026-10-09",
+  "compatibility_flags": ["nodejs_compat"],
+  // Each request makes many sequential Postgres round trips, so run near the database
+  // rather than near the visitor. Your database could be anywhere, so let Cloudflare learn
+  // where; if you know its cloud region, set "region" instead (as demo/policy-desk does).
+  "placement": { "mode": "smart" },
+  "workers_dev": true,
+  "preview_urls": false,
+  "assets": {
+    "directory": "demo/policy-desk/web/dist",
+    "binding": "ASSETS",
+    "not_found_handling": "single-page-application",
+    "run_worker_first": [
+      "/sandbox/*",
+      "/v1/*",
+      "/healthz",
+      "/mcp",
+      "/.well-known/*",
+    ],
+  },
+  // auth0/service/src/store.ts resolves its migrations folder from import.meta.url at
+  // module load; workerd has no file URL, so give the bundle a constant (never read).
+  "define": { "import.meta.url": "\"file:///policy-desk/src/\"" },
+  "rules": [{ "type": "Text", "globs": ["**/*.sql"], "fallthrough": true }],
+  // Workers AI runs the refund agent's model. Provisioned with the Worker; no API key.
+  "ai": { "binding": "AI" },
+  // Sandbox cleanup (sandboxes live 15 minutes).
+  "triggers": { "crons": ["*/5 * * * *"] },
+  // Edge per-IP limit on /sandbox/* and /v1/*, checked before the Postgres limiter.
+  "ratelimits": [
+    {
+      "name": "EDGE_LIMIT",
+      "namespace_id": "1001",
+      "simple": { "limit": 60, "period": 60 },
+    },
+  ],
+  "observability": { "enabled": true },
+  // Public, tenant-independent values only. Everything that names your Auth0 tenant,
+  // FGA store or database is a secret set by `npm run setup` (docs/deploy-cloudflare.md).
+  "vars": {
+    // setup migrates the schema as the database owner and gives the Worker a DML-only
+    // role, so the Worker never runs DDL.
+    "MIGRATE_ON_REQUEST": "false",
+    "AGENT_ID": "agent_returns",
+    "AGENT_MODEL": "@cf/zai-org/glm-4.7-flash",
+    "HIGH_VALUE_QUORUM": "1",
+  },
+}

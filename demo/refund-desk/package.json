@@ -1,0 +1,19 @@
+{
+  "name": "@task-authority/refund-desk",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Customer reference application: Northstar refunds over MCP Tasks, using only the Task Authority SDK for authorization lifecycle.",
+  "dependencies": {
+    "@task-authority/sdk": "*",
+    "@modelcontextprotocol/ext-tasks": "0.2.2",
+    "pg": "8.23.1",
+    "stripe": "23.0.0",
+    "zod": "4.6.7",
+    "@auth0/auth0-api-js": "1.6.1"
+  },
+  "scripts": {
+    "start": "node --import tsx src/server.ts",
+    "refund": "node --import tsx src/cli.ts"
+  }
+}

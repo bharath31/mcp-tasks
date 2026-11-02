@@ -1,0 +1,21 @@
+{
+  "name": "@task-authority/policy-desk",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Public Policy Desk sandbox: a Cloudflare Worker hosting the real Task Authority service and a refund app, with real Auth0 identity and simulated payments.",
+  "scripts": {
+    "dev": "wrangler dev --local",
+    "typecheck": "tsc --noEmit -p ../../tsconfig.json",
+    "test": "node --import tsx --test --test-concurrency=1 --test-timeout=120000 tests/*.test.ts"
+  },
+  "dependencies": {
+    "@task-authority/sdk": "*",
+    "jose": "6.2.12",
+    "pg": "8.23.1",
+    "zod": "4.6.7"
+  },
+  "devDependencies": {
+    "wrangler": "4.149.0"
+  }
+}

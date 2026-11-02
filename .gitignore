@@ -1,0 +1,20 @@
+node_modules/
+dist/
+.env
+.env.*
+!.env.example
+coverage/
+*.log
+.DS_Store
+.wrangler/
+.dev.vars*
+!*.example
+playwright-report/
+test-results/
+.local/
+demo/refund-desk/web/dist/
+
+# Local tooling output
+.playwright-mcp/
+demo/policy-desk/web/.shots/
+demo/policy-desk/web/.taste-skill/

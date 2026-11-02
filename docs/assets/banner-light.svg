@@ -1,0 +1,43 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1280" height="420" viewBox="0 0 1280 420" role="img" aria-label="MCP Tasks with Auth0 approvals: an unofficial reference implementation">
+<defs>
+<pattern id="d" width="24" height="24" patternUnits="userSpaceOnUse"><circle cx="1.5" cy="1.5" r="1.2" fill="#ececec"/></pattern>
+<linearGradient id="f" x1="0" y1="0" x2="1" y2="0"><stop offset="0" stop-color="#ffffff" stop-opacity="1"/><stop offset="0.55" stop-color="#ffffff" stop-opacity="0.6"/><stop offset="1" stop-color="#ffffff" stop-opacity="0"/></linearGradient>
+</defs>
+<rect x="0.5" y="0.5" width="1279" height="419" rx="16" fill="#ffffff" stroke="#eaeaea"/>
+<rect x="1" y="1" width="1278" height="418" rx="16" fill="url(#d)"/>
+<rect x="1" y="1" width="760" height="418" rx="16" fill="url(#f)"/>
+<rect x="64" y="64" width="292" height="30" rx="15" fill="#fafafa" stroke="#eaeaea"/>
+<circle cx="84" cy="79" r="4" fill="#f5a623"/>
+<text x="98" y="84" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Inter, Helvetica, Arial, sans-serif" font-size="14" font-weight="500" fill="#666666">Unofficial reference implementation</text>
+<text x="62" y="160" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Inter, Helvetica, Arial, sans-serif" font-size="56" font-weight="700" letter-spacing="-2" fill="#0a0a0a">MCP Tasks</text>
+<text x="62" y="222" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Inter, Helvetica, Arial, sans-serif" font-size="56" font-weight="700" letter-spacing="-2" fill="#666666">+ human approvals</text>
+<text x="64" y="276" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Inter, Helvetica, Arial, sans-serif" font-size="20" fill="#666666">Agents ask. Your policy decides. A person approves the exact</text>
+<text x="64" y="304" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Inter, Helvetica, Arial, sans-serif" font-size="20" fill="#666666">operation with Auth0. The task resumes and runs once.</text>
+<text x="64" y="364" font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, monospace" font-size="15" fill="#666666">npm run local  ·  npm run setup  ·  MIT</text>
+<rect x="760" y="56" width="456" height="308" rx="12" fill="#ffffff" stroke="#eaeaea"/>
+<text x="784" y="92" font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, monospace" font-size="13" fill="#666666">task 7f3a…c21 · io.modelcontextprotocol/tasks</text>
+<line x1="760" y1="110" x2="1216" y2="110" stroke="#eaeaea"/>
+<circle cx="792" cy="143" r="6" fill="#f2f2f2" stroke="#8f8f8f" stroke-width="2"/>
+<line x1="792" y1="151" x2="792" y2="201" stroke="#eaeaea" stroke-width="2"/>
+<text x="812" y="136" font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, monospace" font-size="11" fill="#666666" letter-spacing="0.5">TOOLS/CALL</text>
+<text x="812" y="156" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Inter, Helvetica, Arial, sans-serif" font-size="14" fill="#0a0a0a">request_refund · $1,500 · cracked standing desk</text>
+<rect x="1116" y="118" width="76" height="22" rx="11" fill="#f2f2f2"/>
+<text x="1154.0" y="133" text-anchor="middle" font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, monospace" font-size="12" font-weight="600" fill="#8f8f8f">working</text>
+<circle cx="792" cy="205" r="6" fill="#fff7e6" stroke="#f5a623" stroke-width="2"/>
+<line x1="792" y1="213" x2="792" y2="263" stroke="#eaeaea" stroke-width="2"/>
+<text x="812" y="198" font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, monospace" font-size="11" fill="#666666" letter-spacing="0.5">POLICY</text>
+<text x="812" y="218" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Inter, Helvetica, Arial, sans-serif" font-size="14" fill="#0a0a0a">refund:create over $1,000 needs a person</text>
+<rect x="1060" y="180" width="132" height="22" rx="11" fill="#fff7e6"/>
+<text x="1126.0" y="195" text-anchor="middle" font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, monospace" font-size="12" font-weight="600" fill="#f5a623">input_required</text>
+<circle cx="792" cy="267" r="6" fill="#e9f8ef" stroke="#1a9b4b" stroke-width="2"/>
+<line x1="792" y1="275" x2="792" y2="325" stroke="#eaeaea" stroke-width="2"/>
+<text x="812" y="260" font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, monospace" font-size="11" fill="#666666" letter-spacing="0.5">APPROVAL</text>
+<text x="812" y="280" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Inter, Helvetica, Arial, sans-serif" font-size="14" fill="#0a0a0a">Reviewer confirms with a passkey, bound to this refund</text>
+<rect x="1116" y="242" width="76" height="22" rx="11" fill="#e9f8ef"/>
+<text x="1154.0" y="257" text-anchor="middle" font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, monospace" font-size="12" font-weight="600" fill="#1a9b4b">working</text>
+<circle cx="792" cy="329" r="6" fill="#eaf3ff" stroke="#0068d6" stroke-width="2"/>
+<text x="812" y="322" font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, monospace" font-size="11" fill="#666666" letter-spacing="0.5">CLAIM</text>
+<text x="812" y="342" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Inter, Helvetica, Arial, sans-serif" font-size="14" fill="#0a0a0a">Claimed once, refund runs once, audit recorded</text>
+<rect x="1100" y="304" width="92" height="22" rx="11" fill="#eaf3ff"/>
+<text x="1146.0" y="319" text-anchor="middle" font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, monospace" font-size="12" font-weight="600" fill="#0068d6">completed</text>
+</svg>

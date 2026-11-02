@@ -1,0 +1,24 @@
+model
+  schema 1.1
+
+type user
+type agent
+type client
+
+type organization
+  relations
+    # people
+    define member: [user]
+    define admin: [user]
+    # may issue organization-owned delegations
+    define delegation_grantor: [user] or admin
+    # may read audit history for the organization
+    define investigator: [user]
+    # workloads
+    define registered_agent: [agent]
+    define trusted_backend: [client]
+    # per-action permissions (names are referenced by tenant action policy)
+    define refund_request: [user]
+    define refund_approve: [user]
+    define deploy_request: [user]
+    define deploy_approve: [user]

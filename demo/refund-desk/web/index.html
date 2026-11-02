@@ -1,0 +1,255 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Refund Desk Reference</title>
+    <meta
+      name="description"
+      content="Reference implementation: an MCP Tasks refund workflow whose authorization lifecycle is owned by a separately deployed Task Authority service."
+    />
+    <link rel="stylesheet" href="style.css" />
+  </head>
+  <body>
+    <main>
+      <h1>Refund Desk <span class="pill">reference implementation</span></h1>
+      <p class="sub">
+        A customer's MCP Tasks refund workflow. Who may delegate, who may
+        approve, and whether this exact refund is still authorized are decided
+        by a separately deployed <strong>proposed</strong> Task Authority
+        service, not by this application.
+      </p>
+      <div class="banner" id="banner" aria-live="polite">
+        Loading environment…
+      </div>
+
+      <nav role="tablist" aria-label="Views">
+        <button role="tab" aria-selected="true" data-tab="run">
+          Run the workflow
+        </button>
+        <button role="tab" aria-selected="false" data-tab="inspect">
+          Inspect security
+        </button>
+        <button role="tab" aria-selected="false" data-tab="understand">
+          Understand the implementation
+        </button>
+      </nav>
+
+      <section id="run" role="tabpanel">
+        <h2>1. Prerequisites</h2>
+        <ul>
+          <li>
+            Two Auth0 accounts in the <code>Northstar</code> organization: a
+            <strong>requester</strong> (Alice) and an eligible
+            <strong>manager</strong> (Morgan) who holds
+            <code>refund_approve</code> in FGA, each with a second factor
+            enrolled. Use separate browser profiles.
+          </li>
+          <li>
+            An MCP client that supports protocol <code>2026-07-28</code> and the
+            <code>io.modelcontextprotocol/tasks</code> extension. Add this
+            endpoint, then sign in as the requester:
+          </li>
+        </ul>
+        <pre id="endpoint">…</pre>
+        <div class="card note">
+          <strong>Client support is limited.</strong> This repository tests only
+          a deterministic compliant client and the
+          <code>@modelcontextprotocol/ext-tasks</code> requester types. A client
+          without the extension is refused with <code>-32021</code> and never
+          receives a task.
+        </div>
+
+        <h2>2. Copyable prompts</h2>
+        <h3>Create something to refund</h3>
+        <pre class="prompt">
+Use create_test_payment with amountMinor 30000, currency USD and a new UUID idempotencyKey. Tell me the paymentId.</pre>
+        <h3>Automatic path: $50, no human</h3>
+        <pre class="prompt">
+Use request_refund for order "N-50", payment &lt;paymentId&gt;, amountMinor 5000, currency USD, reason "Returned unopened". Then poll tasks/get until it completes.</pre>
+        <h3>Exception path: $150, needs a manager</h3>
+        <pre class="prompt">
+Use request_refund for order "742", payment &lt;paymentId&gt;, amountMinor 15000, currency USD, reason "Customer returned the item", exceptionNote "Damaged on arrival, RMA verified". Give me the task id, then stop. I will check back later.</pre>
+        <h3>After you reconnect</h3>
+        <pre class="prompt">
+Call tasks/get for task &lt;taskId&gt; and summarize the status, status message and result.</pre>
+
+        <h2>3. What happens</h2>
+        <ol>
+          <li>
+            The task is created durably and a scoped, expiring delegation plus
+            the exact operation (<em
+              >$150.00 USD, payment, destination, digest</em
+            >) are registered with Task Authority. Status stays
+            <code>working</code> while it waits for the warehouse;
+            <code>input_required</code> is used only when the client can
+            actually answer.
+          </li>
+          <li>
+            A signed warehouse event arrives (a
+            <span class="pill fixture">synthetic producer</span>). The app asks
+            Task Authority for a human decision. Close your MCP client now to
+            see disconnected execution.
+          </li>
+          <li>
+            The manager opens the review link, sees the exact operation, signs
+            in with a fresh second factor bound to that operation, and decides.
+            The service checks live FGA eligibility.
+          </li>
+          <li>
+            The worker obtains an atomic
+            <code>authorize-and-claim</code> immediately before the refund,
+            calls the provider with the operation key as idempotency key, and
+            reports the outcome. Reconnect and read the result.
+          </li>
+        </ol>
+      </section>
+
+      <section id="inspect" role="tabpanel" hidden>
+        <h2>Correlated timeline</h2>
+        <p class="sub">
+          Customer-app events interleaved with Task Authority's security
+          decisions for one task. The decisions shown are read from the service,
+          not generated by this page.
+        </p>
+        <div class="card" id="operator-gate">
+          <p>
+            <strong>Scenario controls are a nonproduction demo fixture.</strong>
+            They need the operator token and exist only when
+            <code>DEMO_MODE=1</code>. They mutate fixtures through authenticated
+            operator-only APIs and never forge approvals.
+          </p>
+          <label for="opToken">Operator token</label
+          ><input
+            id="opToken"
+            type="password"
+            autocomplete="off"
+            placeholder="Bearer token for /operator/*"
+          />
+          <label for="taskId">Task id</label
+          ><input id="taskId" placeholder="task id from tasks/get" />
+          <div class="row">
+            <button class="act" id="loadTimeline">Load timeline</button
+            ><button class="act secondary" id="runWorker">
+              Run worker once
+            </button>
+          </div>
+        </div>
+        <div id="taskSummary"></div>
+        <table id="timeline" hidden>
+          <thead>
+            <tr>
+              <th>Time (UTC)</th>
+              <th>Layer</th>
+              <th>Actor</th>
+              <th>Event</th>
+              <th>Decision / detail</th>
+            </tr>
+          </thead>
+          <tbody></tbody>
+        </table>
+
+        <h2>Scenario controls</h2>
+        <div class="grid" id="scenarios"></div>
+        <h3>Last response</h3>
+        <pre id="response">
+Nothing yet. Each control shows the service's or app's actual reply.</pre>
+      </section>
+
+      <section id="understand" role="tabpanel" hidden>
+        <h2>Who owns what</h2>
+        <svg
+          viewBox="0 0 900 250"
+          role="img"
+          aria-label="Architecture: MCP client to customer app, customer app to Task Authority through the SDK, customer app to payment provider"
+          width="100%"
+        >
+          <rect class="box" x="10" y="90" width="150" height="70" rx="8" />
+          <text x="85" y="120" text-anchor="middle">MCP client / agent</text>
+          <text x="85" y="140" text-anchor="middle">2026-07-28 + tasks</text>
+          <rect class="box" x="230" y="40" width="270" height="170" rx="8" />
+          <text x="365" y="62" text-anchor="middle" font-weight="bold">
+            Refund Desk (customer)
+          </text>
+          <text x="245" y="88">mcp.ts tasks/get · update · cancel</text>
+          <text x="245" y="108">workflow.ts business rules + SDK calls</text>
+          <text x="245" y="128">worker.ts leases, retries, reconcile</text>
+          <text x="245" y="148">payments.ts provider adapter</text>
+          <text x="245" y="168">its DB: tasks + events only</text>
+          <text x="245" y="190">no grant / approval / claim tables</text>
+          <rect class="box" x="590" y="20" width="300" height="110" rx="8" />
+          <text x="740" y="42" text-anchor="middle" font-weight="bold">
+            Task Authority (proposed service)
+          </text>
+          <text x="605" y="68">delegations · operations · approvals</text>
+          <text x="605" y="88">atomic authorize-and-claim · revocation</text>
+          <text x="605" y="108">audit · its own database and secrets</text>
+          <rect class="box" x="590" y="150" width="140" height="50" rx="8" />
+          <text x="660" y="180" text-anchor="middle">Auth0 (login · MFA)</text>
+          <rect class="box" x="750" y="150" width="140" height="50" rx="8" />
+          <text x="820" y="180" text-anchor="middle">FGA (permissions)</text>
+          <rect class="box" x="230" y="225" width="270" height="20" rx="6" />
+          <text x="365" y="239" text-anchor="middle" id="providerLabel">
+            Payment provider
+          </text>
+          <path class="edge" d="M160 125 H230" />
+          <path class="edge" d="M500 75 H590" />
+          <text x="545" y="68" text-anchor="middle">SDK</text>
+          <path class="edge" d="M365 210 V225" />
+          <path class="edge" d="M740 130 V150" />
+        </svg>
+        <div class="grid">
+          <div class="card">
+            <h3>Customer owns</h3>
+            <ul>
+              <li>MCP Tasks lifecycle and polling</li>
+              <li>Business eligibility and the $100 auto threshold</li>
+              <li>Provider credentials and the refund call</li>
+              <li>Reconciliation by operation key</li>
+            </ul>
+          </div>
+          <div class="card">
+            <h3>Task Authority owns</h3>
+            <ul>
+              <li>Delegation lifetime and revocation</li>
+              <li>Exact-operation approvals and live FGA eligibility</li>
+              <li>One-use claim, replay and race semantics</li>
+              <li>The authoritative decision history</li>
+            </ul>
+          </div>
+          <div class="card">
+            <h3>Existing Auth0 products</h3>
+            <ul>
+              <li>Login, MFA, organizations</li>
+              <li>
+                <code>@auth0/auth0-api-js</code> token verification and OBO
+                exchange
+              </li>
+              <li>FGA relationship checks</li>
+            </ul>
+          </div>
+        </div>
+        <h2>Read the code</h2>
+        <ul>
+          <li>
+            <code>demo/refund-desk/src/workflow.ts</code> – the protected
+            workflow (about 55 lines of code)
+          </li>
+          <li>
+            <code>demo/refund-desk/src/mcp.ts</code> – MCP Tasks 2026-07-28
+            receiver
+          </li>
+          <li><code>auth0/sdk/src/client.ts</code> – the SDK</li>
+          <li>
+            <code>auth0/service/src/claims.ts</code> – authorize-and-claim
+          </li>
+          <li>
+            <code>docs/security-model.md</code>,
+            <code>docs/architecture.md</code>
+          </li>
+        </ul>
+      </section>
+    </main>
+    <script type="module" src="app.js"></script>
+  </body>
+</html>

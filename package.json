@@ -1,0 +1,105 @@
+{
+  "name": "mcp-tasks",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "check": "npm run build && npm run lint && npm test",
+    "doctor": "node tools/doctor.mjs",
+    "db:up": "node tools/db-up.mjs",
+    "db:down": "node tools/db-up.mjs down",
+    "local": "node --import tsx auth0/tests/interop/claude-code-stack.ts",
+    "build": "npm run build:core && npm run build:web",
+    "deploy": "wrangler deploy",
+    "setup": "node demo/policy-desk/tools/setup.mjs",
+    "test": "npm run test:unit && npm run test:contracts && npm run test:integration && npm run test:protocol && npm run test:security && npm run test:policy-desk && npm run test:tools",
+    "format": "prettier --write .",
+    "format:check": "prettier --check .",
+    "build:core": "tsc --noEmit && tsc -p demo/refund-workflow/tsconfig.json",
+    "test:policy-desk": "node --import tsx --test --test-concurrency=1 demo/policy-desk/tests/*.test.ts",
+    "test:admin": "node --test demo/policy-desk/tests/admin-page.test.mjs",
+    "test:tools": "node --test demo/policy-desk/tools/*.test.mjs tools/*.test.mjs",
+    "lint": "prettier --check . && node auth0/tools/check-boundaries.mjs",
+    "test:unit": "node --import tsx --test auth0/tests/sdk/*.test.ts",
+    "test:contracts": "node --import tsx --test auth0/tests/contracts/*.test.ts",
+    "test:integration": "node --import tsx --test --test-concurrency=1 auth0/tests/service/*.test.ts auth0/tests/integration/*.test.ts",
+    "test:protocol": "node --import tsx --test auth0/tests/e2e/protocol.test.ts",
+    "test:security": "node --import tsx --test --test-concurrency=1 auth0/tests/e2e/scenarios.test.ts auth0/tests/e2e/restart.test.ts",
+    "dev:authority": "npm run start -w @task-authority/service",
+    "migrate:authority": "npm run migrate -w @task-authority/service",
+    "build:web": "node demo/tools/build-web.mjs && node demo/policy-desk/web/build.mjs && tsc -p auth0/approval-ui/tsconfig.json && tsc -p demo/refund-desk/web/tsconfig.json && tsc -p demo/policy-desk/web/tsconfig.json",
+    "dev:demo": "npm run build:web && node --import tsx demo/refund-desk/src/server.ts",
+    "preview:policy-desk": "node demo/policy-desk/web/preview/build.mjs --serve",
+    "verify:live": "node --import tsx demo/tools/verify-live.ts",
+    "test:fullstack": "node --import tsx --test --test-concurrency=1 --test-timeout=240000 auth0/tests/e2e/fullstack.test.ts",
+    "interop:claude-code": "npm run local --",
+    "task-authority": "node --import tsx auth0/tools/task-authority.ts",
+    "verify": "node demo/policy-desk/tools/setup.mjs --verify"
+  },
+  "engines": {
+    "node": ">=22"
+  },
+  "cloudflare": {
+    "bindings": {
+      "AI": {
+        "description": "Workers AI runs the refund agent's model (`AGENT_MODEL`). Created with the Worker; no API key needed."
+      },
+      "AGENT_MODEL": {
+        "description": "Workers AI model id for the refund agent."
+      },
+      "MIGRATE_ON_REQUEST": {
+        "description": "Keep `false`: `npm run setup` migrates the database as its owner and gives the Worker a least-privilege role."
+      },
+      "HIGH_VALUE_QUORUM": {
+        "description": "Reviewers needed for high-value refunds: `1`, or `2` when two real people will review."
+      },
+      "AGENT_ID": {
+        "description": "The agent's id in delegations and FGA. Leave as is."
+      }
+    }
+  },
+  "dependencies": {
+    "@auth0/auth0-react": "2.28.2",
+    "@auth0/auth0-spa-js": "2.28.3",
+    "@modelcontextprotocol/client": "2.3.1",
+    "@modelcontextprotocol/ext-tasks": "0.2.2",
+    "dotenv": "18.0.6",
+    "express": "5.2.1",
+    "express-oauth2-jwt-bearer": "1.10.0",
+    "geist": "1.7.2",
+    "jose": "6.2.12",
+    "lucide-react": "1.56.0",
+    "pg": "8.23.1",
+    "pg-boss": "12.37.1",
+    "react": "18.3.1",
+    "react-dom": "18.3.1",
+    "stripe": "23.0.0",
+    "zod": "4.6.7"
+  },
+  "devDependencies": {
+    "@cloudflare/workers-types": "5.20261009.1",
+    "@openfga/syntax-transformer": "0.2.2",
+    "@types/express": "5.0.6",
+    "@types/node": "26.6.4",
+    "@types/pg": "8.23.1",
+    "@types/react": "18.3.12",
+    "@types/react-dom": "18.3.1",
+    "esbuild": "0.28.2",
+    "miniflare": "5.20261006.1-alpha",
+    "playwright-core": "^1.64.0",
+    "prettier": "3.9.9",
+    "tsx": "4.23.15",
+    "typescript": "7.0.2",
+    "undici": "7.30.1",
+    "wrangler": "4.149.0"
+  },
+  "workspaces": [
+    "auth0/approval-ui",
+    "auth0/contracts",
+    "auth0/fixtures",
+    "auth0/sdk",
+    "auth0/service",
+    "demo/refund-desk",
+    "demo/refund-workflow"
+  ]
+}
