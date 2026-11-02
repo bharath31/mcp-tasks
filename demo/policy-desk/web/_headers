@@ -6,3 +6,10 @@
   X-Content-Type-Options: nosniff
   Referrer-Policy: strict-origin-when-cross-origin
   Permissions-Policy: camera=(), microphone=(), geolocation=()
+
+# Link-preview image and clip: crawlers and chat apps fetch them from anywhere. Unversioned names,
+# so cache for a day and let a regenerated file show up without a purge.
+/og/*
+  Cache-Control: public, max-age=86400, stale-while-revalidate=604800
+  Access-Control-Allow-Origin: *
+  Cross-Origin-Resource-Policy: cross-origin
