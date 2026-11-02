@@ -1,5 +1,7 @@
 import { aboutDemo, h } from "./dom";
 
+const REPO = "https://github.com/bharath31/mcp-tasks";
+
 const STEPS = [
   [
     "The agent asks",
@@ -63,6 +65,7 @@ export function landing(opts: {
         { class: "l-links" },
         h("a", { class: "navlink", href: "#how" }, "How it works"),
         h("a", { class: "navlink", href: "#real" }, "What is real"),
+        h("a", { class: "navlink", href: REPO }, "GitHub"),
         signIn("Sign in", "btn primary small"),
       ),
     ),
@@ -200,6 +203,7 @@ export function landing(opts: {
       h("span", { class: "wordmark" }, "Policy Desk"),
       h("span", {}, "A reference implementation of a proposed design"),
       h("span", {}, "Payments simulated"),
+      h("a", { class: "foot-link", href: REPO }, "Source on GitHub"),
     ),
   );
 }

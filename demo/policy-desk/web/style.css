@@ -736,6 +736,14 @@ pre,
 .l-foot > span:nth-child(2) {
   flex: 1;
 }
+.foot-link {
+  color: var(--muted);
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+.foot-link:hover {
+  color: var(--ink);
+}
 @media (max-width: 960px) {
   .l-cards {
     grid-template-columns: repeat(2, minmax(0, 1fr));
