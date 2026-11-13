@@ -823,7 +823,6 @@ describe("recovery through the official MCP Tasks requester", () => {
       const req = new Request(url, init);
       const body = (await req.clone().json()) as any;
       if (!crashed && body.method === "tasks/update") {
-        crashed = true;
         const t = (await d.repo.get(body.params.taskId))!;
         const [key, answer] = Object.entries<any>(
           body.params.inputResponses,
@@ -837,6 +836,9 @@ describe("recovery through the official MCP Tasks requester", () => {
           request: { ...t.request, exceptionNote: answer.content.note },
           nextRunAt: new Date(d.w.clock.now() + 120_000),
         });
+        // Signal only after the crash state is committed. Otherwise the test can
+        // advance the clock and tick before this save, missing the expired lease.
+        crashed = true;
         return Response.json({
           jsonrpc: "2.0",
           id: body.id,
@@ -887,7 +889,11 @@ describe("recovery through the official MCP Tasks requester", () => {
       return ok();
     };
     try {
-      assert.ok(await until(() => crashed), "the requester answered once");
+      assert.ok(await until(() => crashed), "the crash state was committed");
+      const stranded = (await d.repo.get(id))!;
+      assert.equal(stranded.status, "working");
+      assert.equal(stranded.operationId, null);
+      assert.equal(stranded.nextRunAt.getTime(), d.w.clock.now() + 120_000);
       await d.step(121_000); // lease lapsed: the worker re-asks
       // A spec-following requester never answers a key twice and skips a repeated one, so
       // only a fresh key reaches the user again and lets the task proceed.
