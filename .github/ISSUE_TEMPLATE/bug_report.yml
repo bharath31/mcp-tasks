@@ -1,0 +1,41 @@
+name: Bug or setup problem
+description: Something failed while trying the playground, local stack or deployment.
+title: "[Bug]: "
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for trying the repo. Please remove tokens, database URLs, email addresses and other secrets from commands and logs.
+        For vulnerabilities, use the private reporting instructions in SECURITY.md instead of a public issue.
+  - type: dropdown
+    id: path
+    attributes:
+      label: What were you trying?
+      options:
+        - Offline policy playground
+        - Local UI preview
+        - Local MCP stack / Claude Code
+        - Hosted demo
+        - Deploying my own copy
+        - SDK or policy integration
+        - Something else
+    validations:
+      required: true
+  - type: textarea
+    id: reproduce
+    attributes:
+      label: Steps to reproduce
+      description: Include the command or page, what you expected and what happened instead. Use placeholders for secrets.
+    validations:
+      required: true
+  - type: textarea
+    id: environment
+    attributes:
+      label: Environment
+      description: OS, Node version, commit SHA, and MCP host/version if relevant. For the local stack, include redacted npm run doctor output.
+  - type: textarea
+    id: logs
+    attributes:
+      label: Relevant error output
+      description: Redacted excerpts only. Do not attach .env files, .local MCP credentials or Auth0 setup state.
+      render: text

@@ -1,0 +1,35 @@
+name: Use case or integration question
+description: Tell us which agent action needs approval, or where this pattern does not fit.
+title: "[Use case]: "
+body:
+  - type: markdown
+    attributes:
+      value: |
+        This is an experimental reference implementation. A concrete workflow helps us decide what to improve; you do not need a proposed solution.
+        Use fictional examples in place of customer data or other confidential details.
+  - type: textarea
+    id: action
+    attributes:
+      label: What action is the agent trying to take?
+      description: For example, refund a payment, deploy a service or export customer data.
+    validations:
+      required: true
+  - type: textarea
+    id: people
+    attributes:
+      label: Who requests it, and who may approve it?
+      description: Are they different people? What determines who can approve? How long could approval take?
+    validations:
+      required: true
+  - type: textarea
+    id: today
+    attributes:
+      label: How do you handle this today?
+      description: A host confirmation dialog, workflow interrupt, existing approval service or custom code? What is missing, if anything?
+    validations:
+      required: true
+  - type: textarea
+    id: fit
+    attributes:
+      label: Where does this repo fit or fall short?
+      description: Include your stack, MCP host, what you tried and any adoption blocker. It is useful to hear if this is more machinery than you need.

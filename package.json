@@ -5,6 +5,7 @@
   "type": "module",
   "scripts": {
     "check": "npm run build && npm run lint && npm test",
+    "playground": "node --import tsx tools/playground.ts",
     "doctor": "node tools/doctor.mjs",
     "db:up": "node tools/db-up.mjs",
     "db:down": "node tools/db-up.mjs down",
@@ -18,7 +19,7 @@
     "build:core": "tsc --noEmit && tsc -p demo/refund-workflow/tsconfig.json",
     "test:policy-desk": "node --import tsx --test --test-concurrency=1 demo/policy-desk/tests/*.test.ts",
     "test:admin": "node --test demo/policy-desk/tests/admin-page.test.mjs",
-    "test:tools": "node --test demo/policy-desk/tools/*.test.mjs tools/*.test.mjs",
+    "test:tools": "node --import tsx --test demo/policy-desk/tools/*.test.mjs tools/*.test.mjs tools/*.test.ts",
     "lint": "prettier --check . && node auth0/tools/check-boundaries.mjs",
     "test:unit": "node --import tsx --test auth0/tests/sdk/*.test.ts",
     "test:contracts": "node --import tsx --test auth0/tests/contracts/*.test.ts",

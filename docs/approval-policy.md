@@ -60,7 +60,7 @@ Read it as: an agent may refund up to $100 on its own, within $500 and 20 refund
 Author and test it locally, with no server or token:
 
 ```sh
-npm run task-authority -- policy init refunds > refunds.json      # templates: refunds, production-deploys, data-exports
+npm run --silent task-authority -- policy init refunds > refunds.json      # templates: refunds, production-deploys, data-exports
 npm run task-authority -- policy check refunds.json               # schema, CEL type-check, tiers, budgets: what publishing enforces
 npm run task-authority -- policy explain refunds.json refund:create --actor agent --args '{"amountMinor":150000,"currency":"usd"}'
 # {"decision":"approval_required","reasonCode":"policy_approval_required","ruleIds":["high-value"],"tier":"high_value","quorum":2}

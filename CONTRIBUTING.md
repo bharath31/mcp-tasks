@@ -2,6 +2,19 @@
 
 Issues and pull requests are welcome. This is an experimental reference implementation, so the bar is: it must be true, tested and simple.
 
+## Start without cloud accounts
+
+After `npm ci`, run `npm run playground` to see the policy decisions, or `npm run preview:policy-desk` to explore the UI with fixture data. `npm run test:unit` and `npm run test:tools` need no database or cloud credentials.
+
+Good first contributions:
+
+- **Try the documented setup.** Report the exact step that failed, your environment and a redacted error in the [bug form](https://github.com/bharath31/mcp-tasks/issues/new?template=bug_report.yml).
+- **Test another MCP host.** Include the host/version, protocol negotiation and what worked. Don't turn a local result into a claim about every host.
+- **Bring a real approval workflow.** [Describe the action and approvers](https://github.com/bharath31/mcp-tasks/issues/new?template=use_case.yml) before building a large integration. We want to know where the pattern is useful, and where it is unnecessary.
+- **Improve a policy example.** Add expected decisions and a test using the same evaluator as the service.
+
+For docs-only changes, run `npm run lint`. For behavior changes, run the relevant focused suite while iterating and the full check before a pull request. CI also runs the browser suites.
+
 ## Before you open a pull request
 
 ```sh

@@ -1,0 +1,8 @@
+blank_issues_enabled: true
+contact_links:
+  - name: Report a security vulnerability privately
+    url: https://github.com/bharath31/mcp-tasks/blob/main/SECURITY.md
+    about: Follow the private disclosure instructions; do not open a public bug report.
+  - name: Setup and troubleshooting
+    url: https://github.com/bharath31/mcp-tasks/blob/main/docs/deploy-cloudflare.md
+    about: Prerequisites, guided setup and fixes for common deployment errors.
