@@ -3,7 +3,7 @@
   "version": "0.1.0",
   "private": true,
   "type": "module",
-  "description": "A refund agent as a Cloudflare Workflow, gated by approve(): one Auth0 application and one Action, no Task Authority service.",
+  "description": "Experimental Cloudflare Workflow gated by this repo's approve() proof verifier and Auth0 login Actions, without the Task Authority backend.",
   "scripts": {
     "dev": "wrangler dev",
     "deploy": "wrangler deploy",

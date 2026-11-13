@@ -12,7 +12,7 @@
 <text x="62" y="160" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Inter, Helvetica, Arial, sans-serif" font-size="56" font-weight="700" letter-spacing="-2" fill="#ededed">MCP Tasks</text>
 <text x="62" y="222" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Inter, Helvetica, Arial, sans-serif" font-size="56" font-weight="700" letter-spacing="-2" fill="#a1a1a1">+ human approvals</text>
 <text x="64" y="276" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Inter, Helvetica, Arial, sans-serif" font-size="20" fill="#a1a1a1">Agents ask. Your policy decides. A person approves the exact</text>
-<text x="64" y="304" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Inter, Helvetica, Arial, sans-serif" font-size="20" fill="#a1a1a1">operation with Auth0. The task resumes and runs once.</text>
+<text x="64" y="304" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Inter, Helvetica, Arial, sans-serif" font-size="20" fill="#a1a1a1">operation. Your backend checks permission before dispatch.</text>
 <text x="64" y="364" font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, monospace" font-size="15" fill="#a1a1a1">npm run local  ·  npm run setup  ·  MIT</text>
 <rect x="760" y="56" width="456" height="308" rx="12" fill="#111111" stroke="#262626"/>
 <text x="784" y="92" font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, monospace" font-size="13" fill="#a1a1a1">task 7f3a…c21 · io.modelcontextprotocol/tasks</text>
@@ -26,18 +26,18 @@
 <circle cx="792" cy="205" r="6" fill="#2a1f0a" stroke="#f5a623" stroke-width="2"/>
 <line x1="792" y1="213" x2="792" y2="263" stroke="#262626" stroke-width="2"/>
 <text x="812" y="198" font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, monospace" font-size="11" fill="#a1a1a1" letter-spacing="0.5">POLICY</text>
-<text x="812" y="218" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Inter, Helvetica, Arial, sans-serif" font-size="14" fill="#ededed">refund:create over $1,000 needs a person</text>
+<text x="812" y="218" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Inter, Helvetica, Arial, sans-serif" font-size="14" fill="#ededed">Sandbox policy: over $1,000 needs a reviewer</text>
 <rect x="1060" y="180" width="132" height="22" rx="11" fill="#2a1f0a"/>
-<text x="1126.0" y="195" text-anchor="middle" font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, monospace" font-size="12" font-weight="600" fill="#f5a623">input_required</text>
+<text x="1126.0" y="195" text-anchor="middle" font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, monospace" font-size="12" font-weight="600" fill="#f5a623">working</text>
 <circle cx="792" cy="267" r="6" fill="#0d2417" stroke="#2ecc71" stroke-width="2"/>
 <line x1="792" y1="275" x2="792" y2="325" stroke="#262626" stroke-width="2"/>
 <text x="812" y="260" font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, monospace" font-size="11" fill="#a1a1a1" letter-spacing="0.5">APPROVAL</text>
-<text x="812" y="280" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Inter, Helvetica, Arial, sans-serif" font-size="14" fill="#ededed">Reviewer confirms with a passkey, bound to this refund</text>
+<text x="812" y="280" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Inter, Helvetica, Arial, sans-serif" font-size="14" fill="#ededed">Auth0 passkey confirmation for this exact refund</text>
 <rect x="1116" y="242" width="76" height="22" rx="11" fill="#0d2417"/>
 <text x="1154.0" y="257" text-anchor="middle" font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, monospace" font-size="12" font-weight="600" fill="#2ecc71">working</text>
 <circle cx="792" cy="329" r="6" fill="#0b1a2e" stroke="#3291ff" stroke-width="2"/>
 <text x="812" y="322" font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, monospace" font-size="11" fill="#a1a1a1" letter-spacing="0.5">CLAIM</text>
-<text x="812" y="342" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Inter, Helvetica, Arial, sans-serif" font-size="14" fill="#ededed">Claimed once, refund runs once, audit recorded</text>
+<text x="812" y="342" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Inter, Helvetica, Arial, sans-serif" font-size="14" fill="#ededed">Permission rechecked, claim and audit recorded</text>
 <rect x="1100" y="304" width="92" height="22" rx="11" fill="#0b1a2e"/>
 <text x="1146.0" y="319" text-anchor="middle" font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, monospace" font-size="12" font-weight="600" fill="#3291ff">completed</text>
 </svg>

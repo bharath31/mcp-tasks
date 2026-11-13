@@ -1,6 +1,8 @@
 # Policy Desk sandbox API (contract for the browser UI)
 
-Same origin as the UI. **Identity is real Auth0**: there is no `/sandbox/session`
+This is the host API for Policy Desk's default `APPROVAL_MODE=authority`. The approval backend is custom repository code running in the same Worker, not an Auth0 product. Examples show relevant fields, not exhaustive schemas; see [`src/api.ts`](src/api.ts), [`src/mcp.ts`](src/mcp.ts) and the [backend OpenAPI contract](../../auth0/service/openapi.json).
+
+Same origin as the UI. **Identity uses Auth0 in deployment** (local tests use fixtures): there is no `/sandbox/session`
 and the Worker never issues tokens. The SPA signs the visitor in with Universal
 Login (Authorization Code + PKCE, `audience` = the Task Authority API audience,
 `organization` = the demo organization, DPoP on) and sends that **access token**
@@ -12,7 +14,7 @@ One real user owns exactly one sandbox (`sbx_<24 hex>`, derived from the token
 
 ## Refusals are machine-readable
 
-Every `/sandbox/*` refusal and every refusal on `POST /v1/refunds*` carries:
+Host guardrail refusals on `/sandbox/*` and `/v1/refunds*` use the following shape (optional fields depend on the failure). Forwarded backend errors and MCP JSON-RPC errors have separate contracts:
 
 ```json
 {
@@ -20,15 +22,14 @@ Every `/sandbox/*` refusal and every refusal on `POST /v1/refunds*` carries:
   "reason": "policy_value_out_of_range",
   "message": "agentAutoLimitMinor must be a whole number between 1000 and 50000.",
   "hint": "Amounts are in cents.",
-  "nextAction": "fix_policy_values",
-  "retryAfterSec": 30
+  "nextAction": "fix_policy_values"
 }
 ```
 
 `reason` is stable (use it for logic), `message` and `hint` are plain language,
-`nextAction` is one of `sign_in`, `reset_sandbox`, `retry_later`, `fix_policy_values`,
+`nextAction` can be null or a UI hint such as `sign_in`, `reset_sandbox`, `retry_later`, `fix_policy_values`,
 `pick_order`, `pick_scenario`, `pick_operation`, `change_amount`, `open_review_queue`,
-`use_other_reviewer`, `contact_operator`, `none`. `retryAfterSec` only on 429/503.
+`use_other_reviewer`, `contact_operator`, `none`. `retryAfterSec` is included for applicable retryable guardrails; it is not required on every 429/503. The policy-validation example above therefore omits it.
 Responses coming straight from the Task Authority service (`/v1/*` other than
 `/v1/refunds*`) keep the service shape `{code,message,details:{reason},...}`.
 
@@ -52,30 +53,33 @@ Responses coming straight from the Task Authority service (`/v1/*` other than
 
 ## Endpoints
 
-| Path                                 | Auth                  | Purpose                                                                                     |
-| ------------------------------------ | --------------------- | ------------------------------------------------------------------------------------------- |
-| `GET /sandbox/info`                  | none (optional token) | banner, Auth0 config for the SPA, roles, scenarios, policy, envelope, limits                |
-| `GET /sandbox/me`                    | Auth0 token           | who you are, token assurance snapshot, whether your sandbox exists                          |
-| `POST /sandbox/reset`                | Auth0 token           | create or recreate your sandbox: FGA tuples, policy, delegation, orders                     |
-| `GET /sandbox/agent-key`             | Auth0 token           | whether your own agent holds a key: `{available, connected, mcpUrl, expiresAt, lastUsedAt}` |
-| `POST /sandbox/agent-key`            | Auth0 token           | 201: a new agent key for this sandbox (replaces any earlier one), see below                 |
-| `DELETE /sandbox/agent-key`          | Auth0 token           | revoke your agent's key                                                                     |
-| `POST /sandbox/agent`                | Auth0 token           | `{message}`: one turn of the refund agent; the server adds it to the stored conversation    |
-| `GET /sandbox/agent/conversation`    | Auth0 token           | the stored agent conversation of this sandbox generation (survives reloads and tabs)        |
-| `DELETE /sandbox/agent/conversation` | Auth0 token           | start a new agent conversation                                                              |
-| `POST /sandbox/scenario`             | Auth0 token           | run a canned request through the real `POST /v1/refunds`                                    |
-| `GET /sandbox/state`                 | Auth0 token           | orders, operations, budget, progress, policy settings                                       |
-| `GET /sandbox/progress`              | Auth0 token           | guided-tour booleans derived from real state                                                |
-| `GET /sandbox/audit?operationId=`    | Auth0 token           | audit events of one operation                                                               |
-| `GET /sandbox/orders`                | Auth0 token           | sample orders                                                                               |
-| `GET /sandbox/policy`                | Auth0 token           | active settings, summary, envelope                                                          |
-| `PUT /sandbox/policy`                | Auth0 token           | edit a few numbers inside the safe envelope; publishes + activates a new version            |
-| `POST /sandbox/restore-policy`       | Auth0 token           | publish + activate the default template again (new version)                                 |
-| `POST /sandbox/simulate`             | Auth0 token           | what-if of the agent auto-approve limit against this sandbox's operations                   |
-| `POST /v1/refunds`                   | Auth0 token           | customer REST path: 201 executed, 202 approval, 401 step-up, 403 deny                       |
-| `GET /v1/refunds/{op}`               | Auth0 token           | operation + order + refund                                                                  |
-| `POST /v1/refunds/{op}/run`          | Auth0 token           | resume an approved operation (claim + simulated refund)                                     |
-| `/v1/*` (everything else)            | Auth0 token           | the real Task Authority service, scoped to your sandbox tenant                              |
+| Path                                            | Auth                            | Purpose                                                                                     |
+| ----------------------------------------------- | ------------------------------- | ------------------------------------------------------------------------------------------- |
+| `GET /sandbox/info`                             | none (optional token)           | banner, Auth0 config for the SPA, roles, scenarios, policy, envelope, limits                |
+| `GET /sandbox/me`                               | Auth0 token                     | who you are, token assurance snapshot, whether your sandbox exists                          |
+| `POST /sandbox/reset`                           | Auth0 token                     | create or recreate your sandbox: FGA tuples, policy, delegation, orders                     |
+| `GET /sandbox/agent-key`                        | Auth0 token                     | whether your own agent holds a key: `{available, connected, mcpUrl, expiresAt, lastUsedAt}` |
+| `POST /sandbox/agent-key`                       | Auth0 token                     | 201: a new agent key for this sandbox (replaces any earlier one), see below                 |
+| `DELETE /sandbox/agent-key`                     | Auth0 token                     | revoke your agent's key                                                                     |
+| `POST /mcp`                                     | Auth0 token / sandbox agent key | MCP Tasks JSON-RPC endpoint (see below)                                                     |
+| `GET /sandbox/admin/usage?days=14`              | Operator identity               | Usage metrics; allow-listed verified email or subject required                              |
+| `GET /.well-known/oauth-protected-resource/mcp` | none                            | OAuth discovery metadata for MCP hosts                                                      |
+| `POST /sandbox/agent`                           | Auth0 token                     | `{message}`: one turn of the refund agent; the server adds it to the stored conversation    |
+| `GET /sandbox/agent/conversation`               | Auth0 token                     | the stored agent conversation of this sandbox generation (survives reloads and tabs)        |
+| `DELETE /sandbox/agent/conversation`            | Auth0 token                     | start a new agent conversation                                                              |
+| `POST /sandbox/scenario`                        | Auth0 token                     | run a canned request through the real `POST /v1/refunds`                                    |
+| `GET /sandbox/state`                            | Auth0 token                     | orders, operations, budget, progress, policy settings                                       |
+| `GET /sandbox/progress`                         | Auth0 token                     | guided-tour booleans derived from real state                                                |
+| `GET /sandbox/audit?operationId=`               | Auth0 token                     | audit events of one operation                                                               |
+| `GET /sandbox/orders`                           | Auth0 token                     | sample orders                                                                               |
+| `GET /sandbox/policy`                           | Auth0 token                     | active settings, summary, envelope                                                          |
+| `PUT /sandbox/policy`                           | Auth0 token                     | edit a few numbers inside the safe envelope; publishes + activates a new version            |
+| `POST /sandbox/restore-policy`                  | Auth0 token                     | publish + activate the default template again (new version)                                 |
+| `POST /sandbox/simulate`                        | Auth0 token                     | what-if of the agent auto-approve limit against this sandbox's operations                   |
+| `POST /v1/refunds`                              | Auth0 token                     | customer REST path: 201 executed, 202 approval, 401 step-up, 403 deny                       |
+| `GET /v1/refunds/{op}`                          | Auth0 token                     | operation + order + refund                                                                  |
+| `POST /v1/refunds/{op}/run`                     | Auth0 token                     | resume an approved operation (claim + simulated refund)                                     |
+| `/v1/*` (everything else)                       | Auth0 token                     | the real Task Authority service, scoped to your sandbox tenant                              |
 
 `/mcp`, `POST /v1/refunds` and `GET`/`POST /v1/refunds/{op}*` also accept an **agent key**
 (`Authorization: Bearer <key>`), with no sandbox header: the key names its sandbox.
@@ -108,7 +112,7 @@ binds its SHA-256 to your sandbox. The token is returned once and never stored.
 Refusals: 429 `rate_limited` (5 per visitor per hour), 503 `not_configured` (no
 `EXTERNAL_AGENT_CLIENT_ID`). With the key: 401 `invalid_identity` once it was replaced,
 revoked or expired; 403 `wrong_sandbox` if the request names another sandbox; 410
-`sandbox_expired` until you reset (the key works again after a reset).
+`sandbox_expired` while the expired sandbox still exists. A reset can revive that binding only before cleanup deletes it; after cleanup, issue a new key.
 
 With `Accept: application/x-ndjson`, `POST /sandbox/agent` streams one JSON object per line while the turn runs:
 `model_start`, `model_done` (with its `ms`), `tool_start`, `tool_done` (the MCP exchanges and `ms`), then `done` with the
@@ -119,14 +123,7 @@ split.
 Reviewing uses the real service directly: `GET /v1/approval-requests?status=pending`
 (FGA-filtered, your own requests are hidden), `POST /v1/approval-requests/{id}/lease`,
 `POST /v1/approval-requests/{id}/decisions` with `{decision, operationDigest}`. What
-the token must prove is decided by the policy tier of the operation (see `tier` and
-`assurance` on the operation): routine = fresh MFA session (`amr` has `mfa`) and a
-DPoP-bound token with proof; high value = per-operation step-up whose `amr` names a
-listed factor (webauthn) and, depending on the service build, a token bound to the
-approval via `authorization_details` or the service challenge
-(`POST /v1/approval-requests/{id}/challenge`). The SPA obtains such tokens from Auth0
-(`acr_values`, `max_age`, `authorization_details`, task-authority Actions); the Worker
-accepts nothing weaker.
+the token must prove is pinned in the operation's policy snapshot. Unlike the generic refund template, **both routine and high-value sandbox approvals are per-operation**. They require fresh WebAuthn evidence bound through `POST /v1/approval-requests/{id}/challenge`; `allowAuthenticatorApp=true` also permits fresh TOTP for routine requests only. The SPA uses the repository's Auth0 Actions to get challenge/assurance claims, then submits the DPoP-bound decision token. Rejection by an eligible DPoP-bound reviewer needs no second factor. See [step-up flows](../../docs/approval-step-up-flows.md).
 
 ## GET /sandbox/info
 
@@ -166,7 +163,8 @@ accepts nothing weaker.
       "agentAutoLimitMinor": 10000,
       "budgetMaxMinor": 50000,
       "budgetMaxCount": 20,
-      "highValueAboveMinor": 100000
+      "highValueAboveMinor": 100000,
+      "allowAuthenticatorApp": false
     },
     "summary": [{ "id": "small", "tier": "auto", "text": "…" }],
     "envelope": {
@@ -216,9 +214,7 @@ by the Worker) or `you` (your own token is used).
 
 ## POST /sandbox/reset
 
-Body `{}`. Creates the sandbox on first use. Each call starts a new data generation
-(old data is deleted by the hourly job) so it is idempotent: same shape, empty
-budget, same default policy. Needs Auth0, FGA and Postgres; takes a few seconds.
+Body `{}` or `{ "allowAuthenticatorApp": true }`. Creates the sandbox on first use. **Each call creates a new generation**, so do not automatically retry it as an idempotent operation. Reset restores numeric policy defaults and an empty budget, preserving the prior authenticator-app setting unless the body overrides it. Superseded generations are eligible for cleanup after five minutes; cleanup runs every five minutes. Needs Auth0, FGA and Postgres.
 
 ```json
 {
@@ -413,7 +409,7 @@ Derived from real service state, never from client clicks:
 
 `PUT` body: any of `agentAutoLimitMinor` (1000-50000), `budgetMaxMinor` (1000-200000),
 `budgetMaxCount` (1-50), `highValueAboveMinor` (20000-500000, must exceed the agent
-limit). Anything else (approvers, `unknown_action`, tiers) is refused with
+limit), plus optional boolean `allowAuthenticatorApp`. This adds TOTP to routine per-operation approvals only; high value remains WebAuthn. Anything else (approvers, `unknown_action`, arbitrary tier definitions) is refused with
 `policy_edit_not_allowed`. The Worker builds the document, so the approver floor and
 `unknown_action: deny` cannot be removed. Response:
 `{ "version": "refunds.edit-…", "policy": { version, settings, summary, envelope, … } }`.
@@ -452,4 +448,42 @@ Body `{ orderId, amountMinor, currency?: "USD", reason?, action?: "refund:create
 Bearer error="insufficient_user_authentication", acr_values="mfa", max_age="300"`) /
 403 / 429; the body is the SDK outcome (`decision`, `reasonCode`, `policyVersion`,
 `ruleIds`, `executed`, `operation`, `operationUrl`, `reviewUrl`, `result`). A refused
-call adds `reason`, `message`, `hint`, `nextAction`.
+call adds `reason`, `message`, `hint`, `nextAction` where the host maps the refusal.
+
+## POST /mcp
+
+Policy Desk implements MCP `2026-07-28` with per-request metadata, **not** an `initialize` handshake. Supported methods are `server/discover`, `tools/list`, `tools/call`, `tasks/get`, `tasks/update` and `tasks/cancel`. There are no subscriptions, `tasks/list` or `tasks/result`.
+
+A request to create a refund task has this shape (replace the order id with one from `list_orders`):
+
+```json
+{
+  "jsonrpc": "2.0",
+  "id": 1,
+  "method": "tools/call",
+  "params": {
+    "name": "request_refund",
+    "arguments": {
+      "orderId": "ord_example",
+      "amountMinor": 15000,
+      "reason": "Customer returned the item"
+    },
+    "_meta": {
+      "io.modelcontextprotocol/protocolVersion": "2026-07-28",
+      "io.modelcontextprotocol/clientCapabilities": {
+        "extensions": { "io.modelcontextprotocol/tasks": {} }
+      }
+    }
+  }
+}
+```
+
+- Authenticate with a sandbox agent key or a supported Auth0 token. `server/discover` itself is public. Host OAuth uses the `/mcp` resource audience; console and agent-key audiences are described in the [README](README.md#signing-in-from-an-mcp-host-claude-code).
+- `request_refund` and `tasks/*` require the Tasks capability on each request; missing capability yields `-32021`. An unsupported version or `initialize` yields `-32022`.
+- Read-only tools are `list_orders` and `get_order`. A refund with a registered operation returns `resultType: "task"`; business validation can instead return a complete tool error before any operation exists.
+- Poll `tasks/get` with `params.taskId`, the same protocol/capability metadata, and the caller's credential. If supplied, `Mcp-Name` must match that task id. Default polling interval is 3 seconds.
+- `tasks/get` may **execute** a now-authorized refund through the claim path; it is not a read-only HTTP operation. `POST /v1/refunds/{id}/run` also resumes it. Approval alone does not schedule a background worker.
+- Waiting tasks stay `working` with a review URL. `tasks/update` acknowledges and ignores input responses because Policy Desk never requests client input. `tasks/cancel` withdraws unclaimed work; it cannot reverse a dispatched refund.
+- The wire task TTL is 24 hours, but sandbox expiry after 15 minutes and later cleanup limit availability sooner. Do not treat that TTL as a retention guarantee.
+
+The experimental `APPROVAL_MODE=approve` uses a separate proof ledger rather than Task Authority policy decisions; the authority-mode examples above do not describe that mode's policy or outcome contract.

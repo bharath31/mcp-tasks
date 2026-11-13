@@ -1,6 +1,6 @@
 # Instructions for coding agents
 
-This repository is a reference implementation of MCP Tasks gated by Auth0 approvals. Read [README.md](README.md) and [docs/architecture.md](docs/architecture.md) for what it is. This file tells you how to deploy it for a user and how to work on it.
+This repository is a reference implementation of MCP Tasks gated by a custom approval backend using Auth0 identity and FGA permissions. “Task Authority” is that backend's internal name, not an Auth0 product. Policy Desk embeds it in the same Cloudflare Worker as the app and MCP server. Read [README.md](README.md) and [docs/architecture.md](docs/architecture.md) for what it is. This file tells you how to deploy it for a user and how to work on it.
 
 ## Deploy a working copy for a user
 
@@ -18,11 +18,11 @@ Follow [docs/deploy-cloudflare.md](docs/deploy-cloudflare.md). Condensed:
      --admin-email <user's email> [--deploy]
    ```
 
-   Run it with `--dry-run` first if the tenant is not brand new, and show the user the plan. The delegating user defaults to the user's `+alex` address; override with `--alex-email`. Step 7 opens a browser for that user's one-time sign-in; the user must complete it (password in `~/.policy-desk/auth0-state.json`, `alex.password`). If they cannot right now, pass `--skip-alex-login` and re-run setup without it later (every other step is skipped or repeated harmlessly).
+   Run it with `--dry-run` first if the tenant is not brand new, and show the user the plan. The delegating user defaults to the user's `+alex` address; override with `--alex-email`. Step 7 opens a browser for that user's one-time sign-in; the user must complete it (password in `~/.policy-desk/auth0-state.json`, `alex.password`). If they cannot right now, pass `--skip-alex-login` and re-run setup without it later. Re-runs reconcile managed Auth0 objects and rotate the database runtime password and IP-hash salt; they are not read-only.
 
-6. Verify: setup ends with a read-only checklist and "Auth0 is fully set up". `npm run verify` repeats it any time. Then walk the user through "Your first approval" in the guide. Approvals need the user's own passkey; you cannot approve on their behalf, by design.
+6. Verify: setup ends with a read-only checklist. `npm run verify` repeats it but does not prove an interactive approval, FGA access or Alex's refresh grant. Walk the user through "Your first approval" in the guide. Default approvals need the user's own passkey (routine TOTP is an explicit demo opt-in); never approve on their behalf.
 
-Setup is idempotent. On failure, read the error, fix the cause (the troubleshooting table in the guide covers the common ones), and re-run the same command.
+Setup is rerunnable, but not a no-op. On failure, read the error, fix the cause (the troubleshooting table in the guide covers the common ones), and re-run the same command.
 
 ## Write or change an approval policy
 
@@ -41,6 +41,6 @@ npm run task-authority -- policy explain refunds.json refund:create --actor agen
 - `npm ci`, `npm run db:up` (Postgres in Docker on `127.0.0.1:55432`, or set `TEST_PG_ADMIN_URL`), then `npm run check` before every push: it is what CI runs. `npm run doctor` explains a failing prerequisite.
 - To try a change end to end with a real MCP host, `npm run local -- --owner` and Claude Code ([docs/claude-code.md](docs/claude-code.md)).
 - Where things live: [docs/README.md](docs/README.md).
-- Layers: `auth0/service` (Task Authority), `auth0/sdk` (client), `demo/*` (customer apps). `node auth0/tools/check-boundaries.mjs` enforces that demo apps use only the SDK.
+- Layers: `auth0/service` (custom approval backend), `auth0/sdk` (local unpublished client), `demo/*` (apps). The `auth0/` directory is not an ownership or hosting claim. `node auth0/tools/check-boundaries.mjs` enforces SDK-only access for Refund Desk and Deploy Gate; Policy Desk is the explicit exception because it embeds the backend.
 - The root `wrangler.jsonc` is the one-click deployment. `demo/policy-desk/wrangler.jsonc` is the maintainer's hosted demo (custom domain); do not point a user's deploy at it.
 - Never commit secrets. `.dev.vars*` and `.env*` are ignored; the lint step scans tracked files.

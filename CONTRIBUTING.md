@@ -32,7 +32,7 @@ npm run check      # build, lint and every suite CI's main job runs
 - **Agents never approve.** Any change near decisions needs a test that an agent token is refused.
 - **Every security claim has a test.** If you change behaviour listed in [docs/security-model.md](docs/security-model.md) or [docs/interoperability.md](docs/interoperability.md), update the doc and the test in the same pull request.
 - **Don't oversell.** Something tested only against the local identity provider is "local only", not "works with Auth0".
-- **Keep the layers apart.** Demo apps use only the SDK; `npm run lint` enforces it.
+- **Keep the layers apart.** Refund Desk and Deploy Gate use only the SDK; `npm run lint` enforces it. Policy Desk deliberately embeds the custom approval backend in its Worker and is excluded from that restriction.
 - **Never commit secrets.** `.env*` and `.dev.vars*` are ignored, and lint scans tracked files.
 
 Where things live: [docs/README.md](docs/README.md). Coding agents: [AGENTS.md](AGENTS.md).

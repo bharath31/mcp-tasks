@@ -1,6 +1,6 @@
 # `@task-authority/sdk` (prototype SDK)
 
-Local, unpublished package for the **proposed** Task Authority service. Not an official Auth0 SDK. Use it in a trusted backend with service credentials. Browser reviewers use OAuth and the service HTTP API directly.
+Local, unpublished package for **this repo's custom approval backend**, internally called Task Authority. The backend is embedded in Policy Desk's Worker or run separately with its Node adapter. Neither the backend nor this package is an official Auth0 product or SDK. Use it in a trusted backend with service credentials. Browser reviewers use OAuth and the service HTTP API directly.
 
 ## Quick start
 
@@ -9,7 +9,7 @@ import { createTaskAuthority } from "@task-authority/sdk";
 
 const authority = createTaskAuthority(); // task-authority.json + TASK_AUTHORITY_* env
 
-type Refund = { paymentId: string; amountMinor: number };
+type Refund = { paymentId: string; amountMinor: number; currency: string };
 export const refund = authority.action("refund:create", {
   resource: (r: Refund) => `payment:${r.paymentId}`,
   facts: async (r) => ({
@@ -22,9 +22,14 @@ export const refund = authority.action("refund:create", {
     ),
 });
 
-const outcome = await refund({ paymentId, amountMinor: 1500 }, { user: token });
+const outcome = await refund(
+  { paymentId, amountMinor: 1500, currency: "usd" },
+  { user: token, key: requestId }, // stable across retries of this logical refund
+);
 return outcome.toResponse();
 ```
+
+This is an integration sketch: `stripe`, `refundableBalance`, `paymentId`, `token` and `requestId` come from your application. `token` must be for the approval backend's audience; configure the organization and policy namespace before calling.
 
 `authority.action(name, definition)` declares a protected mutation once; every transport calls the returned function. It is a thin layer over `protect` below, with the same guarantees.
 
@@ -62,7 +67,7 @@ Call options: `user` (the caller's verified access token, or a `VerifiedSubject`
 
 Outcome reporting is automatic: a resolved `run` reports `succeeded`, a `null` from `reconcile` reports `not_submitted`, and a thrown error reports `unknown` (so the operation is reconciled, never blindly retried) before rethrowing. If your callback calls `claim.report` itself, nothing more is reported.
 
-The outcome is `protect`'s outcome plus `toResponse()`, `toMcp()` and `toCli()` (the renderers below). `action.resume(operationId, input)` continues a registered operation, for example after approval; pass the input from your own durable record of the request. Its action and resource must match the operation.
+The outcome is `protect`'s outcome plus `toResponse()`, `toMcp()` and `toCli()` (the renderers below). `action.resume(operationId, input)` continues a registered operation, for example after approval; pass the input from your own durable record of the request. Its action, resource and canonical arguments must match the operation; otherwise it throws `resume_input_mismatch`.
 
 `createTaskAuthority` returns a `TaskAuthority`, so `delegations`, `operations`, `approvals`, `audit` and `protect` are on the same object, and the executor client is `authority.executor`. `demo/policy-desk/src/refunds.ts` uses this API.
 
@@ -78,9 +83,13 @@ const ok = await approve(step, event, env, {
   resource: `payment:${paymentId}`,
   args: { paymentId, amountMinor: 15000, currency: "USD" },
   approvers: { roles: ["finance"] },
+  requester: requesterSubject, // verified by your app; enables the self-approval check
   notify: (link) => sendEmail(financeTeam, link),
 });
-await stripe.refunds.create({ ... }, { idempotencyKey: ok.key });
+await stripe.refunds.create(
+  { payment_intent: paymentId, amount: 15000 },
+  { idempotencyKey: ok.key },
+);
 ```
 
 Other engines build on the same exports: `createApprovalRequest`, `approvalLink`, `handleApprovalRoute`, `verifyApproval`, `startPush` and `pollPush`. How it works, what it guarantees and what is verified so far: [docs/approve.md](../../docs/approve.md).
@@ -225,7 +234,7 @@ Once the prerequisites hold, resume without `prepareOnly` (or call `approvals.re
 
 `authorizeAndClaim({operationId, operationDigest, executionKey, businessStateVersion?})` returns `authorized`, `reconcile_required` or `denied`. Authorized and reconciliation results carry `claim.report(status, providerReference?)`, supporting `succeeded`, `failed`, `pending`, `unknown` and `not_submitted`. Policy refusals return data with `code`, `reason`, `retryable` and `correlationId`; transport and contract errors throw `TaskAuthorityError` with `code`, `status`, `retryable`, `correlationId` and `details`.
 
-Reviewer queue and lease eligibility is checked live by the service. Batch decisions contain up to five `{approvalId, decision, operationDigest}` entries for one action. Routine decisions require fresh MFA and a DPoP-bound reviewer token; use a DPoP-capable OAuth client for the HTTP API. Per-operation review uses confidential PAR/RAR or a service-issued challenge. See the refund-desk reviewer implementation.
+Reviewer queue and lease eligibility is checked live by the service. Batch decisions contain up to five `{approvalId, decision, operationDigest}` entries for one action. Routine session-tier approvals require fresh MFA and, by default, a DPoP-bound reviewer token (a tier can explicitly make DPoP optional). An eligible reviewer with DPoP can reject without another factor. Use a DPoP-capable OAuth client for the HTTP API. Per-operation review uses confidential PAR/RAR or a service-issued challenge. See the refund-desk reviewer implementation.
 
 CIBA is **explicit escalation only**: call `approvals.escalate(approvalId, {reviewerSubject})`, then `approvals.poll(approvalId)` when checking provider progress. `approvals.request` has no channel or named-reviewer option, and `protect` never sends a push notification. An escalation reviewer subject is an unverified routing hint until the service verifies a resulting token.
 

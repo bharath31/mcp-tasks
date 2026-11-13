@@ -1,7 +1,6 @@
 # Policy Desk (backend)
 
-A Cloudflare Worker that hosts the **real Task Authority service** (`auth0/service/src/http.ts`, imported not copied)
-next to a small refund app, so a visitor with a real Auth0 login can experience channel-agnostic approval policy.
+A Cloudflare Worker that embeds **this repo's custom approval backend**, internally called Task Authority (`auth0/service/src/http.ts`, imported not copied), next to a refund app, MCP Tasks server and Workers AI agent. Task Authority is not an Auth0-hosted service or product; Auth0 provides login and authentication evidence.
 The browser UI lives in `web/` and is served from `web/dist` through the Workers `assets` binding (SPA fallback).
 The HTTP contract for the UI is [`API.md`](API.md). What the deployer must create is in
 [`PROVISIONING.md`](PROVISIONING.md).
@@ -9,10 +8,12 @@ The HTTP contract for the UI is [`API.md`](API.md). What the deployer must creat
 ```text
 Browser (Auth0 SPA) ──► Worker
                         ├─ /sandbox/*      host API (me, reset, scenario, state, progress, policy, ...)
-                        ├─ /v1/refunds*    refund app (authority.protect, simulated payments)
-                        ├─ /v1/*           real Task Authority service, tenant = the caller's sandbox
-                        └─ everything else static assets
-Postgres (Hyperdrive): schema authority (service) + schema policy_desk (this demo)
+                        ├─ /mcp            MCP Tasks; external and built-in agent calls
+                        ├─ /v1/refunds*    SDK-protected refund app, simulated payments
+                        ├─ /v1/*           custom approval backend, tenant = sandbox generation
+                        ├─ /.well-known/* OAuth protected-resource metadata
+                        └─ other UI paths  static assets
+Postgres (DATABASE_URL; optional Hyperdrive): authority + policy_desk schemas
 Auth0: login, MFA, DPoP, Actions, M2M clients     Auth0 FGA: relationships
 ```
 
@@ -39,7 +40,7 @@ OWNER_DATABASE_URL='postgres://…' node --import tsx demo/policy-desk/tools/mig
 npx wrangler dev --config demo/policy-desk/wrangler.jsonc --port 8787
 ```
 
-The request stays a working MCP Task until a reviewer completes the hosted page. `tasks/get` verifies and consumes the proof before issuing the simulated refund. The mode is experimental; it does not use Task Authority policy decisions, and it must not be enabled in the hosted demo without a separate deployment review.
+The experimental request stays a working MCP Task until a reviewer completes the app-hosted proof page. This mode still uses Policy Desk's database and sandbox setup; it is not the database-free Refund Workflow example. `tasks/get` verifies and consumes the proof before issuing the simulated refund. The mode is experimental; it does not use Task Authority policy decisions, and it must not be enabled in the hosted demo without a separate deployment review.
 
 The chat's **Review this refund** action comes from structured server metadata. The server strips the signed approval URL from the model-facing result and saved chat history, so the assistant points reviewers to that button instead of printing the token link.
 
@@ -55,13 +56,11 @@ checks and writes, policy publish/activate/simulate through `/v1/policies`, budg
 
 ## Isolation and cleanup
 
-- One real user = one sandbox `sbx_<hash(sub)>` = one service tenant `pd_<id>_g<generation>`; every service query is
-  tenant-scoped. `POST /sandbox/reset` starts a new generation (fast, idempotent).
+- One verified user = one sandbox `sbx_<hash(sub)>` and one backend tenant `pd_<id>_g<generation>` per generation. `POST /sandbox/reset` starts a **new generation on each call**; it is not an idempotent HTTP operation.
 - All demo data is in `policy_desk.*` or rows with the demo's tenant ids in `authority.*`. FGA tuples for visitors are
   written to the configured FGA store.
 - The scheduled handler (`*/5 * * * *`) deletes sandboxes older than 15 minutes and superseded generations. The service
-  tables `audit_events` and `policy_versions` are append-only by trigger; cleanup disables just those two triggers inside
-  one transaction and only deletes rows whose tenant id matches `pd_<24 hex>_g<n>`.
+  tables `audit_events` and `policy_versions` reject ordinary UPDATE/DELETE. Cleanup calls the owner-defined `policy_desk.wipe_tenants` function, which temporarily disables those two triggers within a transaction and only accepts tenant ids matching `pd_<24 hex>_g<n>`. This is intentional demo deletion, not permanent or tamper-proof audit retention. Aggregate usage totals are archived first.
 
 ## Guardrails (all server-side)
 
@@ -72,19 +71,19 @@ checks and writes, policy publish/activate/simulate through `/v1/policies`, budg
 | Max 50 operations per sandbox generation                                                                                                                                                                          | `src/refunds.ts`                                    |
 | Max 40 orders per generation                                                                                                                                                                                      | `src/orders.ts`                                     |
 | Max 10 policy publishes per hour                                                                                                                                                                                  | `src/seed.ts` (`publishPolicy`)                     |
-| Policy edits only 4 numbers inside ranges; approver floor and `unknown_action: deny` fixed in code                                                                                                                | `src/policy.ts`                                     |
+| Policy edits: 4 bounded numbers plus `allowAuthenticatorApp` for routine TOTP; approver floor and unknown-action deny fixed                                                                                       | `src/policy.ts`                                     |
 | Per-IP (hashed) and per-user fixed windows in Postgres: reads 600/10 min, writes 60/10 min, resets 10/h per IP and 6/h per user, 5 new sandboxes/day per IP, scenarios 40/10 min, policy 20/h, simulate 20/10 min | `src/api.ts`, `src/ratelimit.ts`                    |
 | Global cap of 500 active sandboxes                                                                                                                                                                                | `src/api.ts`                                        |
-| 24 hour sandbox TTL (410 after expiry)                                                                                                                                                                            | `src/refunds.ts`, `src/api.ts`, `src/cleanup.ts`    |
+| 15-minute sandbox TTL (410 while expired; 404 after deletion)                                                                                                                                                     | `src/refunds.ts`, `src/api.ts`, `src/cleanup.ts`    |
 | Visitors get no `policies:write`; policy publishing uses the admin M2M client held by the Worker                                                                                                                  | `src/seed.ts`                                       |
 
 ## Adaptations of refund-desk (the customer app)
 
 `demo/refund-desk` is Node-oriented (MCP Tasks service, warehouse stage, worker loop, `stripe`, `@auth0/auth0-api-js`).
 Reused unchanged: `policy.ts` (`isEligible`), `refund.ts` (`stateVersion`), the SDK `protect`/`renderRest`/`renderCli`/`renderMcp`.
-Adapted in `src/refunds.ts`, `src/orders.ts`: a slim REST-only refund app (no MCP `/mcp`, no warehouse return stage), a simulator
-over `policy_desk` tables instead of `refund_desk.sim_*` (the original imports the Stripe SDK and a Node `pg.Pool`), and the
-refund-desk migration is **not** applied (it holds only MCP task/warehouse tables). `/mcp` returns 404.
+Adapted in `src/refunds.ts`, `src/orders.ts` and `src/mcp.ts`: a refund app shared by REST and MCP Tasks, with no warehouse return stage and a simulator over `policy_desk` tables. Refund Desk's migrations are not applied. Policy Desk resumes authorized operations on `tasks/get` or `POST /v1/refunds/{id}/run`; it has no independent refund worker. A completed approval waits if nothing drives those calls.
+
+MCP advertises a 24-hour task TTL, but the 15-minute sandbox lifetime and cleanup limit actual access sooner. It is not a 24-hour retention guarantee.
 Node-only service pieces: `auth0/service/src/store.ts` reads its migration folder from `import.meta.url` at load; `wrangler.jsonc`
 `define`s that constant, and `src/db.ts` supplies a per-request `Store`-shaped object with identical transaction semantics.
 
@@ -103,7 +102,7 @@ email. A stored visitor email never grants access.
 
 Deployment handoff: run the owner migration tool to apply `0004_usage.sql` and
 refresh runtime grants, then configure the operator allowlist before deploying.
-This PR does not apply migrations, set secrets or modify Auth0 configuration.
+The code does not apply owner migrations automatically in the deployed runtime (`MIGRATE_ON_REQUEST=false`).
 
 The AI agent calls `recordModelCall` from `src/usage.ts` once per model invocation,
 including failed calls. Workers AI `usage.prompt_tokens` and
@@ -142,9 +141,7 @@ How the key works (`src/agent-keys.ts`):
   `wrong_sandbox`). A new key replaces the old one, `DELETE /sandbox/agent-key` revokes it,
   and TTL cleanup deletes keys with their sandbox, so a leaked key dies with the sandbox at
   the latest even if the token is still unexpired.
-- The key acts as the sandbox's refund agent, under Alex's delegation, exactly like the
-  built-in agent. That is why you, the visitor, may approve what it requests. Nothing is
-  relaxed: Task Authority decides every refund, and the approval still needs your passkey.
+- In the default authority mode, the key acts as the sandbox's refund agent under Alex's delegation, like the built-in agent. The visitor remains a separate reviewer. The custom backend applies the same policy; approvals need WebAuthn unless the routine TOTP option is explicitly enabled.
 - Limits: 5 keys per visitor per hour and 200 per day overall (each is one Auth0 M2M token).
 
 Without `EXTERNAL_AGENT_CLIENT_ID` the panel says it is not set up and the endpoint answers
@@ -173,8 +170,7 @@ The tenant needs, once:
    `organization_usage: "require"` and `organization_require_behavior: "pre_login_prompt"`
    (the sandbox token must carry the demo org) and the email connection enabled, then
    `claude mcp add --transport http --client-id <id> --callback-port 8765 policy-desk https://<host>/mcp`
-   with `http://localhost:8765/callback` in its callbacks. Dynamic client registration also
-   works, but registered clients are third-party and get no organization by default.
+   with `http://localhost:8765/callback` in its callbacks. Dynamic client registration is an alternative only if your tenant permits it; third-party registered clients get no organization by default. Neither hosted OAuth route is verified end to end with Claude Code.
 
 Sign in on the web console and create the sandbox first; `/mcp` answers 404
 `sandbox_not_initialized` until then.
@@ -189,8 +185,7 @@ Needs local Postgres on `127.0.0.1:55432` (same as `auth0/tests/helpers/pg.ts`).
 `auth0/tests/helpers/oidc-server.ts` (test only, not Auth0) and use `ALLOW_LOCAL_FGA=1` (Postgres tuple table).
 `ALLOW_LOCAL_FGA` is refused unless set explicitly; deployed mode requires `FGA_API_URL` and `FGA_STORE_ID`.
 
-`wrangler dev --local` needs `.dev.vars` (see `.dev.vars.example`) and the Hyperdrive `localConnectionString`
-(a local Postgres database named `policy_desk_dev`). Do not run `wrangler deploy` from CI without reading `PROVISIONING.md`.
+`wrangler dev --local` needs `.dev.vars` (see `.dev.vars.example`) with a local `DATABASE_URL`, or a configured Hyperdrive binding with `localConnectionString`. Both checked-in configs currently omit Hyperdrive. Set your own Auth0/FGA values rather than relying on the maintainer's config, and apply owner migrations before starting. Do not run `wrangler deploy` from CI without reading `PROVISIONING.md`.
 
 To look at the console without Auth0 or the Worker, `npm run preview:policy-desk` builds it against in-memory
 fixtures (`web/preview/`) and serves it on <http://localhost:8787>. Add `?scene=empty`, `?scene=new` or

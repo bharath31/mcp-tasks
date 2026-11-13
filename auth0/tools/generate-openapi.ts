@@ -37,7 +37,7 @@ const SUMMARY: Record<string, string> = {
   "POST /v1/delegations/:id/revoke":
     "Revoke unclaimed authority (serialized with claims)",
   "POST /v1/operations":
-    "Register an exact operation against a delegation (idempotent on operationKey)",
+    "Register an exact delegated or human-direct operation (idempotent on operationKey)",
   "GET /v1/operations/:id":
     "Inspect the authorization lifecycle of an operation",
   "POST /v1/operations/:id/approval-requests":
@@ -46,6 +46,8 @@ const SUMMARY: Record<string, string> = {
     "Read approval progress and the exact operation to review",
   "POST /v1/approval-requests/:id/decisions":
     "Record an authenticated, operation-bound approve/reject",
+  "POST /v1/approvals/:id/proof":
+    "Redeem an experimental signed approval proof (trusted backend)",
   "POST /v1/operations/:id/claims":
     "Atomic authorize-and-claim immediately before dispatch",
   "POST /v1/operations/:id/outcomes":
@@ -143,9 +145,10 @@ export function buildOpenApi() {
   return {
     openapi: "3.1.0",
     info: {
-      title: "Task Authority (proposed service, prototype)",
+      title: "Task Authority (custom approval backend, experimental)",
       version: CONTRACT_VERSION,
-      description: "Prototype API. Not an existing Auth0 public endpoint set.",
+      description:
+        "Repository-owned approval backend, embedded in Policy Desk or deployed separately. Not an Auth0 product or public Auth0 API. Generated routes and request schemas; success response schemas and DPoP requirements are not fully modeled. See the service and SDK READMEs.",
     },
     servers: [{ url: "https://task-authority.example" }],
     paths,

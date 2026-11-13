@@ -2,7 +2,7 @@
 
 An agent that can issue refunds needs more than an authenticated API connection. A support engineer may be allowed to delegate refund requests without being allowed to approve a $1,500 exception. The finance reviewer may be someone else, using a different device, minutes later.
 
-This repo implements that case: **a backend checks who approved which exact action, then checks permission again before execution.** MCP Tasks gives the agent a way to follow work that is still waiting. Auth0 supplies identity and authentication evidence; FGA supplies current relationships and permissions.
+This repo implements that case: **a backend checks who approved which exact action, then checks permission again before execution.** MCP Tasks gives the agent a way to follow work that is still waiting. The approval backend is custom code in this repository, deployed inside the default Cloudflare Worker—not an Auth0 service. Auth0 supplies identity and authentication evidence; FGA supplies current relationships and permissions. Hosted FGA is required by the current deployment, not inherently by this pattern; see [FGA's role and alternatives](architecture.md#is-fga-required).
 
 ## A concrete failure to design for
 

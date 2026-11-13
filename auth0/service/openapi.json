@@ -1,9 +1,9 @@
 {
   "openapi": "3.1.0",
   "info": {
-    "title": "Task Authority (proposed service, prototype)",
+    "title": "Task Authority (custom approval backend, experimental)",
     "version": "2026-10-15.v2",
-    "description": "Prototype API. Not an existing Auth0 public endpoint set."
+    "description": "Repository-owned approval backend, embedded in Policy Desk or deployed separately. Not an Auth0 product or public Auth0 API. Generated routes and request schemas; success response schemas and DPoP requirements are not fully modeled. See the service and SDK READMEs."
   },
   "servers": [
     {
@@ -1171,7 +1171,7 @@
     },
     "/v1/operations": {
       "post": {
-        "summary": "Register an exact operation against a delegation (idempotent on operationKey)",
+        "summary": "Register an exact delegated or human-direct operation (idempotent on operationKey)",
         "parameters": [
           {
             "name": "Idempotency-Key",
@@ -1631,6 +1631,7 @@
     },
     "/v1/approvals/{id}/proof": {
       "post": {
+        "summary": "Redeem an experimental signed approval proof (trusted backend)",
         "parameters": [
           {
             "name": "id",

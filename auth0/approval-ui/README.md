@@ -1,6 +1,6 @@
 # Task Authority approval UI (prototype)
 
-React components for the hosted approval page. The page decides nothing itself:
+React components for an approval page you host, used by Refund Desk. These render records from this repository's custom approval backend, not an Auth0-hosted approval product. Policy Desk has its own console/review implementation in `demo/policy-desk/web/`. The page decides nothing itself:
 it shows Task Authority's own record of one operation and posts the signed-in
 person's decision back, so every client (MCP, REST, CLI) lands on the same
 approval.

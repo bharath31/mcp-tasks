@@ -1,13 +1,26 @@
-# PRD: Channel-agnostic approval policy
+# Historical PRD: Channel-agnostic approval policy
 
-| Field    | Value                                                                                                      |
-| -------- | ---------------------------------------------------------------------------------------------------------- |
-| Status   | Draft for review                                                                                           |
-| Date     | 2026-10-15                                                                                                 |
-| Scope    | `auth0/service` (Task Authority), `auth0/sdk`, `auth0/actions`, `demo/refund-desk`                         |
-| Replaces | CIBA as the default approval channel (CIBA is kept as an escalation channel)                               |
-| Related  | [`architecture.md`](architecture.md), [`security-model.md`](security-model.md)                             |
-| Reminder | Task Authority is a proposed design, not an Auth0 product. Nothing here describes a shipped Auth0 feature. |
+> **Archived design context, written 2026-10-15—not current setup instructions or an implementation checklist.** References to “today,” source line numbers, deficiencies and provider limits below describe that investigation, not the current code. Preserve them as rationale; use [approval-policy.md](approval-policy.md), [architecture.md](architecture.md) and [interoperability.md](interoperability.md) for the current implementation and verified integrations. Auth0 plan entitlements and limits must be checked against current provider documentation before deployment.
+
+## Current implementation versus this proposal
+
+- The versioned policy evaluator, SDK guard, REST/CLI parity, budgets, reviewer queue/leases, per-operation challenges, session tiers, batch API, simulation, shadow mode, templates, provider-event reconciliation and digest payload are implemented.
+- CIBA is explicit escalation, not the default approval channel. The earlier front-channel RAR problem is not a description of the current service-challenge or confidential PAR paths.
+- Policy Desk has a limited policy console and co-locates the custom backend with the app in a Worker; the diagram below is a logical/separate-deployment design, not the default hosted topology.
+- Policy Desk makes routine approvals per-operation by default. Session MFA remains supported by the generic policy model. DPoP-bound rejection can omit MFA. Explicit owner approval is now supported for restricted user-owned single-reviewer operations.
+- A general policy editor, role-diverse quorum, conditional FGA approver limits, Event Streams integration and Terraform provider remain future work. The unchecked boxes below are historical requirements, **not** an assertion that all are still missing or implemented exactly as proposed.
+- “Task Authority” is the backend implemented in this repository, not an Auth0 product. Claims coordinate authorization; they do not guarantee exactly-once external effects. Live-test limitations remain in [interoperability.md](interoperability.md).
+
+---
+
+| Field    | Value                                                                                                    |
+| -------- | -------------------------------------------------------------------------------------------------------- |
+| Status   | Archived proposal; see current-status note above                                                         |
+| Date     | 2026-10-15                                                                                               |
+| Scope    | `auth0/service` (Task Authority), `auth0/sdk`, `auth0/actions`, `demo/refund-desk`                       |
+| Replaces | CIBA as the default approval channel (CIBA is kept as an escalation channel)                             |
+| Related  | [`architecture.md`](architecture.md), [`security-model.md`](security-model.md)                           |
+| Reminder | This was a proposal for repository-owned code, not an Auth0 product roadmap or shipped approval feature. |
 
 ## 1. Summary
 
