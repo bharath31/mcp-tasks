@@ -2,8 +2,7 @@
 
 > For your own deployment, use the one-click path in [docs/deploy-cloudflare.md](../../docs/deploy-cloudflare.md): `npm run setup` runs everything below (`provision.mjs`, MFA factors, `ul-text.mjs`, the FGA model, migrations with the runtime role, Worker secrets and `alex-login.mjs`) against the root `wrangler.jsonc`, then checks the tenant read-only (`npm run verify`). This page documents what it configures and how to do it by hand.
 
-Everything about identity, MFA, step-up, DPoP, approvals and authorization is real in this demo.
-Only payments are simulated. This list is derived from `auth0/tools/auth0-provision.mjs`
+The default deployed demo uses real Auth0 identity/MFA and FGA checks with the custom approval backend implemented here; payments are simulated. “Task Authority API” below means an Auth0 resource-server registration (audience/permissions) for that Worker-hosted backend, not an Auth0-hosted approval product. Local tests use identity/FGA fixtures, and the experimental `approve()` mode is not live-verified. This list is derived from `auth0/tools/auth0-provision.mjs`
 (the test-tenant provisioner), `auth0/actions/*.cjs`, `docs/approval-policy.md`
 and `demo/refund-desk/README.md`. The hosted demo runs on a live tenant that was configured by hand and by
 these tools over time; **`npm run setup` has never been run end to end against a brand-new tenant**.
@@ -13,11 +12,7 @@ The Worker only reads configuration from the variables below. Use a dedicated te
 
 `tools/provision.mjs` does steps 1 to 6 of section 1 through the Auth0 CLI (`auth0 login` first, with
 scopes for resource servers, clients, client grants, organizations, actions and connections; Node 22, no
-dependencies). It is **additive and idempotent**: every object it creates is named `policy-desk` /
-`Policy Desk`, it looks objects up by name first, and it never edits an existing API, client, connection,
-organization, user, Action, MFA setting, branding or tenant setting. The one shared object it must touch is
-the post-login flow: it fetches the current bindings and appends its two Actions at the end (existing
-bindings keep their order and settings; the before/after list is printed).
+dependencies). It is **rerunnable and reconciles managed objects** named `policy-desk` / `Policy Desk`, looking them up by stored id/name. It can update existing managed API settings, clients/callbacks, grants and Action code; it is not create-only. It preserves unrelated post-login bindings and appends its own Actions in the required order. Always inspect a dry run on a tenant that is not new. The higher-level `setup.mjs` additionally changes MFA factors, email-connection configuration and Universal Login text.
 
 ```sh
 # 1. Dry run (default): prints every planned call with redacted bodies, writes nothing.
@@ -46,13 +41,15 @@ It only reports (never changes) tenant-wide facts, and prints an `ACTION NEEDED 
 WebAuthn factors off, connection sign-up disabled, DPoP/RAR availability on the tenant, and Alex's one-time login.
 If the tenant rejects the DPoP or RAR fields on the API, the script continues without them and says so.
 
-**Exact order** (everything that touches secrets keeps them out of stdout, argv and the repo):
+**Manual maintainer path:** the standalone `put-secrets.mjs` and `alex-login.mjs` helpers target `demo/policy-desk/wrangler.jsonc`, which contains the maintainer's deployment. Do not use them unchanged for a root-config user deployment; use `npm run setup`, which overrides the secret destination. The sequence below describes those maintainer helpers, not the deploy-your-own path.
+
+**Order** (secrets are passed over stdin rather than command arguments):
 
 1. `provision.mjs ... --apply --create-alex <email>`: Auth0 objects, Alex and the "Policy Desk Agent Owner"
    confidential client (regular web app, authorization code + refresh token, callback
    `http://127.0.0.1:53682/callback`, **non-rotating** refresh tokens, organization usage allowed, user grant on
    the Task Authority API with no scopes; the API already allows offline access).
-2. Deploy the Worker once (`wrangler deploy`, yours to run), then
+2. Build with `npm run build:web` and deploy the intended maintainer config (`npx wrangler deploy --config demo/policy-desk/wrangler.jsonc`), then
    `node demo/policy-desk/tools/put-secrets.mjs --apply`: pushes every client id/secret (including
    `AGENT_OWNER_CLIENT_ID/SECRET`) with `wrangler secret put` over stdin.
 3. `node demo/policy-desk/tools/alex-login.mjs`: opens the browser once. Sign in as Alex with the email you gave
@@ -66,7 +63,7 @@ Still manual after the script runs:
 1. **Tenant-wide settings it will not touch**: enable WebAuthn roaming/platform (and OTP) under MFA; enable
    sign-up on the connection if it is disabled.
 2. **Auth0 FGA store** and credentials (section 2).
-3. **Postgres and Hyperdrive**, then the id in `wrangler.jsonc` (section 3).
+3. **Postgres**, plus optional Hyperdrive if desired (section 3).
 4. **Cloudflare**: copy `vars` into `wrangler.jsonc`, then `wrangler secret put` each name in `secrets` and
    `manualSecrets` (values for the `AUTHORITY_*` / `AGENT_*` ids and secrets are in the state file).
 
@@ -74,7 +71,7 @@ The numbered list below documents what the script configures, for review and for
 
 ## 1. Auth0 tenant
 
-1. **Task Authority API** (resource server)
+1. **Task Authority API registration** (resource server for your custom backend)
    - Identifier (audience): your choice, e.g. `https://policy-desk.example/task-authority`
      -> Worker var `TASK_AUTHORITY_AUDIENCE`.
    - Signing algorithm RS256. RBAC on, "Add permissions in the access token" on
@@ -86,8 +83,7 @@ The numbered list below documents what the script configures, for review and for
    - Rich Authorization Requests: authorization details type `task_authority_approval`.
      Reviewer PAR/RAR needs the Highly Regulated Identity entitlement; the template's routine tier works
      without it (session MFA + DPoP). The hosted sandbox makes every approval per-operation: the
-     SPA signs in with email OTP and no `approvals:decide` scope (so no MFA at sign-in), and each
-     decision is a fresh WebAuthn step-up bound to a service challenge. High-value (`per_operation`) tiers need a token whose `amr`
+     SPA signs in with email OTP and no `approvals:decide` scope (so no MFA at sign-in), and each approval is a fresh WebAuthn step-up bound to a service challenge by default (routine TOTP is an explicit sandbox opt-in; DPoP-bound rejection needs no new factor). High-value (`per_operation`) tiers need a token whose `amr`
      names `webauthn-platform` or `webauthn-roaming`, so enable WebAuthn as an MFA factor.
    - If the agent client requests a separate audience, create a second API and set `APP_AUDIENCE`;
      otherwise the agent also uses the Task Authority audience (the default).
@@ -120,8 +116,7 @@ The numbered list below documents what the script configures, for review and for
    offline refresh token for an access token whenever it must (re)create the delegation, using the "Policy Desk
    Agent Owner" confidential client: Worker secrets `AGENT_OWNER_CLIENT_ID`, `AGENT_OWNER_CLIENT_SECRET`,
    `AGENT_OWNER_REFRESH_TOKEN` (the last one is set by `alex-login.mjs`). Rotation must stay off for that client.
-   Alex must never review: the service forbids a delegation owner or initiator approving under that delegation,
-   so the visitor (a different person) is the reviewer.
+   The default sandbox policy keeps Alex from reviewing the agent's request, so the visitor is a separate reviewer. The backend also supports an explicit `self_approval: "owner"` policy elsewhere; it is not enabled by this sandbox template.
 6. **Actions** (Actions > Library, deploy, attach to Login flow in this order). Deploy the repo files
    unchanged; they are Auth0 Actions v3:
    1. `auth0/actions/task-authority-approval.cjs` (forces MFA/step-up for approval logins; add secret none)
@@ -132,7 +127,7 @@ The numbered list below documents what the script configures, for review and for
 7. **MFA**: enable the factors you want reviewers to use (OTP, WebAuthn roaming/platform). Without
    WebAuthn the high-value tier cannot be approved (by design; it is the PRD's phishing-resistant tier).
 8. **Callback URLs**: `https://<your-origin>/` and `https://<your-origin>/review` (or whatever the UI uses)
-   as Allowed Callback URLs, Allowed Logout URLs and Allowed Web Origins; also add the origin to CORS if the
+   as Allowed Callback URLs. Allowed Web Origins should contain the origin only (no `/review` path); configure logout URLs separately. Also add the origin to CORS if the
    SPA calls the Worker cross-origin (it should not: same origin).
 
 ## 2. Auth0 FGA
@@ -140,21 +135,18 @@ The numbered list below documents what the script configures, for review and for
 1. Create an FGA store and write the model in `auth0/service/fga/model.fga`.
 2. Credentials (two clients are cleaner; one is enough for a trial):
    - read/check: Worker secret `FGA_API_TOKEN` (or `FGA_CLIENT_ID`/`FGA_CLIENT_SECRET` client credentials)
-   - write (used only by `POST /sandbox/reset` to grant the visitor their own tuples): `FGA_ADMIN_TOKEN`
+   - write (sandbox setup/refresh): `FGA_ADMIN_TOKEN`, or the configured FGA client credentials with write access
 3. Vars: `FGA_API_URL` (e.g. `https://api.us1.fga.dev`), `FGA_STORE_ID`, optional `FGA_MODEL_ID`,
    optional `FGA_TOKEN_URL` / `FGA_TOKEN_AUDIENCE` for Auth0 FGA client credentials.
 4. The Worker writes, idempotently, on `organization:<org_id>`: the visitor (`member`, `refund_request`,
-   `refund_approve`), Alex (`member`, `refund_request`), `agent:<AGENT_ID>` `registered_agent`, and the API and
-   executor clients `trusted_backend`. Tuples for visitors accumulate in the store; prune them with a store-side job
+   `refund_approve`), Alex (`member`, `refund_request`), `agent:<AGENT_ID>` `registered_agent`, and the configured backend clients `trusted_backend`. Tuples for visitors accumulate in the store; prune them with a store-side job
    (the Worker's cleanup only deletes Postgres rows).
 
 ## 3. Cloudflare and Postgres
 
-- A Postgres database (Supabase or any Postgres 14+) and a **Hyperdrive** configuration for it: put the id in
-  `wrangler.jsonc` (`hyperdrive[0].id`). Schemas: `authority` (Task Authority) and `policy_desk` (this demo).
+- A Postgres database (Supabase or another reachable Postgres 14+ host). Both checked-in Worker configs currently use the runtime role's `DATABASE_URL` secret directly. **Hyperdrive is optional**: add a binding named `HYPERDRIVE` with your configuration id to use it. Schemas: `authority` (custom approval backend) and `policy_desk` (demo).
 - **Two database roles.** The Worker must not own the tables: an owner can disable the append-only
-  triggers on `authority.audit_events` and `authority.policy_versions`, which would void the audit
-  guarantee if the Worker were compromised.
+  triggers on `authority.audit_events` and `authority.policy_versions`. The restricted runtime role cannot do that directly, but can invoke demo cleanup; this is not tamper-proof or permanent audit storage.
   1. An **owner** role (the one that created the schemas) applies migrations and never goes into the Worker:
      `OWNER_DATABASE_URL=postgres://owner:...@host/db npx tsx demo/policy-desk/tools/migrate.ts`.
      This also grants the runtime role (`src/migrations/runtime-grants.sql`); re-run it after every
@@ -168,7 +160,7 @@ The numbered list below documents what the script configures, for review and for
   Order for an existing deployment: create the runtime role, run `tools/migrate.ts` as the owner, set
   `DATABASE_URL` to the runtime role, then deploy.
 
-- Build the UI (`web/dist`), then deploy yourself (`wrangler deploy`). `wrangler.jsonc` attaches the custom domain `mcp-tasks.dev` (and keeps `mcp-tasks.bharath.sh` as a redirect via `LEGACY_HOSTS`); change or remove `routes`, `CANONICAL_ORIGIN` and `LEGACY_HOSTS` for your own deployment.
+- Build the UI (`npm run build:web`). For your own deployment use `npm run deploy` with the root config and `npm run setup`. The maintainer's `demo/policy-desk/wrangler.jsonc` attaches `mcp-tasks.dev` and its legacy redirect; do not use it as-is for another deployment.
 - Worker vars: see `wrangler.jsonc` (`AUTH0_DOMAIN`, `TASK_AUTHORITY_AUDIENCE`, `SPA_CLIENT_ID`, `AUTH0_ORG_ID`,
   `AGENT_ID`, `HIGH_VALUE_QUORUM`, `FGA_API_URL`, `FGA_STORE_ID`).
 - Worker secrets: `wrangler secret put <NAME>` for every secret above and the optional `IP_HASH_SALT`.
@@ -177,5 +169,5 @@ The numbered list below documents what the script configures, for review and for
 ## 4. Verification that needs a live tenant
 
 Universal Login with the organization, MFA enrolment, DPoP at the token endpoint, the Actions' claims
-(`amr` factor names, namespaced `auth_time`), WebAuthn for the high-value tier, the Alex refresh-token exchange, Auth0 FGA writes/checks, Hyperdrive, and the hourly cron. Local tests use a stand-in IdP
+(`amr` factor names, namespaced `auth_time`), WebAuthn for the high-value tier, the Alex refresh-token exchange, Auth0 FGA writes/checks, Hyperdrive, and the five-minute cleanup cron. Local tests use a stand-in IdP
 (`auth0/tests/helpers/oidc-server.ts`, test only) and the Postgres tuple table (`ALLOW_LOCAL_FGA=1`, refused otherwise).

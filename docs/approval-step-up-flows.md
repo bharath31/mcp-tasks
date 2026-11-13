@@ -1,5 +1,7 @@
 # Refund approval step-up flows
 
+This page covers Policy Desk's default custom-backend mode (`APPROVAL_MODE=authority`), not the separate experimental `approve()` proof path. The backend runs in the Worker; the Actions below run in Auth0 during login.
+
 By default every Policy Desk refund that needs a human is approved with a fresh passkey or security key, bound to that one refund. A code (email, Guardian OTP, SMS or push) never approves a refund by itself.
 
 **Demo opt-in for reviewers without a passkey device.** A sandbox can turn on "Accept authenticator apps for routine approvals" (at sandbox creation, or in Policy; the setting is `allowAuthenticatorApp`). The routine tier's `factors` then also list `otp`, so a fresh authenticator-app code (TOTP) approves routine refunds. It is still per operation: the code must come after the service's challenge for that one refund, and the sign-in's own MFA never counts. High-value refunds always need a passkey or security key. The page sends `task_authority_factor=webauthn_or_otp` for such an approval, and the Action offers or enrols a passkey or an authenticator app. A policy change applies to new requests only, so a refund already waiting keeps the factors it was registered with. Rejecting moves no money, so a signed-in reviewer whose token is bound to their browser (DPoP) rejects with no second factor.
@@ -8,7 +10,7 @@ This page lists every path through the approval step-up, what the reviewer sees,
 
 ## How one approval runs
 
-1. The reviewer presses **Approve**. The page checks that the browser can use WebAuthn, then asks the service for a challenge bound to the approval, its digest, the reviewer and the browser's DPoP key.
+1. The reviewer presses **Approve**. For a WebAuthn-only policy the page checks that the browser supports it (the routine TOTP opt-in skips this prerequisite), then asks the service for a challenge bound to the approval, its digest, the reviewer and the browser's DPoP key.
 2. The page sends the reviewer to Auth0 with `task_authority_challenge`, `task_authority_factor=webauthn`, the MFA `acr_values` and the `approvals:decide` scope. It sends no `max_age`, so a reviewer whose Auth0 session is still active does not type the email code again.
 3. `auth0/actions/task-authority-approval.cjs` picks the second factor:
    - a passkey or security key enrolled: challenge it, and offer nothing else;
@@ -75,7 +77,7 @@ If Auth0 does not report the passkey enrolment itself as an MFA method, the firs
 | ------------------------------------------------------ | --------------------------------------------------------------------------- | ---------------------------------------------------------------- |
 | Approve, separate reviewer                             | Fresh WebAuthn bound to the refund                                          | `flows.test.ts` "fresh passkey"                                  |
 | Reject, DPoP-bound sign-in                             | No second factor, no freshness check; still bound to the digest and audited | `flows.test.ts` "device-bound reviewer rejects"                  |
-| Reject or approve with a bearer (non-DPoP) token       | Refused `mfa_required`                                                      | `flows.test.ts` "device-bound reviewer rejects"                  |
+| Plain login bearer token used to reject or approve     | Refused `mfa_required`                                                      | `flows.test.ts` "device-bound reviewer rejects"                  |
 | DPoP-bound token sent as bearer, or a replayed proof   | Refused                                                                     | `security.test.ts` "refuses a DPoP-bound token sent as Bearer"   |
 | Owner approving their own agent (self-approval policy) | Always a fresh passkey, never a review session, never OTP                   | `auth0/tests/service/owner-approval.test.ts`                     |
 | Owner without a self-approval policy                   | Refused (separation of duties)                                              | `owner-approval.test.ts` "separation of duties is the default"   |
@@ -91,10 +93,10 @@ If Auth0 does not report the passkey enrolment itself as an MFA method, the firs
 | Sandbox reset between the challenge and the return    | The old approval is gone; the decision is refused                                             | `flows.test.ts` "a sandbox reset between the challenge and the return"         |
 | Sandbox expires mid-approval                          | The decision may still record in Task Authority, but the refund never runs: `sandbox_expired` | `flows.test.ts` "a sandbox that expires mid-approval"                          |
 
-## Deploying the fix
+## Deploying the current implementation
 
-1. Deploy the Worker and web bundle (`npm run build`, then `wrangler deploy --config demo/policy-desk/wrangler.jsonc`).
-2. Update the `policy-desk task-authority-approval` Action with `auth0/actions/task-authority-approval.cjs` and deploy it. Bindings do not change.
+1. Deploy the Worker and web bundle: `npm run build`, then `npm run deploy` for your own root-config deployment. Only the maintainer should use `npx wrangler deploy --config demo/policy-desk/wrangler.jsonc` (it contains the maintainer's domain and tenant).
+2. Update/deploy both managed Actions from `auth0/actions/task-authority-approval.cjs` and `auth0/actions/task-authority-assurance.cjs`, in that order. `npm run setup` reconciles them; `npm run verify` checks deployed code and binding order without changing them.
 3. Set the Universal Login text: `node demo/policy-desk/tools/ul-text.mjs --tenant <tenant>` (dry run), then add `--apply`.
 
 ## Checking it live

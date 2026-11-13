@@ -3,7 +3,7 @@
   "version": "0.1.0",
   "private": true,
   "type": "module",
-  "description": "Proposed Auth0 Task Authority service (reference implementation, not an Auth0 product).",
+  "description": "Custom approval backend using Auth0 identity and FGA permissions. Experimental reference implementation, not an Auth0 product.",
   "scripts": {
     "start": "node --import tsx src/server.ts",
     "migrate": "node --import tsx src/migrate-cli.ts"

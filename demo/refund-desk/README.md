@@ -1,30 +1,34 @@
 # Refund Desk (customer reference application)
 
-A merchant-returns agent over **MCP Tasks 2026-07-28**. It owns the MCP receiver, task persistence, the worker, business rules and the provider adapter. It does **not** own delegation, approval, claim or FGA state: that is the separately deployed Task Authority service, reached only through `@task-authority/sdk`.
+A merchant-returns agent over **MCP Tasks 2026-07-28**. It owns the MCP receiver, task persistence, the worker, business rules and the provider adapter. It does **not** own delegation, approval, claim or FGA state: that is this repo's custom Task Authority backend, run separately for this example and reached through the local unpublished `@task-authority/sdk`. It is not an Auth0-hosted product. Policy Desk is the alternative that embeds both app and backend in one Worker.
 
 ## Files
 
-| File                                    | Owns                                                                          |
-| --------------------------------------- | ----------------------------------------------------------------------------- |
-| `src/workflow.ts`                       | The protected workflow: `authority.protect` preparation and claimed execution |
-| `src/refund.ts`, `src/policy.ts`        | Business facts and the business eligibility and exception-note requirements   |
-| `src/tasks.ts`                          | Task lifecycle, worker ticks, retries, status mapping                         |
-| `src/mcp.ts`                            | `server/discover`, `tools/call`, `tasks/get                                   | update | cancel`, error codes |
-| `src/auth.ts`                           | `@auth0/auth0-api-js` verification, RFC 9728 metadata, OBO exchange           |
-| `src/payments.ts`                       | Stripe **test-mode** adapter (live keys refused) and a labelled simulator     |
-| `src/warehouse.ts`, `src/repository.ts` | Signed event ingress; task persistence (no authorization tables)              |
+| File                                    | Owns                                                                                      |
+| --------------------------------------- | ----------------------------------------------------------------------------------------- |
+| `src/workflow.ts`                       | The protected workflow: `authority.protect` preparation and claimed execution             |
+| `src/refund.ts`, `src/policy.ts`        | Business facts and the business eligibility and exception-note requirements               |
+| `src/tasks.ts`                          | Task lifecycle, worker ticks, retries, status mapping                                     |
+| `src/mcp.ts`                            | `server/discover`, `tools/call`, `tasks/get`, `tasks/update`, `tasks/cancel`, error codes |
+| `src/auth.ts`                           | `@auth0/auth0-api-js` verification, RFC 9728 metadata, OBO exchange                       |
+| `src/payments.ts`                       | Stripe **test-mode** adapter (live keys refused) and a labelled simulator                 |
+| `src/warehouse.ts`, `src/repository.ts` | Signed event ingress; task persistence (no authorization tables)                          |
 
 ## Run
 
 ```sh
-cp .env.example .env     # see the file for every variable
+# From the repository root, after npm ci:
+cp demo/refund-desk/.env.example demo/refund-desk/.env
+# Fill in the file; entry points do not automatically load .env.
 npm run build:web
-npm run dev:demo         # app + worker loop; the Task Authority service must already be running
+node --env-file=demo/refund-desk/.env --import tsx demo/refund-desk/src/server.ts
 ```
+
+The custom approval backend must already be running; see its [Node setup](../../auth0/service/README.md#run-the-node-backend). If the app variables are already exported, `npm run dev:demo` builds and starts the app/worker. For the account-free fixture stack instead, use `npm run local`.
 
 Set `PAYMENTS_MODE=stripe-test` with an `sk_test_` key for real Stripe test-mode refunds; otherwise the simulator is used and the page banner says so. `DEMO_MODE=1` mounts the operator-only scenario controls (nonproduction).
 
-MCP client: the endpoint is `/mcp`; protected-resource metadata is at `/.well-known/oauth-protected-resource`. The client must send `_meta["io.modelcontextprotocol/protocolVersion"] = "2026-07-28"` and declare `io.modelcontextprotocol/tasks`; otherwise `request_refund` returns `-32021` and creates nothing. Tested clients: a deterministic compliant test client only. No mainstream client has been tested.
+MCP client: the endpoint is `/mcp`; protected-resource metadata is at `/.well-known/oauth-protected-resource`. The client must send `_meta["io.modelcontextprotocol/protocolVersion"] = "2026-07-28"` and declare `io.modelcontextprotocol/tasks`; otherwise `request_refund` returns `-32021` and creates nothing. Tested clients include the official Tasks requester and Claude Code against the local fixture stack. This does not establish live Auth0 OAuth compatibility; see [interoperability](../../docs/interoperability.md).
 
 Tools: `request_refund` (task), `create_test_payment`, `get_payment`.
 
@@ -49,6 +53,9 @@ const result = await authority.protect(
   "refund:create",
   () => ({
     operationKey,
+    organizationId,
+    resourceServer: mcpAudience, // same policy namespace for MCP, REST and CLI
+    delegationId, // omit for a verified human-direct caller
     resource,
     arguments: canonicalArguments,
     facts,
@@ -80,8 +87,8 @@ With `REVIEWER_PAR_ENABLED=1`, a confidential backend sends RAR details to Auth0
 
 ## What this app deliberately does not do
 
-No grant/approval/claim tables, no FGA checks, no approval-by-boolean, no reading service tables (`scripts/check-boundaries.mjs` enforces this). A compromised worker with provider credentials could still refund without a claim; the adapter's grant check is an in-process control.
+No grant/approval/claim tables, no FGA checks, no approval-by-boolean, no reading service tables (`auth0/tools/check-boundaries.mjs` enforces this). A compromised worker with provider credentials could still refund without a claim; the adapter's grant check is an in-process control.
 
 ## Honest status
 
-Executed: protocol conformance, eight security scenarios, real process restarts, signed warehouse ingress, adapter contract against a **fake** Stripe server. Not executed: real Auth0 login/MFA/OBO/RAR, Stripe test mode, a mainstream MCP client, deployment.
+Tested: protocol conformance, security scenarios, real process restarts, signed warehouse ingress, the adapter contract against a **fake** Stripe server, and Claude Code against the local stack. Not verified for this standalone app: live Auth0 login/MFA/OBO/RAR, real Stripe test-mode dispatch or deployment. Policy Desk's hosted Auth0/FGA evidence is separate; see [interoperability](../../docs/interoperability.md).

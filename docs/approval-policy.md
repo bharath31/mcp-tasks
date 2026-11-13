@@ -1,7 +1,6 @@
 # Approval policy implementation
 
-Task Authority is a reference implementation, not a shipped Auth0 product.
-The design and requirements are in [the PRD](prd-approval-policy.md).
+Task Authority is this repo's custom approval backend, not a shipped Auth0 product. It runs inside Policy Desk's Worker by default or separately via Node. This page describes implemented behavior; [the PRD](prd-approval-policy.md) is historical rationale, not the current contract.
 
 ## Write your first policy
 
@@ -9,7 +8,7 @@ A policy is a versioned JSON document per API (resource server). Each action dec
 
 ```json
 {
-  "resource_server": "https://api.example.com/refunds",
+  "resource_server": "https://api.northstar.example",
   "version": "refunds.v1",
   "unknown_action": "deny",
   "actions": {
@@ -69,13 +68,15 @@ npm run task-authority -- policy explain refunds.json refund:create --actor agen
 Publish it to a Task Authority service with a token that has `policies:write` (the admin M2M client), trying it in shadow mode and against recent traffic before it decides anything:
 
 ```sh
-export TASK_AUTHORITY_URL=https://<your service> TASK_AUTHORITY_TOKEN=<policies:write token>
-npm run task-authority -- policy apply refunds.json --shadow            # publish; evaluate alongside the active version
-npm run task-authority -- policy simulate https://api.example.com/refunds --version refunds.v1 --since 30d
-npm run task-authority -- policy activate https://api.example.com/refunds refunds.v1
+export TASK_AUTHORITY_URL='https://your-approval-backend.example'
+# Set TASK_AUTHORITY_TOKEN privately to a policies:write token.
+# Use the resource_server and version from YOUR file; these match the untouched template.
+npm run task-authority -- policy apply refunds.json --shadow
+npm run task-authority -- policy simulate https://api.northstar.example --version refunds.v1 --since 30d
+npm run task-authority -- policy activate https://api.northstar.example refunds.v1
 ```
 
-In the one-click deployment, each sandbox's policy is built by `sandboxPolicy()` in [`demo/policy-desk/src/policy.ts`](../demo/policy-desk/src/policy.ts) and published through the same `/v1/policies` API. The console's **Policy** view lets you change its four limits, replay the change against your own operations, and publish and activate a new version; change that function and push to your copy to change the rules themselves.
+In the one-click deployment, each sandbox's policy is built by `sandboxPolicy()` in [`demo/policy-desk/src/policy.ts`](../demo/policy-desk/src/policy.ts) and published through the same `/v1/policies` API. The console's **Policy** view lets you change its four numeric limits and opt into authenticator-app codes for routine approvals, replay the change against your own operations, and publish and activate a new version; change that function and push to your copy to change the rules themselves.
 
 The rest of this page is the full reference: administration, owner approval, budgets, reviewers, CIBA and provider reconciliation.
 
@@ -92,14 +93,14 @@ export TASK_AUTHORITY_URL=http://localhost:8788
 npm run task-authority -- policy templates
 npm run task-authority -- policy validate refunds.json
 npm run task-authority -- policy apply refunds.json
-npm run task-authority -- policy simulate https://api.example/refunds --version refunds.v2 --since 30d
-npm run task-authority -- policy activate https://api.example/refunds refunds.v2 --shadow
-npm run task-authority -- policy activate https://api.example/refunds refunds.v2
-npm run task-authority -- policy list https://api.example/refunds
+npm run task-authority -- policy simulate https://api.northstar.example --version refunds.v1 --since 30d
+npm run task-authority -- policy activate https://api.northstar.example refunds.v1 --shadow
+npm run task-authority -- policy activate https://api.northstar.example refunds.v1
+npm run task-authority -- policy list https://api.northstar.example
 ```
 
 Templates cover refunds, production deploys, and data exports. Adapt the API
-identifier, argument names, requester and approver relations before publishing.
+identifier, argument names, requester and approver relations before publishing; update the commands to match. Each changed document needs a new version. These CLI examples address the standalone backend; Policy Desk additionally resolves a sandbox tenant, so use its console/host API rather than assuming a bare admin M2M call selects a sandbox.
 New registrations read the active pointer directly; activation requires no
 restart. Existing operations retain their version, facts, actor and digest.
 No configured policy means deny. `unknown_action: "approve"` requires an explicit
@@ -171,13 +172,13 @@ operation digest, never a review session, and needs a WebAuthn factor (`amr`
 names any). OTP never satisfies it.
 
 Each transport points at the same hosted approval page. REST returns 202 with
-`reviewUrl`, the CLI prints it, and MCP moves the task to `input_required` with
+`reviewUrl`, the CLI prints it, and the SDK's default MCP rendering moves the task to `input_required` with
 a URL-mode elicitation keyed `owner_approval:<approval id>` (`elicitationId` =
 approval id). Each approval gets its own key, because MCP Tasks never lets a
 server reuse an input-request key for a later request. The
 elicitation answer only says whether the user went to the page; the agent
 continues when Task Authority records the decision. `OperationView.ownerApproval`
-and `ApprovalView.viewerRole` tell clients and the page which path applies.
+and `ApprovalView.viewerRole` tell clients and the page which path applies. For headless hosts, `renderMcp(outcome, { ownerPrompt: "status" })` keeps the task `working` and puts the link in its status instead. Policy Desk does not use owner elicitation; its visitor reviews requests delegated by Alex.
 
 ## Budget holds
 
@@ -242,9 +243,6 @@ holds, hold release/recheck, human separation of duties, queue leases, DPoP
 proofs, reviewer sessions, batch atomicity, transport parity and reconciliation.
 Run `npm run lint`, `npm run build`, and `npm test`.
 
-Auth0 Enterprise/HRI entitlements and browser WebAuthn ceremonies require live
-tenant verification. The reference confidential reviewer backend keeps pending
+PAR/RAR and CIBA still require live-tenant verification; Policy Desk's separate service-challenge/WebAuthn path has manual demo-tenant evidence, not CI coverage of real authenticators. The reference confidential reviewer backend keeps pending
 OAuth transactions in memory for five minutes; restarting it requires a new
-login. The console, Terraform provider, identity Event Streams revocation,
-conditional approver limits and role-diverse quorum remain future work under
-P2. This implementation makes no production SLA or multi-region guarantees.
+login. Policy Desk has a limited policy console (four numeric settings, the routine TOTP opt-in and simulation). A general policy editor, Terraform provider, identity Event Streams revocation, conditional approver limits and role-diverse quorum remain future work. This implementation makes no production SLA or multi-region guarantees.

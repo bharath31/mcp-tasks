@@ -20,15 +20,19 @@ Start with the [root README](../README.md). This page lists every guide, says wh
 | [`auth0/sdk/README.md`](../auth0/sdk/README.md)         | You are calling Task Authority from your app.                                                                 |
 | [`auth0/service/README.md`](../auth0/service/README.md) | You are running Task Authority yourself.                                                                      |
 
-Background, not instructions: [prd-approval-policy.md](prd-approval-policy.md) (the design rationale for policy).
+App references: [Policy Desk README](../demo/policy-desk/README.md), [API](../demo/policy-desk/API.md), [architecture](../demo/policy-desk/ARCHITECTURE.md), [manual provisioning](../demo/policy-desk/PROVISIONING.md), [Refund Desk](../demo/refund-desk/README.md), [Refund Workflow](../demo/refund-workflow/README.md), and [approval UI components](../auth0/approval-ui/README.md).
+
+Project guidance: [contributing](../CONTRIBUTING.md), [coding agents](../AGENTS.md), [security reporting](../SECURITY.md), and [MIT license](../LICENSE).
+
+Historical background, not current instructions: [prd-approval-policy.md](prd-approval-policy.md). Its old-code observations and unchecked requirements are not a current implementation-status report.
 
 ## Repository layout
 
 ```text
-auth0/                 The approval layer: what Auth0 would own
+auth0/                 This repo's custom approval code and Auth0 integrations (not Auth0-owned)
   service/             Task Authority: delegations, policy, approvals, atomic claim, audit (Postgres, FGA)
   sdk/                 @task-authority/sdk: the client your app uses, plus approve() for workflows
-  approval-ui/         The hosted approval page
+  approval-ui/         Reusable review components; embedded by Refund Desk
   actions/             Auth0 post-login Actions (assurance, MFA, factor enrolment)
   contracts/           Shared types between SDK and service
   fixtures/            Test identities and tuples
@@ -43,7 +47,7 @@ tools/                 playground (offline policy), doctor (prerequisites), db-u
 wrangler.jsonc         The one-click deploy (Policy Desk, no tenant values)
 ```
 
-`npm run lint` runs `auth0/tools/check-boundaries.mjs`. It fails if Refund Desk or Deploy Gate imports service internals or reads the service's tables, if the SDK reaches past the shared contracts, or if a tracked file holds a secret. Policy Desk is the exception: it hosts the service in the same Worker, so it imports it directly.
+`npm run lint` runs `auth0/tools/check-boundaries.mjs`. It fails if Refund Desk or Deploy Gate imports service internals or reads the service's tables, if the SDK imports disallowed dependencies (the proof verifier may also use `jose`), or if its scanner detects a secret pattern in tracked or non-ignored untracked files. Policy Desk is the exception: it hosts the service in the same Worker, so it imports it directly.
 
 ## Checks
 

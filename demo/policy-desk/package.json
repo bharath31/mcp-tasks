@@ -3,7 +3,7 @@
   "version": "0.1.0",
   "private": true,
   "type": "module",
-  "description": "Public Policy Desk sandbox: a Cloudflare Worker hosting the real Task Authority service and a refund app, with real Auth0 identity and simulated payments.",
+  "description": "Policy Desk sandbox: one Cloudflare Worker embeds the custom approval backend, refund REST/MCP app, agent and console. Auth0 identity, FGA permissions, simulated payments.",
   "scripts": {
     "dev": "wrangler dev --local",
     "typecheck": "tsc --noEmit -p ../../tsconfig.json",

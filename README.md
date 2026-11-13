@@ -26,7 +26,7 @@ Your support agent wants to refund $1,500. A confirmation dialog can ask “allo
 - **Is it still allowed?** Recheck authorization when the worker claims the operation, even if access changed while it waited.
 - **Can another entry point skip review?** Apply the same policy when MCP, REST and CLI call the protected action.
 
-Task Authority, the service in this repo, implements those checks. Your app owns the task, business validation and provider call. A database transaction controls the execution claim; **provider idempotency and reconciliation are still required** to prevent duplicate external effects.
+The custom approval backend in this repo, internally called **Task Authority**, implements those checks. It runs inside your Cloudflare Worker in the default deployment—not in Auth0. Auth0 handles login and authentication evidence; Auth0 FGA answers current permission checks. Your app owns the task, business validation and provider call. A database transaction controls the execution claim; **provider idempotency and reconciliation are still required** to prevent duplicate external effects.
 
 **For:** developers building agent tools that move money, deploy code or export sensitive data, and need an inspectable approval implementation. Refunds are the end-to-end example; deploys and exports also have policy templates.
 
@@ -152,4 +152,4 @@ Useful first contributions: report where setup got stuck, reproduce a host-compa
 
 ## License
 
-[MIT](LICENSE). “Task Authority” is a proposed design, not an Auth0 product or API. Auth0 and Okta are trademarks of Okta, Inc.; this project uses those names only to identify the services it integrates with.
+[MIT](LICENSE). “Task Authority” names the experimental approval backend implemented here, not an Auth0 product or API. Auth0 and Okta are trademarks of Okta, Inc.; this project uses those names only to identify the services it integrates with.

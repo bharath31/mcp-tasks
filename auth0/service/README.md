@@ -1,65 +1,62 @@
-# Task Authority service (proposed; reference implementation)
+# Task Authority: this repo's approval backend
 
-A separately deployed, multi-tenant authorization lifecycle service for long-running agent tasks. **Not an Auth0 product or API.** It owns delegation grants, exact-operation approvals, the atomic authorize-and-claim, revocation, and the security audit. It evaluates versioned approval policy and budgets. The customer application schedules tasks and calls providers through a claimed operation.
+Experimental, custom code for delegations, versioned policy, budgets, exact-operation approvals, execution claims, revocation and audit. **Not an Auth0 product or Auth0-hosted API.** Auth0 supplies identity and authentication evidence; FGA supplies current permissions; this backend combines them and stores its records in Postgres.
 
-Contract: `openapi.json` (generated from the route table and Zod schemas; `node --import tsx auth0/tools/generate-openapi.ts --check` fails on drift). Errors are always `{ code, message, correlationId, retryable, details? }`.
+Policy Desk embeds this handler in **one Cloudflare Worker** alongside the refund app, MCP server and UI. The Node entry point is an alternative for running it separately from an application such as Refund Desk. See the [deployment diagrams](../../docs/architecture.md).
 
-## Run it
+## Run the Node backend
+
+From the repository root, after `npm ci`:
 
 ```sh
-cp .env.example .env            # fill in; see below
-npm run migrate:authority       # applies migrations/ (or MIGRATE_ON_START=1)
-npm run dev:authority           # Node adapter around the Web-standard handler
-curl localhost:8788/healthz
+cp auth0/service/.env.example auth0/service/.env
+# Fill in auth0/service/.env. These entry points do not load .env automatically.
+node --env-file=auth0/service/.env --import tsx auth0/service/src/migrate-cli.ts
+node --env-file=auth0/service/.env --import tsx auth0/service/src/server.ts
+# In another terminal:
+curl http://localhost:8788/healthz
 ```
 
-`src/http.ts` exports `createHandler({ store, config })`, a plain `(Request) => Response`; `src/server.ts` is only a Node adapter. Runtime: Node 22, PostgreSQL via `pg`.
+If the variables are already exported, `npm run migrate:authority` and `npm run dev:authority` are equivalent. Do not use `MIGRATE_ON_START=1` with a restricted runtime role. Use an owner connection for migrations and appropriately restricted credentials at runtime.
 
-Migrations: `0001_init` (schema, triggers), `0002_harden_roles` (RLS; revokes Supabase API roles when present), `0003_pin_function_search_path`, `0004_ciba`, `0005_policy` (versions, snapshots, budget holds), `0006_approval_policy` (leases, reviewer sessions, DPoP and decisions), `0007_provider_events` (reconciliation and digest throttles).
+`src/http.ts` exports `createHandler({ store, config })`, a Web-standard request handler. `src/server.ts` adapts it to Node 22+. Policy Desk supplies its own database adapter and sandbox-scoped configuration instead.
 
-## What you must provide
+Contract: [`openapi.json`](openapi.json), generated from routes and Zod schemas. `node --import tsx auth0/tools/generate-openapi.ts --check` checks drift. Structured service errors are `{ code, message, correlationId, retryable, details? }`. The generated OpenAPI lists routes and request schemas, but uses generic success-response objects and does not fully model DPoP or forwarded-subject requirements. Use the SDK/contracts and policy documentation alongside it, not as a complete generated-client specification.
 
-| Need                                                | Notes                                                                                                                                                                                |
-| --------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| PostgreSQL, **separate from any customer database** | Role that owns the `authority` schema. The customer app must not be granted it. A role with no grants gets `42501` (tested).                                                         |
-| Auth0 tenant                                        | Issuer + audience for the API; M2M clients carry `permissions`; humans use Organizations (`org_id`).                                                                                 |
-| FGA store with `fga/model.fga`                      | Relations are checked on every protected decision, never cached. OpenFGA HTTP API.                                                                                                   |
-| Operator floor (`TENANT_ACTIONS_JSON`)              | Maps an action to the FGA relations for requesting and approving, plus an optional `autoApproveCeilings` guard and the `resourceServers` that human-direct registrations may target. |
-| `ALLOWED_ORIGINS`                                   | Only the reviewer page's origin(s).                                                                                                                                                  |
+## Dependencies and configuration
 
-M2M permissions: `delegations:create|read|revoke`, `operations:register|read|cancel`, `approvals:request|read`, `claims:create`, `outcomes:report`, `audit:read`. Give the executor only `claims:create`, `outcomes:report`, `operations:read`. Each client must also be `trusted_backend` for the organization in FGA.
+| Need                                            | Notes                                                                                                                                                                                                 |
+| ----------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Postgres                                        | Owns the `authority` schema. A separately deployed customer app must not receive its credentials or grants. Policy Desk deliberately shares one database/runtime role across app and backend schemas. |
+| Auth0 tenant                                    | Issuer and API audience; backend M2M permissions; human organization identity and configured approval Actions. Creating an Auth0 API registers an audience, not a hosted approval backend.            |
+| FGA store with [`fga/model.fga`](fga/model.fga) | OpenFGA-compatible checks at authorization boundaries, with no service-side decision cache. Node configuration accepts an API token; Policy Desk additionally supports FGA client credentials.        |
+| `TENANT_ACTIONS_JSON`                           | Operator floor: requester/approver relations, optional auto-approval ceilings and permitted human-direct `resourceServers`.                                                                           |
+| Published policy                                | Active version for each resource server. Unknown or unconfigured actions deny unless an explicit supported policy says otherwise.                                                                     |
+| `ALLOWED_ORIGINS`                               | Explicit browser reviewer origins for a separately hosted page.                                                                                                                                       |
 
-## Behaviour worth knowing
+`TENANTS_JSON` configures multiple Node-backend tenants, each with a distinct issuer. Policy Desk uses a different resolver: a backend tenant per visitor sandbox generation under one Auth0 issuer.
 
-- One transaction per request; lock order delegation → operation → approval. FGA is called inside the lock and any failure is `authorization_unavailable` (HTTP 503, retryable), with nothing claimed.
-- Claim recovery: same operation + same executor within the lease returns the same claim; after the lease or revocation it returns `reconcile_required`. `not_submitted` (customer attests the provider has nothing) releases it for a fresh claim.
-- Approval decisions require a human token with multi-factor `amr` and fresh `auth_time`. Routine policy accepts a verified DPoP session; high value policy requires operation binding through RAR or a service-issued challenge and a single-use decision id. Claims `amr`/`auth_time` may be namespaced (`https://task-authority.example/…`; override with tenant `claimNamespace`).
-- Quotas per tenant: open delegations, open approvals, claims per day (database counters); request rate per caller per minute (in-process).
+Use separate API, executor, auditor and policy-administration credentials. The executor needs `claims:create`, `outcomes:report` and `operations:read`; policy administration uses `policies:write` / `policies:read`. Protected backend operations also require the relevant `trusted_backend` FGA relation. The app's `approvalAssertion: "none"` cannot lower the policy or operator floor.
 
-## Limits (honest list)
+## Behavior
 
-No deployment was performed. In-process rate limit. No retention/purge job (audit and idempotency rows persist). The Node adapter supports multiple tenants using `TENANTS_JSON`. Auth0/FGA SaaS behaviour is unverified; the FGA client targets the OpenFGA API and was verified against OpenFGA v1.8.4. See `docs/security-model.md`.
+- Requests execute in database transactions. Claim/revocation paths lock delegation, operation and approval in order. FGA failures return retryable `authorization_unavailable` without a new claim.
+- A retry by the same executor during a live lease can recover the same claim. Expired or revoked uncertain claims require reconciliation. `not_submitted` is an executor attestation that can release the claim; it is not independently verified provider evidence.
+- Routine session tiers require policy-specified fresh MFA and, by default, DPoP. Per-operation tiers require fresh operation-bound assurance via a service challenge or RAR. A DPoP-bound eligible reviewer can reject without a second factor. See [approval policy](../../docs/approval-policy.md).
+- Default separation of duties excludes initiators/owners. Explicit owner approval is restricted to a user-owned delegation, one reviewer and operation-bound WebAuthn. Agent tokens cannot decide.
+- Database quotas cover open delegations/approvals and claims per day. The backend's request-rate limiter is in-process; Policy Desk adds edge and Postgres limiters.
+- The SDK normalizes operation `status` to storage lifecycle for executors while retaining `outcomeStatus` for user-facing clients. Reads require an authorized initiator, reviewer or backend.
 
-## Tests
+Policy administration includes publishing, validation, activation, simulation and shadow versions. Reviewer surfaces include queue, leases, challenges and batch decisions. CIBA is explicit escalation only. Provider events (`provider-events:write`) support reconciliation alerts; the digest endpoint produces an eligibility-filtered payload, not notification delivery.
 
-`npm run test:integration` (needs PostgreSQL) covers this service through the HTTP handler. `OPENFGA_BIN=… npm run test:integration` runs the same tests against a real OpenFGA server.
+## Migrations and tests
 
-## Versioned policies and reviewers
+Migrations `0001`–`0007` cover the schema, role hardening, function search paths, CIBA, policies/budget holds, reviewer sessions/decisions and provider events. Use the migration runner rather than applying a selected subset.
 
-Publish and activate an explicit policy before accepting operations. Unconfigured
-APIs and unknown actions deny by default. Use a separate M2M token with
-`policies:write` to manage documents; `policies:read` can inspect them. The
-application token cannot lower policy using `approvalAssertion: "none"`.
-See [policy setup, budgets and outcomes](../../../docs/approval-policy.md).
+`npm run test:integration` needs Postgres and exercises the HTTP handler. `OPENFGA_BIN=/path/to/openfga npm run test:integration` selects a real local OpenFGA server instead of the fixture where supported. See [checks](../../docs/README.md#checks).
 
-New surfaces include `PUT/GET /v1/policies/{resourceServer}`, validation,
-activation, simulation and shadow mode; the eligible approval queue, reviewer
-leases, operation challenges and batch decisions; explicit CIBA escalation;
-provider reconciliation (`provider-events:write`); and a coalesced digest.
-`resourceServer` is the API identifier and is independent of delegation scope.
+## Limits and evidence
 
-The operation-status endpoint renders the six user-facing states in `status`
-and `outcomeStatus`, with the storage lifecycle in `lifecycleStatus`. The SDK
-normalizes `status` to the lifecycle for executor compatibility, retaining
-`outcomeStatus` for user-facing clients. Status reads are restricted to verified
-initiators, current reviewers and authorized backends.
+The handler is deployed inside the hosted Policy Desk demo. That does not validate every standalone path: CIBA, RAR and on-behalf-of exchange remain local-fixture-tested only. The hosted demo's manual Auth0/FGA checks and tested MCP hosts are recorded in [interoperability](../../docs/interoperability.md).
+
+There is no general retention job, external security review or production SLA. Policy Desk has a demo-specific cleanup function that intentionally removes expired sandbox records. Claims do not guarantee exactly-once external effects: use provider idempotency and reconciliation. A compromised app holding provider credentials can bypass the backend. See the [security model](../../docs/security-model.md).
