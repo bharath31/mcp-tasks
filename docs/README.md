@@ -4,20 +4,21 @@ Start with the [root README](../README.md). This page lists every guide, says wh
 
 ## Guides
 
-| Guide                                                   | Read it when                                                                                       |
-| ------------------------------------------------------- | -------------------------------------------------------------------------------------------------- |
-| [architecture.md](architecture.md)                      | You want the picture: the parts, one request from start to finish, and where to look in the code.  |
-| [claude-code.md](claude-code.md)                        | You want to drive MCP Tasks from Claude Code, or need to know which sessions and modes support it. |
-| [deploy-cloudflare.md](deploy-cloudflare.md)            | You are deploying the full stack to your own Cloudflare, Auth0, FGA and Postgres.                  |
-| [approval-policy.md](approval-policy.md)                | You are writing, testing, publishing or simulating a policy.                                       |
-| [approve.md](approve.md)                                | You want an Auth0-signed approval as a step in a durable workflow, without the service.            |
-| [approval-step-up-flows.md](approval-step-up-flows.md)  | You need every refund approval path (factors, failures, reject, owner, agents) and its test.       |
-| [security-model.md](security-model.md)                  | You need to know what is guaranteed, what is not, and which test proves each claim.                |
-| [interoperability.md](interoperability.md)              | You need to know which MCP hosts and features have been tested, and against what.                  |
-| [demo-guide.md](demo-guide.md)                          | You want to run the scripted scenarios behind the security claims.                                 |
-| [github-about.md](github-about.md)                      | You are publishing a copy of the repo and need its GitHub description, website and topics.         |
-| [`auth0/sdk/README.md`](../auth0/sdk/README.md)         | You are calling Task Authority from your app.                                                      |
-| [`auth0/service/README.md`](../auth0/service/README.md) | You are running Task Authority yourself.                                                           |
+| Guide                                                   | Read it when                                                                                                  |
+| ------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------- |
+| [why-this-exists.md](why-this-exists.md)                | You want to decide whether you need this, or compare it with tool confirmation, workflow interrupts and CIBA. |
+| [architecture.md](architecture.md)                      | You want the picture: the parts, one request from start to finish, and where to look in the code.             |
+| [claude-code.md](claude-code.md)                        | You want to drive MCP Tasks from Claude Code, or need to know which sessions and modes support it.            |
+| [deploy-cloudflare.md](deploy-cloudflare.md)            | You are deploying the full stack to your own Cloudflare, Auth0, FGA and Postgres.                             |
+| [approval-policy.md](approval-policy.md)                | You are writing, testing, publishing or simulating a policy.                                                  |
+| [approve.md](approve.md)                                | You want an Auth0-signed approval as a step in a durable workflow, without the service.                       |
+| [approval-step-up-flows.md](approval-step-up-flows.md)  | You need every refund approval path (factors, failures, reject, owner, agents) and its test.                  |
+| [security-model.md](security-model.md)                  | You need to know what is guaranteed, what is not, and which test proves each claim.                           |
+| [interoperability.md](interoperability.md)              | You need to know which MCP hosts and features have been tested, and against what.                             |
+| [demo-guide.md](demo-guide.md)                          | You want to run the scripted scenarios behind the security claims.                                            |
+| [github-about.md](github-about.md)                      | You are publishing a copy of the repo and need its GitHub description, website and topics.                    |
+| [`auth0/sdk/README.md`](../auth0/sdk/README.md)         | You are calling Task Authority from your app.                                                                 |
+| [`auth0/service/README.md`](../auth0/service/README.md) | You are running Task Authority yourself.                                                                      |
 
 Background, not instructions: [prd-approval-policy.md](prd-approval-policy.md) (the design rationale for policy).
 
@@ -38,7 +39,7 @@ demo/                  Customer apps (Refund Desk and Deploy Gate use only the S
   refund-desk/         A merchant-returns app with an MCP Tasks server (what `npm run local` runs)
   refund-workflow/     A Cloudflare Workflow gated by approve(), no service
   deploy-gate/         A second, unrelated action on the same SDK and service
-tools/                 doctor (prerequisite checks) and db-up (local Postgres)
+tools/                 playground (offline policy), doctor (prerequisites), db-up (local Postgres)
 wrangler.jsonc         The one-click deploy (Policy Desk, no tenant values)
 ```
 

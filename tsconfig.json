@@ -10,7 +10,7 @@
     "noUncheckedIndexedAccess": true,
     "outDir": "dist"
   },
-  "include": ["auth0/**/*.ts", "demo/**/*.ts"],
+  "include": ["auth0/**/*.ts", "demo/**/*.ts", "tools/**/*.ts"],
   "exclude": [
     "node_modules",
     "dist",

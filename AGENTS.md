@@ -29,7 +29,7 @@ Setup is idempotent. On failure, read the error, fix the cause (the troubleshoot
 Use the offline loop; it needs no server:
 
 ```sh
-npm run task-authority -- policy init refunds > refunds.json
+npm run --silent task-authority -- policy init refunds > refunds.json
 npm run task-authority -- policy check refunds.json
 npm run task-authority -- policy explain refunds.json refund:create --actor agent --args '{"amountMinor":5000,"currency":"usd"}'
 ```
