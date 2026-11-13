@@ -8,7 +8,7 @@ This TypeScript reference implementation lets routine requests through under pol
 
 [![CI](https://github.com/bharath31/mcp-tasks/actions/workflows/ci.yml/badge.svg)](https://github.com/bharath31/mcp-tasks/actions/workflows/ci.yml)
 [![MIT](https://img.shields.io/badge/license-MIT-black)](LICENSE)
-[![Status: experimental](https://img.shields.io/badge/status-experimental-amber)](#status-and-limits)
+[![Status: experimental](https://img.shields.io/badge/status-experimental-d29922)](#status-and-limits)
 
 [![Policy Desk preview: an agent's refund waits for a reviewer to approve the exact amount with a passkey.](docs/assets/social-preview.png)](https://mcp-tasks.dev)
 

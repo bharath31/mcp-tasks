@@ -6,7 +6,7 @@ The repository's About box (description, website and topics) lives in GitHub set
 
 **Description** (GitHub allows 350 characters):
 
-> Human approvals for agent actions. Gate refunds with Auth0-verified, exact-operation approval and resume them as MCP Tasks. TypeScript reference implementation with an offline playground and hosted demo. Experimental and unofficial.
+> Human approvals for agent actions. Gate refunds with Auth0-verified, exact-operation approval and resume them as MCP Tasks. Experimental TypeScript reference implementation with a hosted demo. Unofficial.
 
 **Website:** https://mcp-tasks.dev
 
@@ -22,7 +22,7 @@ Needs the [GitHub CLI](https://cli.github.com) signed in with admin rights on th
 REPO=bharath31/mcp-tasks
 
 gh repo edit "$REPO" \
-  --description "Human approvals for agent actions. Gate refunds with Auth0-verified, exact-operation approval and resume them as MCP Tasks. TypeScript reference implementation with an offline playground and hosted demo. Experimental and unofficial." \
+  --description "Human approvals for agent actions. Gate refunds with Auth0-verified, exact-operation approval and resume them as MCP Tasks. Experimental TypeScript reference implementation with a hosted demo. Unofficial." \
   --homepage "https://mcp-tasks.dev"
 
 # Replaces the whole topic list, so it also removes any topic not named here.
