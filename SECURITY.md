@@ -4,7 +4,7 @@ This is an experimental reference implementation, not a supported product. There
 
 ## Reporting a vulnerability
 
-Report it privately through GitHub: **Security** tab, then **Report a vulnerability** (<https://github.com/bharath31/mcp-tasks/security/advisories/new>). Please do not open a public issue or pull request for a vulnerability.
+Report it privately through GitHub: **Security** tab, then **Report a vulnerability** (<https://github.com/bharath31/nominee/security/advisories/new>). Please do not open a public issue or pull request for a vulnerability.
 
 Include what you did, what you expected, what happened, and the commit you tested. A failing test is the most useful form.
 

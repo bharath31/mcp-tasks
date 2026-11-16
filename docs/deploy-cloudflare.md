@@ -15,7 +15,7 @@ It is the same code that runs the hosted demo, with no custom domain and no tena
 
 Agents: [`AGENTS.md`](../AGENTS.md) has the same steps as a checklist.
 
-> **Untested path.** As of this documentation review (2026-11-13) nobody has run this guide end to end on a brand-new Auth0 tenant; the hosted demo's tenant was built up over time. Expect rough edges: `npm run setup -- --dry-run` shows the plan, `npm run verify` shows what is missing, and please [open an issue](https://github.com/bharath31/mcp-tasks/issues) with whatever breaks.
+> **Untested path.** As of this documentation review (2026-11-13) nobody has run this guide end to end on a brand-new Auth0 tenant; the hosted demo's tenant was built up over time. Expect rough edges: `npm run setup -- --dry-run` shows the plan, `npm run verify` shows what is missing, and please [open an issue](https://github.com/bharath31/nominee/issues) with whatever breaks.
 
 ## 1. Prerequisites
 
@@ -31,7 +31,7 @@ Agents: [`AGENTS.md`](../AGENTS.md) has the same steps as a checklist.
 
 ## 2. Deploy the Worker
 
-[![Deploy to Cloudflare](https://deploy.workers.cloudflare.com/button)](https://deploy.workers.cloudflare.com/?url=https://github.com/bharath31/mcp-tasks)
+[![Deploy to Cloudflare](https://deploy.workers.cloudflare.com/button)](https://deploy.workers.cloudflare.com/?url=https://github.com/bharath31/nominee)
 
 The button copies this repository into your GitHub or GitLab account, connects it to Workers Builds, and deploys it. Keep the defaults it shows: build command `npm run build`, deploy command `npm run deploy`, Worker name `mcp-tasks`. It asks for no secrets; there are none to give yet. Every push to your copy redeploys.
 

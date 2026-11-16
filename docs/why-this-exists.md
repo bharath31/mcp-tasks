@@ -47,6 +47,6 @@ Refunds have the fullest implementation. Production deployments and data exports
 
 The implementation shows that the pattern can be built. It does not establish developer demand, production reliability or a reduction in implementation time.
 
-If this resembles something you are building, [describe one real action](https://github.com/bharath31/mcp-tasks/issues/new?template=use_case.yml): who requests it, who approves it, how long it waits, and what your current workflow cannot enforce. If an existing tool already meets your needs, that is useful feedback too.
+If this resembles something you are building, [describe one real action](https://github.com/bharath31/nominee/issues/new?template=use_case.yml): who requests it, who approves it, how long it waits, and what your current workflow cannot enforce. If an existing tool already meets your needs, that is useful feedback too.
 
 To evaluate the policy first, run `npm run playground`. To inspect an actual approval flow, use the [hosted demo](https://mcp-tasks.dev) or [local MCP walkthrough](claude-code.md).

@@ -1,7 +1,10 @@
 # Deterministic CI: external services are faked or local. This does NOT cover
 # live gates (Auth0 tenant, FGA SaaS, Stripe test mode, mainstream MCP clients).
 name: ci
-on: [push, pull_request]
+on:
+  push:
+    branches: [main]
+  pull_request:
 permissions:
   contents: read
 concurrency:

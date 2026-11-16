@@ -1,6 +1,6 @@
 import { aboutDemo, h } from "./dom";
 
-const REPO = "https://github.com/bharath31/mcp-tasks";
+const REPO = "https://github.com/bharath31/nominee";
 
 const STEPS = [
   [
