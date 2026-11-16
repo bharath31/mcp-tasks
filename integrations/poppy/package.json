@@ -1,0 +1,16 @@
+{
+  "name": "@action-authority/poppy",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "exports": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "test": "node --import tsx --test tests/*.test.ts",
+    "format:check": "prettier --check \"src/**/*.ts\" \"tests/**/*.ts\" \"*.json\" README.md"
+  },
+  "dependencies": {
+    "structured-headers": "2.1.1"
+  }
+}
