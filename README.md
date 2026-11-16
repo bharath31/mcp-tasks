@@ -21,7 +21,7 @@ _Scripted UI preview. [Watch the short walkthrough](https://mcp-tasks.dev/og/pol
 
 - **Protected actions:** the existing backend and SDK in `auth0/` implement policy, approval records, permission checks and execution claims. Package names remain **Task Authority** (`@task-authority/*`) for compatibility; that SDK is local workspace source, not the separate Nominee npm packages.
 - **Refund reference:** Policy Desk uses an MCP Tasks server, Workers AI, Auth0 and simulated payments. The hosted URL above is this reference, not the shopping demo.
-- **Shopping example:** the [storefront](examples/storefront/README.md) and [experimental Poppy adapter](integrations/poppy/README.md) include a loopback-only fixture purchase simulation. Live customer identity, phone approval, a browser-controlling agent and payments are not connected yet. See the [shopping brief](docs/plans/customer-agent-commerce.md) for the boundaries.
+- **Shopping example:** the [storefront](examples/storefront/README.md) and [experimental Poppy adapter](integrations/poppy/README.md) include a loopback-only fixture purchase simulation. Live customer identity, phone approval, a browser-controlling agent and payments are not connected yet.
 - **Workflow experiment:** [`approve()`](docs/approve.md) verifies an operation-bound decision inside a workflow without the approval backend. It has local-fixture evidence, not live Auth0 verification.
 
 Nominee is not an Auth0 product. These components have different implementation and verification boundaries; the shopping fixture does not yet use the full Task Authority backend.
