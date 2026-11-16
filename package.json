@@ -37,7 +37,7 @@
     "interop:claude-code": "npm run local --",
     "task-authority": "node --import tsx auth0/tools/task-authority.ts",
     "verify": "node demo/policy-desk/tools/setup.mjs --verify",
-    "test:shopping": "npm --prefix integrations/poppy test && node --import tsx --test examples/storefront/tests/*.test.ts"
+    "test:shopping": "npm --prefix packages/commerce test && npm --prefix integrations/poppy test && node --import tsx --test examples/storefront/tests/*.test.ts"
   },
   "engines": {
     "node": ">=22"

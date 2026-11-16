@@ -1,5 +1,7 @@
 # Commerce domain prototype
 
+**Security blocked:** an independently reported A→trusted B→B requote sequence can lose the customer-verification requirement. Do not connect or use checkout execution until the upstream lane fix and regression test are integrated and reviewed.
+
 This single-host domain prototype includes server-priced carts, quotes and an order execution ledger. It is **not a production storefront**: there is no HTTP handler, authenticated request verifier, CSRF protection, upstream revocation integration, full Task Authority adapter, durable real provider, deployment, or production approval verifier. Node 22's `node:sqlite` is experimental. Do not expose these methods directly to untrusted clients.
 
 `createCartStore(path, options)` requires callers to supply a freshly verified actor on every call. Human actors are `{kind: "human", customerId, scopes: []}`; agents are `{kind: "agent", customerId?, agentId, pairwiseUserId, sessionId, scopes}`. These fields must come from trusted server-side verification, never JSON. Guest linking requires exact agent/user/session continuity, a verified customer ID, and `cart:write`. Account cart agents need `cart:write`; quote and execution agents need `checkout:write` and `addresses:read`. Human review requires ownership, a human session and a separate operation-bound proof callback. An agent cannot be a human reviewer; a human cannot execute an agent-originated checkout. Session grants, local disconnect and upstream revocation must be enforced by the host's verifier on every call.
