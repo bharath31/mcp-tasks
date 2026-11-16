@@ -19,6 +19,17 @@ export default function Review({
       })
       .catch((e) => setMessage(e.message));
   }, [id]);
+  async function becomeHuman() {
+    try {
+      await api.fixtureTransition("human");
+      setSession(await api.session());
+      setMessage(
+        "Fixture customer selected; this is not identity verification.",
+      );
+    } catch (e) {
+      setMessage(e instanceof Error ? e.message : "Transition failed.");
+    }
+  }
   async function approve() {
     try {
       await api.approve(id);
@@ -60,6 +71,13 @@ export default function Review({
             {quote.shippingMinor} · total {quote.totalMinor} {quote.currency}{" "}
             minor units
           </p>
+          {session?.mode === "fixture" &&
+            session.actor.kind === "agent" &&
+            session.actor.customerId && (
+              <button onClick={becomeHuman}>
+                Switch to fixture customer (simulated)
+              </button>
+            )}
           {session?.mode === "fixture" &&
           session.actor.kind === "human" &&
           session.capabilities.directCustomerVerification === true ? (

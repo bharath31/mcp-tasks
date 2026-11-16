@@ -146,6 +146,26 @@ export default function Shop() {
       setKey(crypto.randomUUID());
     });
   }
+  async function grant() {
+    await run(async () => {
+      await api.fixtureTransition("grant");
+      if (cart) setCart((await api.linkCart(cart.id)).cart);
+      setSession(await api.session());
+    });
+  }
+  async function resumeAgent() {
+    await run(async () => {
+      await api.fixtureTransition("agent");
+      setSession(await api.session());
+    });
+  }
+  async function confirmFixture() {
+    if (!quote) return;
+    await run(async () => {
+      await api.fixtureConfirm(quote.id);
+      setResult(null);
+    });
+  }
   async function complete() {
     if (!quote) return;
     await run(async () => setResult(await api.complete(quote.id, key)));
@@ -219,7 +239,10 @@ export default function Shop() {
                     <b>{money(p.priceMinor, p.currency)}</b>
                   </div>
                   <p>{p.description}</p>
-                  <button disabled={busy || fixture} onClick={() => add(p)}>
+                  <button
+                    disabled={busy || fixture || !session}
+                    onClick={() => add(p)}
+                  >
                     {fixture ? "Available when connected" : "Add to cart"}
                   </button>
                 </article>
@@ -302,6 +325,21 @@ export default function Shop() {
           </div>
           <aside>
             <h2>Personal agent simulator</h2>
+            {session?.mode === "fixture" && (
+              <>
+                <p>Local fixture only: no real identity, proof or payment.</p>
+                {!session.actor.customerId && (
+                  <button disabled={busy} onClick={grant}>
+                    Grant fixture account access
+                  </button>
+                )}
+                {session.actor.customerId && (
+                  <button disabled={busy} onClick={resumeAgent}>
+                    Resume fixture agent
+                  </button>
+                )}
+              </>
+            )}
             <p>
               This panel simulates a customer’s choices. It is not a connected
               personal agent and does not prove customer presence.
@@ -394,13 +432,20 @@ export default function Shop() {
             {result?.status === "customer_verification_required" && (
               <p>
                 Customer review is required.{" "}
-                <a href={result.reviewUrl}>Open the merchant’s review page</a>.
+                <a href={result.reviewUrl} target="_blank" rel="noreferrer">
+                  Open the merchant’s review page
+                </a>
+                .
               </p>
             )}
             {result?.status === "approval_required" && (
               <p>
-                Agent confirmation is required. This simulator cannot provide
-                protocol approval.
+                Fixture agent confirmation is simulated, not protocol proof.
+                {session?.mode === "fixture" && (
+                  <button disabled={busy} onClick={confirmFixture}>
+                    Confirm exact fixture quote
+                  </button>
+                )}
               </p>
             )}
             {result?.status === "processing" && (

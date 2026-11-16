@@ -81,6 +81,14 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
   return data as T;
 }
 export const api = {
+  fixtureTransition: (transition: "grant" | "human" | "agent") =>
+    request<{ actor: Session["actor"] }>(`/fixture/${transition}`, {
+      method: "POST",
+    }),
+  fixtureConfirm: (id: string) =>
+    request<unknown>(`/checkouts/${encodeURIComponent(id)}/confirm`, {
+      method: "POST",
+    }),
   catalog: () => request<{ products: Product[] }>("/catalog"),
   session: () => request<Session>("/session"),
   addresses: () => request<{ addresses: Address[] }>("/addresses"),
@@ -94,7 +102,12 @@ export const api = {
   items: (id: string, items: Cart["items"]) =>
     request<{ cart: Cart }>(`/carts/${encodeURIComponent(id)}/items`, {
       method: "PUT",
-      body: JSON.stringify({ items }),
+      body: JSON.stringify({
+        items: items.map(({ productId, quantity }) => ({
+          productId,
+          quantity,
+        })),
+      }),
     }),
   quote: (id: string, shippingAddressId: string) =>
     request<{ quote: Quote }>(`/carts/${encodeURIComponent(id)}/quote`, {

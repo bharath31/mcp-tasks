@@ -69,3 +69,14 @@ jobs:
       - run: npm --prefix packages/commerce run build
       - run: npm --prefix integrations/poppy run build
       - run: npm --prefix examples/storefront run build
+      - run: npm --prefix examples/storefront exec -- playwright-core install --with-deps chromium
+      - name: Fixture browser smoke (actual local backend)
+        run: |
+          export CHROME_PATH="$(find ~/.cache/ms-playwright -path '*chrome-linux*/chrome' -type f | head -1)"
+          test -x "$CHROME_PATH"
+          cd examples/storefront
+          SHOPPING_FIXTURE=1 NODE_ENV=production npm run fixture > /tmp/fixture-server.log 2>&1 &
+          server=$!
+          trap 'kill "$server" 2>/dev/null || true' EXIT
+          for i in $(seq 1 60); do grep -q 'Fixture only:' /tmp/fixture-server.log && break; sleep 1; done
+          npm run test:fixture-browser
