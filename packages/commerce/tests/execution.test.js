@@ -487,3 +487,105 @@ test("an already-issued legacy A-B-B quote cannot execute before safe requote", 
     rmSync(dir, { recursive: true, force: true });
   }
 });
+
+test("accepted timeout reconciles after expiry and completed replay ignores later revisions", async () => {
+  const dir = mkdtempSync(join(tmpdir(), "reconcile-expired-"));
+  let calls = 0,
+    accepted;
+  const provider = {
+    async place() {
+      calls++;
+      accepted = { id: "provider-accepted" };
+      throw Error("timeout");
+    },
+    async reconcile() {
+      return accepted;
+    },
+  };
+  const { auth, options } = setup(provider);
+  let store = createCartStore(join(dir, "db"), options);
+  const realNow = Date.now;
+  try {
+    const cart = store.create(agent);
+    store.update(cart.id, agent, [{ productId: "tea", quantity: 1 }]);
+    const quote = await store.createQuote(cart.id, agent, "fixture-home");
+    auth.confirmForTest(quote);
+    assert.equal(
+      (await store.completeQuote(quote.id, agent)).status,
+      "processing",
+    );
+    store.close();
+    const originalAccount = options.customerAccount;
+    options.customerAccount = {
+      async getAddress() {
+        return null;
+      },
+    };
+    store = createCartStore(join(dir, "db"), options);
+    Date.now = () => realNow() + 3600000;
+    await assert.rejects(
+      store.reconcileQuote(quote.id, { ...agent, agentId: "other" }),
+    );
+    await assert.rejects(
+      store.reconcileQuote(quote.id, { ...agent, scopes: [] }),
+    );
+    await assert.rejects(
+      store.reconcileQuote(quote.id, { ...agent, customerId: "other" }),
+    );
+    await assert.rejects(store.reconcileQuote(quote.id, human));
+    const completed = await store.reconcileQuote(quote.id, agent);
+    assert.equal(completed.status, "completed");
+    assert.deepEqual(await store.completeQuote(quote.id, agent), completed);
+    Date.now = realNow;
+    options.customerAccount = originalAccount;
+    store.update(cart.id, agent, [{ productId: "tea", quantity: 2 }]);
+    const next = await store.createQuote(cart.id, agent, "fixture-home");
+    assert.notEqual(next.operationId, quote.operationId);
+    assert.deepEqual(await store.completeQuote(quote.id, agent), completed);
+    await assert.rejects(
+      store.completeQuote(quote.id, { ...agent, pairwiseUserId: "other" }),
+    );
+    assert.equal(calls, 1);
+  } finally {
+    Date.now = realNow;
+    store.close();
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test("unknown provider outcome cannot be abandoned without an atomic fence", async () => {
+  const provider = {
+    async place() {
+      throw Error("unknown");
+    },
+    async reconcile() {
+      return null;
+    },
+  };
+  const { auth, options } = setup(provider);
+  const store = createCartStore(":memory:", options);
+  try {
+    const cart = store.create(agent);
+    store.update(cart.id, agent, [{ productId: "mug", quantity: 1 }]);
+    const quote = await store.createQuote(cart.id, agent, "fixture-home");
+    auth.confirmForTest(quote);
+    assert.equal(
+      (await store.completeQuote(quote.id, agent)).status,
+      "processing",
+    );
+    assert.equal(
+      (await store.reconcileQuote(quote.id, agent)).status,
+      "processing",
+    );
+    await assert.rejects(
+      store.abandonQuote(quote.id, agent),
+      /safe_abandon_unavailable/,
+    );
+    assert.throws(
+      () => store.update(cart.id, agent, []),
+      /checkout_processing/,
+    );
+  } finally {
+    store.close();
+  }
+});

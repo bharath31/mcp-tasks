@@ -14,35 +14,97 @@ export function fixtureApi(databasePath, origin) {
   ledger.exec(
     `PRAGMA busy_timeout=5000; CREATE TABLE IF NOT EXISTS fixture_provider_orders (provider_key TEXT PRIMARY KEY, id TEXT NOT NULL, quote TEXT NOT NULL)`,
   );
+  function locked(fn) {
+    ledger.exec("BEGIN IMMEDIATE");
+    try {
+      const value = fn();
+      ledger.exec("COMMIT");
+      return value;
+    } catch (error) {
+      ledger.exec("ROLLBACK");
+      throw error;
+    }
+  }
   const provider = {
     async place({ quote, idempotencyKey }) {
-      ledger
-        .prepare(
-          "INSERT OR IGNORE INTO fixture_provider_orders VALUES (?, ?, ?)",
+      return locked(() => {
+        const execution = ledger
+          .prepare("SELECT * FROM checkout_executions WHERE operation_id = ?")
+          .get(idempotencyKey);
+        const snapshot = ledger
+          .prepare("SELECT data FROM quotes WHERE id = ?")
+          .get(quote.id);
+        // The same lock fences abandonment. Never create a new fixture order after expiry.
+        if (
+          !execution ||
+          execution.status !== "processing" ||
+          execution.quote_id !== quote.id ||
+          execution.provider_key !== idempotencyKey ||
+          !snapshot ||
+          snapshot.data !== JSON.stringify(quote) ||
+          Date.now() >= Date.parse(quote.expiresAt)
         )
-        .run(idempotencyKey, randomUUID(), JSON.stringify(quote));
-      return {
-        id: ledger
-          .prepare(
-            "SELECT id FROM fixture_provider_orders WHERE provider_key = ?",
-          )
-          .get(idempotencyKey).id,
-      };
-    },
-    async reconcile({ idempotencyKey }) {
-      return (
+          return null;
         ledger
           .prepare(
-            "SELECT id FROM fixture_provider_orders WHERE provider_key = ?",
+            "INSERT OR IGNORE INTO fixture_provider_orders VALUES (?, ?, ?)",
           )
-          .get(idempotencyKey) ?? null
-      );
+          .run(idempotencyKey, randomUUID(), JSON.stringify(quote));
+        const saved = ledger
+          .prepare(
+            "SELECT id, quote FROM fixture_provider_orders WHERE provider_key = ?",
+          )
+          .get(idempotencyKey);
+        if (saved.quote !== JSON.stringify(quote))
+          throw Error("provider_key_conflict");
+        return { id: saved.id };
+      });
+    },
+    async reconcile({ quote, idempotencyKey }) {
+      const found = ledger
+        .prepare(
+          "SELECT id, quote FROM fixture_provider_orders WHERE provider_key = ?",
+        )
+        .get(idempotencyKey);
+      if (!found) return { status: "absent" };
+      if (found.quote !== JSON.stringify(quote))
+        throw Error("provider_key_conflict");
+      return { id: found.id };
     },
   };
+  function atomicAbandonAbsent({ quote, idempotencyKey }) {
+    return locked(() => {
+      const execution = ledger
+        .prepare("SELECT * FROM checkout_executions WHERE operation_id = ?")
+        .get(idempotencyKey);
+      if (
+        !execution ||
+        execution.status !== "processing" ||
+        execution.quote_id !== quote.id ||
+        execution.customer_id !== quote.customerId ||
+        execution.provider_key !== idempotencyKey
+      )
+        return;
+      if (
+        ledger
+          .prepare(
+            "SELECT 1 FROM fixture_provider_orders WHERE provider_key = ?",
+          )
+          .get(idempotencyKey)
+      )
+        return;
+      ledger
+        .prepare(
+          "UPDATE checkout_executions SET status = 'abandoned' WHERE operation_id = ? AND status = 'processing'",
+        )
+        .run(idempotencyKey);
+    });
+  }
   const store = createCartStore(databasePath, {
     ...authority,
     customerAccount: accounts,
     orderProvider: provider,
+    atomicAbandonAbsent,
   });
   const sessions = new Map();
   const scopes = [
@@ -57,7 +119,7 @@ export function fixtureApi(databasePath, origin) {
     return {
       kind: "agent",
       agentId: "fixture-agent",
-      pairwiseUserId: session.id,
+      pairwiseUserId: "fixture-agent-customer-pair",
       sessionId: session.id,
       ...(session.granted
         ? { customerId: "fixture-customer", scopes }
@@ -238,6 +300,8 @@ export function fixtureApi(databasePath, origin) {
           }
           if (p[2] === "reconcile")
             return send(res, 200, await store.reconcileQuote(p[1], a));
+          if (p[2] === "abandon")
+            return send(res, 200, await store.abandonQuote(p[1], a));
         }
       }
       if (req.method === "GET" && p[0] === "orders" && p.length === 1) {
@@ -278,6 +342,7 @@ export function fixtureApi(databasePath, origin) {
   }
   return {
     handle,
+    provider,
     close() {
       store.close();
       ledger.close();

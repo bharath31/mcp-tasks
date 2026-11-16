@@ -207,3 +207,171 @@ test(
     assert.notEqual(code, 0);
   },
 );
+
+test(
+  "fixture restart restores pending agent and safely abandons only confirmed absent claims",
+  { timeout: 90000 },
+  async () => {
+    const dir = mkdtempSync(join(tmpdir(), "fixture-recover-")),
+      db = join(dir, "state.sqlite"),
+      port = await freePort(),
+      origin = `http://127.0.0.1:${port}`;
+    let child = await start(port, db),
+      cookie = "";
+    async function call(path, method = "GET", data = {}) {
+      const r = await fetch(origin + "/api" + path, {
+        method,
+        headers: {
+          ...(cookie ? { cookie } : {}),
+          ...(method === "GET"
+            ? {}
+            : { origin, "content-type": "application/json" }),
+        },
+        ...(method === "GET" ? {} : { body: JSON.stringify(data) }),
+      });
+      if (r.headers.get("set-cookie"))
+        cookie = r.headers.get("set-cookie").split(";")[0];
+      return { status: r.status, data: await r.json() };
+    }
+    try {
+      await call("/session");
+      const guest = (await call("/carts", "POST")).data.cart;
+      const orphan = (await call("/carts", "POST")).data.cart;
+      await call(`/carts/${guest.id}/items`, "PUT", {
+        items: [{ productId: "tea", quantity: 1 }],
+      });
+      await call("/fixture/grant", "POST");
+      await call(`/carts/${guest.id}/link`, "POST");
+      const q1 = (
+        await call(`/carts/${guest.id}/quote`, "POST", {
+          shippingAddressId: "fixture-home",
+        })
+      ).data.quote;
+      const cart2 = (await call("/carts", "POST")).data.cart;
+      await call(`/carts/${cart2.id}/items`, "PUT", {
+        items: [{ productId: "tea", quantity: 1 }],
+      });
+      const q2 = (
+        await call(`/carts/${cart2.id}/quote`, "POST", {
+          shippingAddressId: "fixture-home",
+        })
+      ).data.quote;
+      await stop(child);
+      // Simulate two crash windows: accepted provider order and claim before provider insertion.
+      const { DatabaseSync } = require("node:sqlite");
+      const sqlite = new DatabaseSync(db);
+      for (const q of [q1, q2])
+        sqlite
+          .prepare(
+            "INSERT INTO checkout_executions VALUES (?, ?, ?, 'processing', ?, NULL)",
+          )
+          .run(q.operationId, q.id, "fixture-customer", q.operationId);
+      const snapshot = sqlite
+        .prepare("SELECT data FROM quotes WHERE id = ?")
+        .get(q1.id).data;
+      sqlite
+        .prepare("INSERT INTO fixture_provider_orders VALUES (?, ?, ?)")
+        .run(q1.operationId, "accepted-before-restart", snapshot);
+      sqlite.close();
+      child = await start(port, db);
+      cookie = "";
+      await call("/session");
+      assert.equal(
+        (await call(`/checkouts/${q1.id}/reconcile`, "POST")).status,
+        403,
+      );
+      await call("/fixture/grant", "POST");
+      assert.equal(
+        (await call(`/carts/${orphan.id}/link`, "POST")).status,
+        403,
+      );
+      const resolved = await call(`/checkouts/${q1.id}/reconcile`, "POST");
+      assert.equal(resolved.data.order.id, "accepted-before-restart");
+      assert.equal(
+        (await call(`/checkouts/${q2.id}/reconcile`, "POST")).data.status,
+        "provider_confirmed_absent",
+      );
+      const recovery = await Promise.all(
+        Array.from({ length: 5 }, () =>
+          call(`/checkouts/${q2.id}/abandon`, "POST"),
+        ),
+      );
+      assert.ok(recovery.every((r) => r.data.status === "abandoned"));
+      assert.equal(
+        (await call(`/checkouts/${q2.id}/reconcile`, "POST")).data.status,
+        "abandoned",
+      );
+      const next = (
+        await call(`/carts/${cart2.id}/quote`, "POST", {
+          shippingAddressId: "fixture-home",
+        })
+      ).data.quote;
+      assert.notEqual(next.operationId, q2.operationId);
+      const inspect = new DatabaseSync(db);
+      assert.equal(
+        inspect
+          .prepare(
+            "SELECT count(*) AS n FROM fixture_provider_orders WHERE provider_key = ?",
+          )
+          .get(q2.operationId).n,
+        0,
+      );
+      assert.equal(
+        inspect
+          .prepare(
+            "SELECT status FROM checkout_executions WHERE operation_id = ?",
+          )
+          .get(q2.operationId).status,
+        "abandoned",
+      );
+      const oldSnapshot = JSON.parse(
+        inspect.prepare("SELECT data FROM quotes WHERE id = ?").get(q2.id).data,
+      );
+      const newSnapshot = JSON.parse(
+        inspect.prepare("SELECT data FROM quotes WHERE id = ?").get(next.id)
+          .data,
+      );
+      inspect
+        .prepare(
+          "INSERT INTO checkout_executions VALUES (?, ?, ?, 'processing', ?, NULL)",
+        )
+        .run(next.operationId, next.id, "fixture-customer", next.operationId);
+      inspect.close();
+      const { fixtureApi } = await import("../server/fixture.mjs");
+      const adapter = fixtureApi(db, origin);
+      try {
+        // A delayed placement cannot cross the atomic abandonment fence.
+        assert.equal(
+          await adapter.provider.place({
+            quote: oldSnapshot,
+            idempotencyKey: q2.operationId,
+          }),
+          null,
+        );
+        // Race a live provider insertion against absence-abandonment: exactly one wins.
+        const [abandon, placement] = await Promise.all([
+          call(`/checkouts/${next.id}/abandon`, "POST"),
+          adapter.provider.place({
+            quote: newSnapshot,
+            idempotencyKey: next.operationId,
+          }),
+        ]);
+        if (placement) {
+          assert.notEqual(abandon.data.status, "abandoned");
+          assert.equal(
+            (await call(`/checkouts/${next.id}/reconcile`, "POST")).data.order
+              .id,
+            placement.id,
+          );
+        } else {
+          assert.equal(abandon.data.status, "abandoned");
+        }
+      } finally {
+        adapter.close();
+      }
+    } finally {
+      await stop(child);
+      rmSync(dir, { recursive: true, force: true });
+    }
+  },
+);

@@ -104,6 +104,50 @@ export function createCartStore(path, options = {}) {
   function view(row) {
     return { id: row.id, version: row.version, items: JSON.parse(row.items) };
   }
+  function executionSnapshot(id, actor) {
+    const row = getQuoteRow.get(id);
+    if (!row) fail();
+    const quote = quoteView(row);
+    if (typeof quote.destinationVerificationRequired !== "boolean")
+      throw new Error("legacy_quote_requires_requote");
+    if (
+      quote.id !== row.id ||
+      quote.cartId !== row.cart_id ||
+      quote.operationId !== row.operation_id ||
+      quote.revision !== row.revision ||
+      !nonempty(quote.customerId) ||
+      !nonempty(quote.operationId) ||
+      !Number.isSafeInteger(quote.revision) ||
+      quote.revision < 1 ||
+      !Number.isFinite(Date.parse(quote.expiresAt)) ||
+      !Array.isArray(quote.items) ||
+      quote.items.length === 0 ||
+      !["agent_confirmation", "customer_verification", "denied"].includes(
+        quote.requirement,
+      ) ||
+      !Number.isSafeInteger(quote.totalMinor) ||
+      quote.totalMinor < 0 ||
+      !nonempty(quote.currency) ||
+      !quote.destination ||
+      !nonempty(quote.destination.id) ||
+      quote.destination.customerId !== quote.customerId
+    )
+      throw new Error("invalid_quote_snapshot");
+    executionActor(quote, actor);
+    if (quote.customerId !== actor.customerId) fail();
+    const execution = db
+      .prepare(
+        "SELECT * FROM checkout_executions WHERE operation_id = ? AND quote_id = ? AND customer_id = ?",
+      )
+      .get(quote.operationId, id, actor.customerId);
+    if (
+      execution &&
+      (execution.provider_key !== quote.operationId ||
+        !["processing", "completed", "abandoned"].includes(execution.status))
+    )
+      throw new Error("invalid_execution");
+    return { quote, execution };
+  }
   function transaction(fn) {
     db.exec("BEGIN IMMEDIATE");
     try {
@@ -308,7 +352,10 @@ export function createCartStore(path, options = {}) {
         const execution = activeExecution(cartId);
         if (execution?.status === "processing")
           throw new Error("checkout_processing");
-        if (execution?.status === "completed") {
+        if (
+          execution?.status === "completed" ||
+          execution?.status === "abandoned"
+        ) {
           db.prepare("DELETE FROM checkout_operations WHERE cart_id = ?").run(
             cartId,
           );
@@ -433,11 +480,7 @@ export function createCartStore(path, options = {}) {
         typeof provider.reconcile !== "function"
       )
         throw new Error("checkout_adapters_unavailable");
-      let quote = await this.validateQuote(id, actor);
-      executionActor(quote, actor);
-      const existing = db
-        .prepare("SELECT * FROM checkout_executions WHERE operation_id = ?")
-        .get(quote.operationId);
+      let { quote, execution: existing } = executionSnapshot(id, actor);
       if (existing) {
         if (
           existing.quote_id !== id ||
@@ -446,8 +489,9 @@ export function createCartStore(path, options = {}) {
           fail();
         return existing.status === "completed"
           ? { status: "completed", order: JSON.parse(existing.order_data) }
-          : { status: "processing" };
+          : { status: existing.status };
       }
+      quote = await this.validateQuote(id, actor);
       const decision = await authority.evaluate({
         actor: structuredClone(actor),
         quote: structuredClone(quote),
@@ -555,16 +599,11 @@ export function createCartStore(path, options = {}) {
       const provider = options.orderProvider;
       if (!provider || typeof provider.reconcile !== "function")
         throw new Error("checkout_adapters_unavailable");
-      const quote = await this.validateQuote(id, actor);
-      executionActor(quote, actor);
-      const record = db
-        .prepare(
-          "SELECT * FROM checkout_executions WHERE operation_id = ? AND quote_id = ? AND customer_id = ?",
-        )
-        .get(quote.operationId, id, actor.customerId);
+      const { quote, execution: record } = executionSnapshot(id, actor);
       if (!record) throw new Error("checkout_not_started");
       if (record.status === "completed")
         return { status: "completed", order: JSON.parse(record.order_data) };
+      if (record.status === "abandoned") return { status: "abandoned" };
       let order;
       try {
         order = await provider.reconcile({
@@ -574,6 +613,8 @@ export function createCartStore(path, options = {}) {
       } catch {
         return { status: "processing" };
       }
+      if (order?.status === "absent")
+        return { status: "provider_confirmed_absent" };
       if (!order || !nonempty(order.id)) return { status: "processing" };
       const data = JSON.stringify({
         id: order.id,
@@ -592,6 +633,25 @@ export function createCartStore(path, options = {}) {
         )
         .get(quote.operationId);
       return { status: "completed", order: JSON.parse(saved.order_data) };
+    },
+    // Only an adapter that atomically fences all dispatch and updates this ledger
+    // in the same transaction may provide atomicAbandonAbsent.
+    async abandonQuote(id, actor) {
+      const { quote, execution } = executionSnapshot(id, actor);
+      if (!execution) throw new Error("checkout_not_started");
+      if (execution.status === "completed")
+        return { status: "completed", order: JSON.parse(execution.order_data) };
+      if (execution.status === "abandoned") return { status: "abandoned" };
+      if (typeof options.atomicAbandonAbsent !== "function")
+        throw new Error("safe_abandon_unavailable");
+      await options.atomicAbandonAbsent({
+        quote: structuredClone(quote),
+        idempotencyKey: execution.provider_key,
+      });
+      const latest = executionSnapshot(id, actor).execution;
+      if (latest.status === "completed")
+        return { status: "completed", order: JSON.parse(latest.order_data) };
+      return { status: latest.status };
     },
     // Review proof is bound to an exact immutable quote revision.
     async recordHumanReview(id, actor) {
