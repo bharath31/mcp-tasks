@@ -53,7 +53,7 @@ test("immutable revisions, ownership, scope, address and cart revalidation survi
     );
     const first = await store.createQuote(cart.id, actor, "home");
     assert.equal(first.totalMinor, 3600);
-    assert.equal(first.requirement, "denied");
+    assert.equal(first.requirement, "agent_confirmation");
     first.items[0].priceMinor = 1;
     first.destination.destination.postalCode = "evil";
     assert.equal(store.getQuote(first.id, actor).items[0].priceMinor, 1800);

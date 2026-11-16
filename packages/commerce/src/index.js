@@ -1,7 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { DatabaseSync } from "node:sqlite";
 
-// This is a partial milestone. In particular, there is no checkout or payment API.
+// Domain-only implementation; callers must supply trusted authentication and adapters.
 const products = Object.freeze([
   Object.freeze({
     id: "mug",
@@ -65,6 +65,11 @@ export function createCartStore(path, options = {}) {
       quote_id TEXT PRIMARY KEY REFERENCES quotes(id),
       operation_id TEXT NOT NULL, revision INTEGER NOT NULL,
       customer_id TEXT NOT NULL, reviewed_at TEXT NOT NULL
+    );
+    CREATE TABLE IF NOT EXISTS checkout_executions (
+      operation_id TEXT PRIMARY KEY, quote_id TEXT NOT NULL UNIQUE,
+      customer_id TEXT NOT NULL, status TEXT NOT NULL, provider_key TEXT NOT NULL UNIQUE,
+      order_data TEXT
     );`);
   const get = db.prepare("SELECT * FROM carts WHERE id = ?");
   function authorize(row, actor, cartScope = true) {
@@ -87,6 +92,14 @@ export function createCartStore(path, options = {}) {
       actor.sessionId !== row.session_id
     )
       fail();
+  }
+  function activeExecution(cartId) {
+    return db
+      .prepare(
+        `SELECT e.* FROM checkout_executions e JOIN checkout_operations o
+      ON o.operation_id = e.operation_id WHERE o.cart_id = ?`,
+      )
+      .get(cartId);
   }
   function view(row) {
     return { id: row.id, version: row.version, items: JSON.parse(row.items) };
@@ -112,6 +125,11 @@ export function createCartStore(path, options = {}) {
         !actor.scopes.includes("addresses:read"))
     )
       fail();
+  }
+  function executionActor(quote, actor) {
+    const cart = get.get(quote.cartId);
+    quoteActor(cart, actor);
+    if (cart.agent_id && actor.kind !== "agent") fail();
   }
   async function addressFor(customerId, addressId) {
     const port = options.customerAccount;
@@ -231,6 +249,8 @@ export function createCartStore(path, options = {}) {
       return transaction(() => {
         const row = get.get(id);
         authorize(row, actor);
+        if (activeExecution(id)?.status === "processing")
+          throw new Error("checkout_processing");
         db.prepare(
           "UPDATE carts SET items = ?, version = version + 1 WHERE id = ?",
         ).run(JSON.stringify(priced), id);
@@ -285,6 +305,15 @@ export function createCartStore(path, options = {}) {
         let op = db
           .prepare("SELECT * FROM checkout_operations WHERE cart_id = ?")
           .get(cartId);
+        const execution = activeExecution(cartId);
+        if (execution?.status === "processing")
+          throw new Error("checkout_processing");
+        if (execution?.status === "completed") {
+          db.prepare("DELETE FROM checkout_operations WHERE cart_id = ?").run(
+            cartId,
+          );
+          op = undefined;
+        }
         if (!op) {
           db.prepare("INSERT INTO checkout_operations VALUES (?, ?, 0)").run(
             cartId,
@@ -294,6 +323,17 @@ export function createCartStore(path, options = {}) {
             .prepare("SELECT * FROM checkout_operations WHERE cart_id = ?")
             .get(cartId);
         }
+        const previous = op.revision
+          ? db
+              .prepare(
+                "SELECT data FROM quotes WHERE operation_id = ? AND revision = ?",
+              )
+              .get(op.operation_id, op.revision)
+          : null;
+        const changedDestination =
+          previous &&
+          JSON.stringify(JSON.parse(previous.data).destination) !==
+            JSON.stringify(address);
         const revision = op.revision + 1;
         db.prepare(
           "UPDATE checkout_operations SET revision = ? WHERE cart_id = ?",
@@ -313,7 +353,12 @@ export function createCartStore(path, options = {}) {
           currency: "USD",
           destination: address,
           expiresAt: new Date(Date.now() + 15 * 60 * 1000).toISOString(),
-          requirement: "denied",
+          requirement:
+            totalMinor <= 5000 &&
+            address.trustedForAgentCheckout &&
+            !changedDestination
+              ? "agent_confirmation"
+              : "customer_verification",
         };
         db.prepare("INSERT INTO quotes VALUES (?, ?, ?, ?, ?)").run(
           quote.id,
@@ -356,7 +401,178 @@ export function createCartStore(path, options = {}) {
         throw new Error("stale_quote");
       return quote;
     },
-    // This records a review only; no checkout or execution path consumes it.
+    async completeQuote(id, actor) {
+      const authority = options.authorization;
+      const provider = options.orderProvider;
+      if (
+        !authority ||
+        typeof authority.evaluate !== "function" ||
+        !provider ||
+        typeof provider.place !== "function" ||
+        typeof provider.reconcile !== "function"
+      )
+        throw new Error("checkout_adapters_unavailable");
+      let quote = await this.validateQuote(id, actor);
+      executionActor(quote, actor);
+      const existing = db
+        .prepare("SELECT * FROM checkout_executions WHERE operation_id = ?")
+        .get(quote.operationId);
+      if (existing) {
+        if (
+          existing.quote_id !== id ||
+          existing.customer_id !== actor.customerId
+        )
+          fail();
+        return existing.status === "completed"
+          ? { status: "completed", order: JSON.parse(existing.order_data) }
+          : { status: "processing" };
+      }
+      const decision = await authority.evaluate({
+        actor: structuredClone(actor),
+        quote: structuredClone(quote),
+      });
+      if (
+        !["agent_confirmation", "customer_verification", "denied"].includes(
+          decision,
+        )
+      )
+        throw new Error("invalid_authorization_decision");
+      if (decision === "denied") return { status: "denied" };
+      const needsHuman =
+        actor.kind === "human" ||
+        quote.requirement === "customer_verification" ||
+        decision === "customer_verification";
+      if (needsHuman) {
+        const review = db
+          .prepare(
+            "SELECT * FROM quote_human_reviews WHERE quote_id = ? AND operation_id = ? AND revision = ? AND customer_id = ?",
+          )
+          .get(quote.id, quote.operationId, quote.revision, quote.customerId);
+        if (!review) return { status: "customer_verification_required" };
+      } else {
+        if (
+          typeof options.verifyAgentConfirmation !== "function" ||
+          (await options.verifyAgentConfirmation({
+            actor: structuredClone(actor),
+            quote: structuredClone(quote),
+          })) !== true
+        )
+          return { status: "approval_required" };
+      }
+      quote = await this.validateQuote(id, actor);
+      const claim = transaction(() => {
+        const record = getQuoteRow.get(id);
+        const row = record && get.get(record.cart_id);
+        quoteActor(row, actor);
+        const op = db
+          .prepare("SELECT * FROM checkout_operations WHERE cart_id = ?")
+          .get(record.cart_id);
+        if (
+          !op ||
+          op.operation_id !== quote.operationId ||
+          op.revision !== quote.revision ||
+          row.version !== quote.cartVersion ||
+          Date.now() >= Date.parse(quote.expiresAt) ||
+          JSON.stringify(quoteView(record)) !== JSON.stringify(quote) ||
+          JSON.stringify(pricedItems(row)) !== JSON.stringify(quote.items)
+        )
+          throw new Error("stale_quote");
+        const prior = db
+          .prepare("SELECT * FROM checkout_executions WHERE operation_id = ?")
+          .get(quote.operationId);
+        if (prior) {
+          if (prior.quote_id !== id || prior.customer_id !== actor.customerId)
+            fail();
+          return { owner: false, row: prior };
+        }
+        if (
+          needsHuman &&
+          !db
+            .prepare(
+              "SELECT 1 FROM quote_human_reviews WHERE quote_id = ? AND operation_id = ? AND revision = ? AND customer_id = ?",
+            )
+            .get(quote.id, quote.operationId, quote.revision, quote.customerId)
+        )
+          throw new Error("review_missing");
+        db.prepare(
+          "INSERT INTO checkout_executions VALUES (?, ?, ?, 'processing', ?, NULL)",
+        ).run(quote.operationId, quote.id, quote.customerId, quote.operationId);
+        return { owner: true, key: quote.operationId };
+      });
+      if (!claim.owner)
+        return claim.row.status === "completed"
+          ? { status: "completed", order: JSON.parse(claim.row.order_data) }
+          : { status: "processing" };
+      try {
+        const order = await provider.place({
+          quote: structuredClone(quote),
+          idempotencyKey: claim.key,
+        });
+        if (!order || !nonempty(order.id)) return { status: "processing" };
+        const data = JSON.stringify({
+          id: order.id,
+          customerId: quote.customerId,
+          operationId: quote.operationId,
+          quoteId: quote.id,
+          totalMinor: quote.totalMinor,
+          currency: quote.currency,
+        });
+        db.prepare(
+          "UPDATE checkout_executions SET status = 'completed', order_data = ? WHERE operation_id = ? AND status = 'processing'",
+        ).run(data, quote.operationId);
+        const saved = db
+          .prepare(
+            "SELECT order_data FROM checkout_executions WHERE operation_id = ?",
+          )
+          .get(quote.operationId);
+        return { status: "completed", order: JSON.parse(saved.order_data) };
+      } catch {
+        return { status: "processing" };
+      }
+    },
+    async reconcileQuote(id, actor) {
+      const provider = options.orderProvider;
+      if (!provider || typeof provider.reconcile !== "function")
+        throw new Error("checkout_adapters_unavailable");
+      const quote = await this.validateQuote(id, actor);
+      executionActor(quote, actor);
+      const record = db
+        .prepare(
+          "SELECT * FROM checkout_executions WHERE operation_id = ? AND quote_id = ? AND customer_id = ?",
+        )
+        .get(quote.operationId, id, actor.customerId);
+      if (!record) throw new Error("checkout_not_started");
+      if (record.status === "completed")
+        return { status: "completed", order: JSON.parse(record.order_data) };
+      let order;
+      try {
+        order = await provider.reconcile({
+          quote: structuredClone(quote),
+          idempotencyKey: record.provider_key,
+        });
+      } catch {
+        return { status: "processing" };
+      }
+      if (!order || !nonempty(order.id)) return { status: "processing" };
+      const data = JSON.stringify({
+        id: order.id,
+        customerId: quote.customerId,
+        operationId: quote.operationId,
+        quoteId: quote.id,
+        totalMinor: quote.totalMinor,
+        currency: quote.currency,
+      });
+      db.prepare(
+        "UPDATE checkout_executions SET status = 'completed', order_data = ? WHERE operation_id = ? AND status = 'processing'",
+      ).run(data, quote.operationId);
+      const saved = db
+        .prepare(
+          "SELECT order_data FROM checkout_executions WHERE operation_id = ?",
+        )
+        .get(quote.operationId);
+      return { status: "completed", order: JSON.parse(saved.order_data) };
+    },
+    // Review proof is bound to an exact immutable quote revision.
     async recordHumanReview(id, actor) {
       validateActor(actor);
       if (actor.kind !== "human") fail();
@@ -470,6 +686,50 @@ export function createFixtureCustomerAccountPort() {
             address.customerId === customerId && address.id === addressId,
         ) ?? null,
       );
+    },
+  };
+}
+
+/** Explicitly fixture-only policy and confirmation simulator, not identity proof. */
+export function createFixtureAuthorization(mode) {
+  if (mode !== "fixture") throw new Error("fixture_mode_required");
+  const confirmations = new Set();
+  const reviews = new Set();
+  const key = (quote) =>
+    `${quote.id}:${quote.operationId}:${quote.revision}:${quote.customerId}`;
+  return {
+    authorization: {
+      async evaluate({ quote }) {
+        return quote.requirement;
+      },
+    },
+    async verifyAgentConfirmation({ quote }) {
+      return confirmations.has(key(quote));
+    },
+    async verifyHumanReview({ quote }) {
+      return reviews.has(key(quote));
+    },
+    confirmForTest(quote) {
+      confirmations.add(key(quote));
+    },
+    reviewForTest(quote) {
+      reviews.add(key(quote));
+    },
+  };
+}
+
+/** In-memory simulated order provider. It never charges and is not restart durable. */
+export function createFixtureOrderProvider(mode) {
+  if (mode !== "fixture") throw new Error("fixture_mode_required");
+  const orders = new Map();
+  return {
+    async place({ idempotencyKey }) {
+      if (!orders.has(idempotencyKey))
+        orders.set(idempotencyKey, { id: randomUUID() });
+      return structuredClone(orders.get(idempotencyKey));
+    },
+    async reconcile({ idempotencyKey }) {
+      return structuredClone(orders.get(idempotencyKey) ?? null);
     },
   };
 }
