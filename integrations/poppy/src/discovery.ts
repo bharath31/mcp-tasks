@@ -7,6 +7,14 @@ export interface DiscoveryOptions {
   /** Enable only when the application implements all Operations v3 obligations. */
   operationsV3?: boolean;
 }
+function onlyKeys(value: unknown, keys: string[]): boolean {
+  return (
+    !!value &&
+    typeof value === "object" &&
+    !Array.isArray(value) &&
+    Object.keys(value).every((key) => keys.includes(key))
+  );
+}
 function httpsUrl(input: string): string {
   const url = new URL(input);
   if (url.protocol !== "https:" || url.username || url.password || url.hash)
@@ -21,6 +29,12 @@ export function buildDiscovery(options: DiscoveryOptions) {
     /[/@?#]/.test(options.domain)
   )
     throw new Error("Invalid organization");
+  if (
+    options.scopes &&
+    (!onlyKeys(options.scopes, Object.keys(options.scopes)) ||
+      Object.values(options.scopes).some((value) => typeof value !== "string"))
+  )
+    throw new Error("Invalid scopes");
   if (!options.apis.length) throw new Error("At least one API is required");
   const apis = options.apis.map((api) => {
     if (!["openapi", "mcp"].includes(api.type) || !api.description.trim())
@@ -49,8 +63,24 @@ export function validateDiscovery(
   servingHost: string,
 ): boolean {
   try {
-    if (!document || typeof document !== "object") return false;
+    if (
+      !onlyKeys(document, [
+        "protocol_version",
+        "organization",
+        "auth",
+        "apis",
+        "extensions",
+      ])
+    )
+      return false;
     const doc = document as ReturnType<typeof buildDiscovery>;
+    if (
+      !onlyKeys(doc.organization, ["name", "domain"]) ||
+      (doc.auth !== undefined && !onlyKeys(doc.auth, ["issuer", "scopes"])) ||
+      !Array.isArray(doc.apis) ||
+      doc.apis.some((api) => !onlyKeys(api, ["type", "url", "description"]))
+    )
+      return false;
     if (
       doc.protocol_version !== "1.0" ||
       doc.organization.domain.toLowerCase() !== servingHost.toLowerCase()
@@ -60,6 +90,7 @@ export function validateDiscovery(
       doc.extensions &&
       (Object.keys(doc.extensions).some((key) => key !== "operations") ||
         doc.extensions.operations.length !== 1 ||
+        !onlyKeys(doc.extensions.operations[0], ["version"]) ||
         doc.extensions.operations[0].version !== "3")
     )
       return false;

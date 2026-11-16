@@ -1,6 +1,6 @@
 # Poppy integration seam (experimental)
 
-Framework-neutral server helpers for verified Auth0 Poppy identities and a subset of the Operations v3 API/MCP wire format. This is **not a Poppy implementation or a conformant storefront**. Poppy 1.0 is a draft, and Operations v3 is newer than the 0.3 documentation of the upstream API PR. Neither real SDK compatibility nor a live tenant has been verified here. Do not advertise the extension until the application implements and tests all obligations described below.
+Framework-neutral server helpers for verified Auth0 Poppy identities and a subset of the Operations v3 API/MCP wire format. This is **not a Poppy implementation or a conformant storefront**. Poppy 1.0 is a draft, and Operations v3 is newer than the 0.3 documentation of the upstream API PR. Pinned SDK exported identity types are checked separately; runtime SDK compatibility and a live tenant have not been verified here. Do not advertise the extension until the application implements and tests all obligations described below.
 
 ## Install and verify
 
@@ -23,3 +23,14 @@ Stable `@auth0/auth0-api-js` 1.7.0 and `@auth0/nextjs-auth0` 4.33.0 do not inclu
 ## Evidence and limits
 
 Included tests use mocked SDK results and local protocol fixtures only. No `createTestAgent` upstream compatibility suite, real signed-request test, Next.js browser join, live Auth0 tenant, conformance suite, UCP, website-operations endpoint, or production commerce service was run. Discovery and Operations helpers implement only the explicitly documented subset and cannot establish protocol conformance. Treat every upstream SDK update and 1.0 protocol change as requiring renewed compatibility/security review.
+
+### Reproducing the pinned SDK type check
+
+With clean checkouts at the two exact revisions above, run:
+
+```sh
+AUTH0_AUTH_JS=/path/to/auth0-auth-js NEXTJS_AUTH0=/path/to/nextjs-auth0 \
+  integrations/poppy/scripts/check-sdk-contract.sh
+```
+
+The script verifies revisions and clean worktrees, copies the upstream exported type declarations into a temporary directory, and type-checks their request/result and browser-context types against the adapter. It does not install or change the SDK checkouts. `skipLibCheck` leaves unrelated upstream dependencies unresolved; this checks the relevant structural types, not actual SDK runtime behavior, the `Auth0Client` overloads, signatures, crypto, tenant configuration, or 1.0 protocol compatibility. A signed-request test with `createTestAgent` and a real browser join remain necessary before live use. Discovery validation deliberately rejects extra fields, including a website operations endpoint, rather than accepting capabilities this subset does not implement.

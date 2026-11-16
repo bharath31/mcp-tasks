@@ -151,3 +151,49 @@ test("discovery advertises only opted-in Operations v3 and refuses wrong host, v
     }),
   );
 });
+test("discovery refuses unsupported website operations and extra capabilities", () => {
+  const doc = buildDiscovery({
+    domain: "shop.example",
+    name: "Shop",
+    apis: [
+      { type: "mcp", url: "https://shop.example/mcp", description: "MCP" },
+    ],
+    operationsV3: true,
+  });
+  assert.equal(
+    validateDiscovery(
+      {
+        ...doc,
+        web: { browser_session_endpoint: "https://shop.example/join" },
+      },
+      "shop.example",
+    ),
+    false,
+  );
+  assert.equal(
+    validateDiscovery(
+      {
+        ...doc,
+        extensions: {
+          operations: [
+            { version: "3", endpoint: "https://shop.example/operations" },
+          ],
+        },
+      },
+      "shop.example",
+    ),
+    false,
+  );
+  assert.equal(
+    validateDiscovery({ ...doc, auth: { disabled: true } }, "shop.example"),
+    false,
+  );
+  assert.throws(() =>
+    buildDiscovery({
+      domain: "shop.example",
+      name: "Shop",
+      apis: doc.apis,
+      scopes: { read: 42 } as unknown as Record<string, string>,
+    }),
+  );
+});
