@@ -17,6 +17,10 @@ _Scripted UI preview. [Watch the short walkthrough](https://mcp-tasks.dev/og/pol
 > [!NOTE]
 > **Independent, experimental, MIT-licensed.** Not an official Auth0, Okta, Anthropic or MCP project. The SDK is a local workspace package, **not on npm**. Use this to evaluate and adapt the pattern, not as a production-ready approval service.
 
+## Action Authority and shopping (work in progress)
+
+Action Authority is the working umbrella for this independent repository, not an Auth0 product. Task Authority remains the existing refund approval backend. The [shopping storefront scaffold](examples/storefront/README.md) and [experimental Poppy adapter](integrations/poppy/README.md) include a loopback-only fixture purchase simulation, not live identity, payments or a production service. The hosted URL above remains the refund reference, not a shopping demo. See the [shopping brief](docs/plans/customer-agent-commerce.md) for protocol evidence and remaining boundaries.
+
 ## The problem this solves
 
 Your support agent wants to refund $1,500. A confirmation dialog can ask “allow this tool call?”, but your backend still needs to establish:
