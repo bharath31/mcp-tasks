@@ -14,6 +14,10 @@ test-results/
 .local/
 demo/refund-desk/web/dist/
 
+# Local planning documents (keep out of this public repository)
+docs/plans/
+docs/prd-approval-policy.md
+
 # Local tooling output
 .playwright-mcp/
 demo/policy-desk/web/.shots/

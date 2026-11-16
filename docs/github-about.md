@@ -19,7 +19,7 @@ The repository's About box (description, website and topics) lives in GitHub set
 Needs the [GitHub CLI](https://cli.github.com) signed in with admin rights on the repo. Set `REPO` to the new copy.
 
 ```sh
-REPO=bharath31/mcp-tasks
+REPO=bharath31/nominee
 
 gh repo edit "$REPO" \
   --description "Human approvals for agent actions. Gate refunds with Auth0-verified, exact-operation approval and resume them as MCP Tasks. Experimental TypeScript reference implementation with a hosted demo. Unofficial." \

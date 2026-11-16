@@ -1,12 +1,12 @@
-# MCP Tasks · human approvals for agent actions
+# Nominee · authority and approvals for agent actions
 
-**Give your agent a refund tool without giving it permission to approve its own refunds.**
+**Let agents act within limits, and bring a person in when an action needs approval.**
 
-This TypeScript reference implementation lets routine requests through under policy and holds sensitive ones for an authorized person. Auth0 verifies the reviewer; the approval covers the exact operation. The agent's [MCP Task](https://modelcontextprotocol.io) waits, then your backend rechecks permission before executing.
+Nominee is an independent TypeScript reference implementation for protecting consequential actions. It evaluates policy, can hold an action for an authorized person, and binds the decision to the exact operation. Applications can use it from REST, a CLI, or an [MCP Task](https://modelcontextprotocol.io); MCP is one integration, not a requirement. The existing end-to-end reference uses Auth0 to verify the reviewer and rechecks permission before execution.
 
 [**Try the live demo →**](https://mcp-tasks.dev) · [Run the playground](#try-it-without-accounts) · [How it works](docs/architecture.md) · [Docs](docs/README.md)
 
-[![CI](https://github.com/bharath31/mcp-tasks/actions/workflows/ci.yml/badge.svg)](https://github.com/bharath31/mcp-tasks/actions/workflows/ci.yml)
+[![CI](https://github.com/bharath31/nominee/actions/workflows/ci.yml/badge.svg)](https://github.com/bharath31/nominee/actions/workflows/ci.yml)
 [![MIT](https://img.shields.io/badge/license-MIT-black)](LICENSE)
 [![Status: experimental](https://img.shields.io/badge/status-experimental-d29922)](#status-and-limits)
 
@@ -17,9 +17,14 @@ _Scripted UI preview. [Watch the short walkthrough](https://mcp-tasks.dev/og/pol
 > [!NOTE]
 > **Independent, experimental, MIT-licensed.** Not an official Auth0, Okta, Anthropic or MCP project. The SDK is a local workspace package, **not on npm**. Use this to evaluate and adapt the pattern, not as a production-ready approval service.
 
-## Action Authority and shopping (work in progress)
+## What's in this repository
 
-Action Authority is the working umbrella for this independent repository, not an Auth0 product. Task Authority remains the existing refund approval backend. The [shopping storefront scaffold](examples/storefront/README.md) and [experimental Poppy adapter](integrations/poppy/README.md) include a loopback-only fixture purchase simulation, not live identity, payments or a production service. The hosted URL above remains the refund reference, not a shopping demo. See the [shopping brief](docs/plans/customer-agent-commerce.md) for protocol evidence and remaining boundaries.
+- **Protected actions:** the existing backend and SDK in `auth0/` implement policy, approval records, permission checks and execution claims. Package names remain **Task Authority** (`@task-authority/*`) for compatibility; that SDK is local workspace source, not the separate Nominee npm packages.
+- **Refund reference:** Policy Desk uses an MCP Tasks server, Workers AI, Auth0 and simulated payments. The hosted URL above is this reference, not the shopping demo.
+- **Shopping example:** the [storefront](examples/storefront/README.md) and [experimental Poppy adapter](integrations/poppy/README.md) include a loopback-only fixture purchase simulation. Live customer identity, phone approval, a browser-controlling agent and payments are not connected yet.
+- **Workflow experiment:** [`approve()`](docs/approve.md) verifies an operation-bound decision inside a workflow without the approval backend. It has local-fixture evidence, not live Auth0 verification.
+
+Nominee is not an Auth0 product. These components have different implementation and verification boundaries; the shopping fixture does not yet use the full Task Authority backend.
 
 ## The problem this solves
 
@@ -41,8 +46,8 @@ The custom approval backend in this repo, internally called **Task Authority**, 
 Start with **Node 22+**. No Docker, Claude Code or cloud credentials needed for the playground.
 
 ```sh
-git clone https://github.com/bharath31/mcp-tasks.git
-cd mcp-tasks
+git clone https://github.com/bharath31/nominee.git
+cd nominee
 npm ci
 npm run playground
 ```
@@ -109,7 +114,7 @@ This is an integration sketch: `stripe`, `paymentId`, `token` and `requestId` co
 
 ## Deploy your own
 
-[![Deploy to Cloudflare](https://deploy.workers.cloudflare.com/button)](https://deploy.workers.cloudflare.com/?url=https://github.com/bharath31/mcp-tasks)
+[![Deploy to Cloudflare](https://deploy.workers.cloudflare.com/button)](https://deploy.workers.cloudflare.com/?url=https://github.com/bharath31/nominee)
 
 One Worker hosts the approval service, refund MCP server, Workers AI agent and console. After cloning and running `npm ci`, run `npm run setup` for guided configuration, or `npm run setup -- --deploy` to deploy from the terminal too. Setup uses your own accounts; the deploy button alone does not configure Auth0 or the database.
 
@@ -152,7 +157,7 @@ npm run check          # build + lint + tests, as in CI
 
 `npm run doctor` diagnoses local prerequisites. `npm run db:down` stops the helper container and retains its data. Browser suites run separately in CI.
 
-Useful first contributions: report where setup got stuck, reproduce a host-compatibility issue, or add a policy example for an action you actually need. [Share your use case](https://github.com/bharath31/mcp-tasks/issues/new?template=use_case.yml) or read [CONTRIBUTING.md](CONTRIBUTING.md).
+Useful first contributions: report where setup got stuck, reproduce a host-compatibility issue, or add a policy example for an action you actually need. [Share your use case](https://github.com/bharath31/nominee/issues/new?template=use_case.yml) or read [CONTRIBUTING.md](CONTRIBUTING.md).
 
 ## License
 

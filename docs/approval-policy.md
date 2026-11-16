@@ -1,6 +1,6 @@
 # Approval policy implementation
 
-Task Authority is this repo's custom approval backend, not a shipped Auth0 product. It runs inside Policy Desk's Worker by default or separately via Node. This page describes implemented behavior; [the PRD](prd-approval-policy.md) is historical rationale, not the current contract.
+Task Authority is this repo's custom approval backend, not a shipped Auth0 product. It runs inside Policy Desk's Worker by default or separately via Node. This page describes implemented behavior.
 
 ## Write your first policy
 
