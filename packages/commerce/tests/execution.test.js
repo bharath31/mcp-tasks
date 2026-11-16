@@ -364,3 +364,126 @@ test("legacy quote history retains changed-destination escalation", async () => 
     rmSync(dir, { recursive: true, force: true });
   }
 });
+
+test("an already-issued legacy A-B-B quote cannot execute before safe requote", async () => {
+  const dir = mkdtempSync(join(tmpdir(), "legacy-direct-"));
+  const path = join(dir, "db");
+  const { auth, options } = setup();
+  const counts = {
+    account: 0,
+    policy: 0,
+    confirmation: 0,
+    human: 0,
+    place: 0,
+    reconcile: 0,
+  };
+  options.customerAccount = {
+    async getAddress(customerId, id) {
+      counts.account++;
+      return {
+        id,
+        customerId,
+        label: id,
+        version: "1",
+        trustedForAgentCheckout: true,
+        destination: { id },
+      };
+    },
+  };
+  const evaluate = options.authorization.evaluate;
+  options.authorization = {
+    async evaluate(input) {
+      counts.policy++;
+      return evaluate(input);
+    },
+  };
+  const confirm = options.verifyAgentConfirmation;
+  options.verifyAgentConfirmation = async (input) => {
+    counts.confirmation++;
+    return confirm(input);
+  };
+  const verify = options.verifyHumanReview;
+  options.verifyHumanReview = async (input) => {
+    counts.human++;
+    return verify(input);
+  };
+  const provider = options.orderProvider;
+  options.orderProvider = {
+    async place(input) {
+      counts.place++;
+      return provider.place(input);
+    },
+    async reconcile(input) {
+      counts.reconcile++;
+      return provider.reconcile(input);
+    },
+  };
+  let store = createCartStore(path, options);
+  try {
+    const cart = store.create(agent);
+    store.update(cart.id, agent, [{ productId: "tea", quantity: 1 }]);
+    await store.createQuote(cart.id, agent, "A");
+    await store.createQuote(cart.id, agent, "B");
+    const legacy = await store.createQuote(cart.id, agent, "B");
+    store.close();
+    const db = new DatabaseSync(path);
+    try {
+      for (const row of db.prepare("SELECT id, data FROM quotes").all()) {
+        const quote = JSON.parse(row.data);
+        delete quote.destinationVerificationRequired;
+        if (row.id === legacy.id) quote.requirement = "agent_confirmation";
+        db.prepare("UPDATE quotes SET data = ? WHERE id = ?").run(
+          JSON.stringify(quote),
+          row.id,
+        );
+      }
+    } finally {
+      db.close();
+    }
+    store = createCartStore(path, options);
+    auth.confirmForTest(legacy);
+    for (const key of Object.keys(counts)) counts[key] = 0;
+    assert.equal(store.getQuote(legacy.id, agent).id, legacy.id);
+    assert.equal(store.getHumanReview(legacy.id, human), null);
+    await assert.rejects(
+      store.completeQuote(legacy.id, agent),
+      /legacy_quote_requires_requote/,
+    );
+    await assert.rejects(
+      store.recordHumanReview(legacy.id, human),
+      /legacy_quote_requires_requote/,
+    );
+    await assert.rejects(
+      store.reconcileQuote(legacy.id, agent),
+      /legacy_quote_requires_requote/,
+    );
+    assert.deepEqual(counts, {
+      account: 0,
+      policy: 0,
+      confirmation: 0,
+      human: 0,
+      place: 0,
+      reconcile: 0,
+    });
+    const fresh = await store.createQuote(cart.id, agent, "B");
+    assert.equal(fresh.operationId, legacy.operationId);
+    assert.equal(fresh.destinationVerificationRequired, true);
+    assert.equal(fresh.requirement, "customer_verification");
+    auth.confirmForTest(fresh);
+    assert.equal(
+      (await store.completeQuote(fresh.id, agent)).status,
+      "customer_verification_required",
+    );
+    assert.equal(counts.place, 0);
+    auth.reviewForTest(fresh);
+    await store.recordHumanReview(fresh.id, human);
+    assert.equal(
+      (await store.completeQuote(fresh.id, agent)).status,
+      "completed",
+    );
+    assert.equal(counts.place, 1);
+  } finally {
+    store.close();
+    rmSync(dir, { recursive: true, force: true });
+  }
+});

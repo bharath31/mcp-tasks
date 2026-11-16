@@ -399,6 +399,10 @@ export function createCartStore(path, options = {}) {
       let row = get.get(record.cart_id);
       quoteActor(row, actor);
       const quote = quoteView(record);
+      // Quotes issued before destination escalation was made sticky cannot be
+      // safely executed or reviewed. Requoting derives the flag from history.
+      if (typeof quote.destinationVerificationRequired !== "boolean")
+        throw new Error("legacy_quote_requires_requote");
       const address = await addressFor(quote.customerId, quote.destination.id);
       row = get.get(record.cart_id);
       quoteActor(row, actor);
