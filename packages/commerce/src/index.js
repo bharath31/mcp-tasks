@@ -330,10 +330,26 @@ export function createCartStore(path, options = {}) {
               )
               .get(op.operation_id, op.revision)
           : null;
-        const changedDestination =
-          previous &&
-          JSON.stringify(JSON.parse(previous.data).destination) !==
-            JSON.stringify(address);
+        const priorQuote = previous ? JSON.parse(previous.data) : null;
+        let changedDestination = priorQuote
+          ? priorQuote.destinationVerificationRequired === true ||
+            JSON.stringify(priorQuote.destination) !== JSON.stringify(address)
+          : false;
+        // Older persisted quotes lack the sticky flag. Derive it from the full
+        // operation history before writing the next revision with the flag.
+        if (
+          priorQuote &&
+          priorQuote.destinationVerificationRequired === undefined
+        ) {
+          const history = db
+            .prepare("SELECT data FROM quotes WHERE operation_id = ?")
+            .all(op.operation_id);
+          changedDestination ||= history.some(
+            (entry) =>
+              JSON.stringify(JSON.parse(entry.data).destination) !==
+              JSON.stringify(priorQuote.destination),
+          );
+        }
         const revision = op.revision + 1;
         db.prepare(
           "UPDATE checkout_operations SET revision = ? WHERE cart_id = ?",
@@ -352,6 +368,7 @@ export function createCartStore(path, options = {}) {
           totalMinor,
           currency: "USD",
           destination: address,
+          destinationVerificationRequired: changedDestination,
           expiresAt: new Date(Date.now() + 15 * 60 * 1000).toISOString(),
           requirement:
             totalMinor <= 5000 &&

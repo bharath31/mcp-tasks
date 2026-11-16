@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { DatabaseSync } from "node:sqlite";
 import {
   createCartStore,
   createFixtureCustomerAccountPort,
@@ -240,5 +241,126 @@ test("in-flight claim blocks a racing caller and cart mutation", async () => {
     assert.equal(calls, 1);
   } finally {
     store.close();
+  }
+});
+
+test("a changed trusted destination remains human-gated on every revision", async () => {
+  const dir = mkdtempSync(join(tmpdir(), "destination-"));
+  const { auth, options } = setup();
+  const addresses = ["A", "B"].map((id) => ({
+    id,
+    customerId: agent.customerId,
+    label: id,
+    version: "1",
+    trustedForAgentCheckout: true,
+    destination: { country: "US", city: id },
+  }));
+  options.customerAccount = {
+    async getAddress(customerId, id) {
+      return (
+        addresses.find((a) => a.customerId === customerId && a.id === id) ??
+        null
+      );
+    },
+  };
+  let calls = 0;
+  const provider = options.orderProvider;
+  options.orderProvider = {
+    ...provider,
+    async place(input) {
+      calls++;
+      return provider.place(input);
+    },
+  };
+  let store = createCartStore(join(dir, "db"), options);
+  try {
+    const cart = store.create(agent);
+    store.update(cart.id, agent, [{ productId: "tea", quantity: 1 }]);
+    const first = await store.createQuote(cart.id, agent, "A");
+    assert.equal(first.requirement, "agent_confirmation");
+    const second = await store.createQuote(cart.id, agent, "B");
+    assert.equal(second.requirement, "customer_verification");
+    auth.reviewForTest(second);
+    await store.recordHumanReview(second.id, human);
+    store.close();
+    store = createCartStore(join(dir, "db"), options);
+    const third = await store.createQuote(cart.id, agent, "B");
+    assert.equal(third.operationId, first.operationId);
+    assert.equal(third.destinationVerificationRequired, true);
+    assert.equal(third.requirement, "customer_verification");
+    auth.confirmForTest(third);
+    assert.equal(
+      (await store.completeQuote(third.id, agent)).status,
+      "customer_verification_required",
+    );
+    assert.equal(calls, 0);
+    auth.reviewForTest(third);
+    await store.recordHumanReview(third.id, human);
+    assert.equal(
+      (await store.completeQuote(third.id, agent)).status,
+      "completed",
+    );
+    assert.equal(calls, 1);
+    const next = await store.createQuote(cart.id, agent, "A");
+    assert.notEqual(next.operationId, third.operationId);
+    assert.equal(next.requirement, "agent_confirmation");
+    await store.createQuote(cart.id, agent, "B");
+    const returned = await store.createQuote(cart.id, agent, "A");
+    assert.equal(returned.requirement, "customer_verification");
+    auth.confirmForTest(returned);
+    assert.equal(
+      (await store.completeQuote(returned.id, agent)).status,
+      "customer_verification_required",
+    );
+    assert.equal(calls, 1);
+  } finally {
+    store.close();
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test("legacy quote history retains changed-destination escalation", async () => {
+  const dir = mkdtempSync(join(tmpdir(), "legacy-destination-"));
+  const path = join(dir, "db");
+  const { options } = setup();
+  options.customerAccount = {
+    async getAddress(customerId, id) {
+      return {
+        id,
+        customerId,
+        label: id,
+        version: "1",
+        trustedForAgentCheckout: true,
+        destination: { id },
+      };
+    },
+  };
+  let store = createCartStore(path, options);
+  try {
+    const cart = store.create(agent);
+    store.update(cart.id, agent, [{ productId: "tea", quantity: 1 }]);
+    await store.createQuote(cart.id, agent, "A");
+    await store.createQuote(cart.id, agent, "B");
+    store.close();
+    const db = new DatabaseSync(path);
+    try {
+      for (const row of db.prepare("SELECT id, data FROM quotes").all()) {
+        const quote = JSON.parse(row.data);
+        delete quote.destinationVerificationRequired;
+        db.prepare("UPDATE quotes SET data = ? WHERE id = ?").run(
+          JSON.stringify(quote),
+          row.id,
+        );
+      }
+    } finally {
+      db.close();
+    }
+    store = createCartStore(path, options);
+    const third = await store.createQuote(cart.id, agent, "B");
+    assert.equal(third.destinationVerificationRequired, true);
+    assert.equal(third.requirement, "customer_verification");
+  } finally {
+    store.close();
+    rmSync(dir, { recursive: true, force: true });
   }
 });
