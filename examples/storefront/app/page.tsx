@@ -1,2 +1,4 @@
-import Shop from './shop';
-export default function Page(){return <Shop/>}
+import Shop from "./shop";
+export default function Page() {
+  return <Shop />;
+}

@@ -56,3 +56,15 @@ jobs:
       - run: test -x "$CHROMIUM_PATH"
       - run: npm run test:fullstack
       - run: npm run test:admin
+  shopping-scaffold:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: 22, cache: npm }
+      - run: npm ci
+      - run: npm ci --prefix integrations/poppy
+      - run: npm ci --prefix examples/storefront
+      - run: npm run test:shopping
+      - run: npm --prefix integrations/poppy run build
+      - run: npm --prefix examples/storefront run build

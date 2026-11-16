@@ -20,6 +20,8 @@ Start with the [root README](../README.md). This page lists every guide, says wh
 | [`auth0/sdk/README.md`](../auth0/sdk/README.md)         | You are calling Task Authority from your app.                                                                 |
 | [`auth0/service/README.md`](../auth0/service/README.md) | You are running Task Authority yourself.                                                                      |
 
+Shopping in progress: [storefront scaffold](../examples/storefront/README.md), [Poppy adapter and evidence](../integrations/poppy/README.md), and [implementation brief](plans/customer-agent-commerce.md). These do not yet provide a purchase path.
+
 App references: [Policy Desk README](../demo/policy-desk/README.md), [API](../demo/policy-desk/API.md), [architecture](../demo/policy-desk/ARCHITECTURE.md), [manual provisioning](../demo/policy-desk/PROVISIONING.md), [Refund Desk](../demo/refund-desk/README.md), [Refund Workflow](../demo/refund-workflow/README.md), and [approval UI components](../auth0/approval-ui/README.md).
 
 Project guidance: [contributing](../CONTRIBUTING.md), [coding agents](../AGENTS.md), [security reporting](../SECURITY.md), and [MIT license](../LICENSE).
