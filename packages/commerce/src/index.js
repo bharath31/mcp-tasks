@@ -60,6 +60,11 @@ export function createCartStore(path, options = {}) {
       id TEXT PRIMARY KEY, cart_id TEXT NOT NULL REFERENCES carts(id),
       operation_id TEXT NOT NULL, revision INTEGER NOT NULL, data TEXT NOT NULL,
       UNIQUE(operation_id, revision)
+    );
+    CREATE TABLE IF NOT EXISTS quote_human_reviews (
+      quote_id TEXT PRIMARY KEY REFERENCES quotes(id),
+      operation_id TEXT NOT NULL, revision INTEGER NOT NULL,
+      customer_id TEXT NOT NULL, reviewed_at TEXT NOT NULL
     );`);
   const get = db.prepare("SELECT * FROM carts WHERE id = ?");
   function authorize(row, actor, cartScope = true) {
@@ -350,6 +355,81 @@ export function createCartStore(path, options = {}) {
       )
         throw new Error("stale_quote");
       return quote;
+    },
+    // This records a review only; no checkout or execution path consumes it.
+    async recordHumanReview(id, actor) {
+      validateActor(actor);
+      if (actor.kind !== "human") fail();
+      const verify = options.verifyHumanReview;
+      if (typeof verify !== "function")
+        throw new Error("human_review_unavailable");
+      const quote = await this.validateQuote(id, actor);
+      // The callback must independently verify a server-side, operation-bound proof.
+      // No proof, assurance or human flag is accepted as an argument to this method.
+      if (
+        (await verify({
+          actor: structuredClone(actor),
+          quote: structuredClone(quote),
+        })) !== true
+      )
+        throw new Error("human_review_unverified");
+      // Re-read external address and current terms after the potentially slow verifier.
+      await this.validateQuote(id, actor);
+      return transaction(() => {
+        const record = getQuoteRow.get(id);
+        if (!record) fail();
+        const row = get.get(record.cart_id);
+        quoteActor(row, actor);
+        const current = quoteView(record);
+        const operation = db
+          .prepare("SELECT * FROM checkout_operations WHERE cart_id = ?")
+          .get(record.cart_id);
+        if (
+          !operation ||
+          operation.operation_id !== quote.operationId ||
+          operation.revision !== quote.revision ||
+          current.id !== quote.id ||
+          current.customerId !== actor.customerId ||
+          row.version !== quote.cartVersion ||
+          Date.now() >= Date.parse(quote.expiresAt) ||
+          JSON.stringify(current) !== JSON.stringify(quote) ||
+          JSON.stringify(pricedItems(row)) !== JSON.stringify(quote.items)
+        )
+          throw new Error("stale_quote");
+        db.prepare(
+          "INSERT OR IGNORE INTO quote_human_reviews VALUES (?, ?, ?, ?, ?)",
+        ).run(
+          quote.id,
+          quote.operationId,
+          quote.revision,
+          quote.customerId,
+          new Date().toISOString(),
+        );
+        return {
+          status: "review_recorded",
+          quoteId: quote.id,
+          operationId: quote.operationId,
+          revision: quote.revision,
+        };
+      });
+    },
+    getHumanReview(id, actor) {
+      validateActor(actor);
+      if (actor.kind !== "human") fail();
+      const quote = getQuoteRow.get(id);
+      if (!quote) fail();
+      quoteActor(get.get(quote.cart_id), actor);
+      const review = db
+        .prepare("SELECT * FROM quote_human_reviews WHERE quote_id = ?")
+        .get(id);
+      return review
+        ? {
+            status: "review_recorded",
+            quoteId: review.quote_id,
+            operationId: review.operation_id,
+            revision: review.revision,
+          }
+        : null;
     },
     close() {
       db.close();
