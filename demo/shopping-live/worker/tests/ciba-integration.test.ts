@@ -325,6 +325,99 @@ test("CIBA denial surfaces terminal denied poll (not endless pending)", async ()
   assert.equal(polled.status, "denied");
 });
 
+test("unbridged store-approved resume stays pending; poll bridges without repoll; execute gated", async () => {
+  const executeHarness = await startHarness({
+    merchantDo: "production",
+    bindings: {
+      ...CIBA_BINDINGS,
+      SHOPPING_GUARDIAN_EXECUTE_ENABLED: "true",
+    },
+    outbound: createCibaPinnedOutbound(mock),
+  });
+  try {
+    const { cookie, csrf } = await executeHarness.login("auth0|ciba-unbridged");
+    const { quoteId } = await cartQuoteOn(executeHarness, cookie, csrf);
+    const started = await apiJson<{ id: string; status: string }>(
+      executeHarness.mf,
+      "/api/approval/start",
+      {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+          origin: ORIGIN,
+          "x-nominee-csrf": csrf,
+        },
+        cookie,
+        body: JSON.stringify({ quoteId }),
+      },
+    );
+    assert.equal(started.status, 200);
+    const authReqId = latestAuthReqId();
+    mock.decide(authReqId, true);
+    const simulate = await apiJson(executeHarness.mf, "/test/ciba-unbridged", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        customerId: "auth0|ciba-unbridged",
+        challengeId: started.body.id,
+      }),
+    });
+    assert.equal(simulate.status, 200);
+
+    const resumed = await apiJson<{
+      approval?: { id: string; status: string };
+    }>(executeHarness.mf, "/api/checkout/resume", { cookie });
+    assert.equal(resumed.status, 200);
+    assert.equal(resumed.body.approval?.id, started.body.id);
+    assert.equal(resumed.body.approval?.status, "pending");
+
+    const executeBlocked = await apiJson<{ code?: string }>(
+      executeHarness.mf,
+      "/api/order/execute",
+      {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+          origin: ORIGIN,
+          "x-nominee-csrf": csrf,
+        },
+        cookie,
+        body: JSON.stringify({ quoteId }),
+      },
+    );
+    assert.equal(executeBlocked.status, 409);
+    assert.equal(executeBlocked.body.code, "order_approval_required");
+
+    const recovered = await apiJson<{ status?: string }>(
+      executeHarness.mf,
+      `/api/approval/${encodeURIComponent(started.body.id)}`,
+      { cookie },
+    );
+    assert.equal(recovered.status, 200);
+    assert.equal(recovered.body.status, "approved");
+    assert.ok(mock.requests.has(authReqId), "provider token poll skipped");
+
+    const executeOk = await apiJson<{ status?: string }>(
+      executeHarness.mf,
+      "/api/order/execute",
+      {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+          origin: ORIGIN,
+          "x-nominee-csrf": csrf,
+        },
+        cookie,
+        body: JSON.stringify({ quoteId }),
+      },
+    );
+    assert.equal(executeOk.status, 200);
+    assert.equal(executeOk.body.status, "completed");
+  } finally {
+    await executeHarness.mf.dispose();
+  }
+});
+
 test("checkout resume rehydrates quote and pending approval after refresh", async () => {
   const { cookie, csrf } = await harness.login("auth0|ciba-resume");
   const { quoteId } = await cartQuote(cookie, csrf);

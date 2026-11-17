@@ -7,6 +7,7 @@ import { CustomerMerchantLedger } from "./merchant-do-shim.js";
 import { handleTestMintAgentCap } from "./mint-agent-cap.js";
 import { handleTestRevokeAgentCap } from "./revoke-agent-cap.js";
 import { handleTestExpireQuote } from "./expire-quote-for-test.js";
+import { handleTestCibaUnbridged } from "./ciba-unbridged-for-test.js";
 import { handleTestSeedSession } from "./seed-session.js";
 import { harnessAgentPorts } from "./test-agent-ports.js";
 const appPromise = shoppingTestJwks().then((jwks) =>
@@ -34,6 +35,9 @@ export default {
     }
     if (url.pathname === "/test/expire-quote" && req.method === "POST") {
       return handleTestExpireQuote(req, env);
+    }
+    if (url.pathname === "/test/ciba-unbridged" && req.method === "POST") {
+      return handleTestCibaUnbridged(req, env);
     }
     const app = await appPromise;
     return app.fetch(req, env);

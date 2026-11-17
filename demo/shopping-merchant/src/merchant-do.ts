@@ -8,6 +8,11 @@ import {
   pollPurchaseCibaChallenge,
   startPurchaseCibaChallenge,
 } from "./ciba/coordinator.js";
+import type { SanitizedChallengeStatus } from "./ciba/challenge-types.js";
+import {
+  customerFacingChallengeStatus,
+  isPurchaseCibaLedgerBridged,
+} from "./ciba/ledger-bridge-status.js";
 import { initCibaChallengeSchema } from "./ciba/schema.js";
 import { createSqlCibaChallengeStore } from "./ciba/sql-ciba-challenge-store.js";
 import { createMerchantLedger } from "./ledger.js";
@@ -75,7 +80,12 @@ type PublicRpcBody =
       browserSessionId: string | null;
       agentId: string | null;
     }
-  | { op: "getCibaChallenge"; actor: HumanActor; challengeId: string };
+  | { op: "getCibaChallenge"; actor: HumanActor; challengeId: string }
+  | {
+      op: "setCibaChallengeApprovedUnbridgedForTest";
+      actor: HumanActor;
+      challengeId: string;
+    };
 
 type RpcBody =
   | PublicRpcBody
@@ -139,6 +149,19 @@ export class CustomerMerchantLedger extends DurableObject<MerchantLedgerEnv> {
 
   private cibaStore() {
     return createSqlCibaChallengeStore(this.database());
+  }
+
+  private async withCustomerFacingPollStatus(
+    polled: SanitizedChallengeStatus,
+    ledger: ReturnType<typeof createMerchantLedger>,
+    challengeId: string,
+    actor: HumanActor,
+  ): Promise<SanitizedChallengeStatus> {
+    const row = await this.cibaStore().get(challengeId);
+    if (!row || row.status !== "approved") return polled;
+    const quote = ledger.getQuote(polled.quoteId, actor);
+    if (isPurchaseCibaLedgerBridged(ledger, row, quote)) return polled;
+    return { ...polled, status: "pending" };
   }
 
   private assertHumanActor(actor: HumanActor, customerId: string): void {
@@ -271,15 +294,57 @@ export class CustomerMerchantLedger extends DurableObject<MerchantLedgerEnv> {
             { status: 404 },
           );
         }
+        const ledger = this.ledgerFor(customerId);
+        const quote = ledger.getQuote(row.quoteId, body.actor);
+        const bridged = isPurchaseCibaLedgerBridged(ledger, row, quote);
+        const status = customerFacingChallengeStatus(row.status, bridged);
         return Response.json({
           quoteId: row.quoteId,
           quoteRevision: row.quoteRevision,
           operationId: row.operationId,
           agentId: row.agentId,
           sessionId: row.sessionId,
-          status: row.status,
+          status,
           ...(row.failureCode ? { failureCode: row.failureCode } : {}),
         });
+      }
+
+      if (body.op === "setCibaChallengeApprovedUnbridgedForTest") {
+        if (this.env.SHOPPING_LEDGER_TEST_HOOKS !== "1") {
+          return Response.json({ error: "forbidden" }, { status: 403 });
+        }
+        this.assertHumanActor(body.actor, customerId);
+        const store = this.cibaStore();
+        const row = await store.get(body.challengeId);
+        if (!row || row.customerId !== customerId) {
+          return Response.json(
+            { error: "challenge_not_found" },
+            { status: 404 },
+          );
+        }
+        if (row.status === "approved" && row.consumedAtMs == null) {
+          return Response.json({ ok: true });
+        }
+        const from =
+          row.status === "starting" || row.status === "polling"
+            ? ([row.status] as const)
+            : null;
+        if (!from) {
+          return Response.json(
+            { error: "challenge_not_simulatable" },
+            { status: 409 },
+          );
+        }
+        const transitioned = await store.transition(
+          body.challengeId,
+          [...from],
+          "approved",
+          { decidedAtMs: Date.now() },
+        );
+        if (!transitioned.ok) {
+          return Response.json({ error: transitioned.reason }, { status: 409 });
+        }
+        return Response.json({ ok: true });
       }
 
       if (body.op === "pollPurchaseCiba") {
@@ -310,7 +375,13 @@ export class CustomerMerchantLedger extends DurableObject<MerchantLedgerEnv> {
             if (!approvalRecorded) {
               throw new Error("challenge_already_consumed");
             }
-            return Response.json(polled);
+            const faced = await this.withCustomerFacingPollStatus(
+              polled,
+              ledger,
+              body.challengeId,
+              body.actor,
+            );
+            return Response.json(faced);
           }
           try {
             const bridged = ledger.recordCustomerApprovalFromCibaChallenge(
@@ -319,7 +390,13 @@ export class CustomerMerchantLedger extends DurableObject<MerchantLedgerEnv> {
               quote,
               { merchantDisplayName: merchantDisplayNameFromEnv(this.env) },
             );
-            return Response.json({ ...polled, ledger: bridged });
+            const faced = await this.withCustomerFacingPollStatus(
+              polled,
+              ledger,
+              body.challengeId,
+              body.actor,
+            );
+            return Response.json({ ...faced, ledger: bridged });
           } catch (error) {
             const message =
               error instanceof Error ? error.message : "bridge_failed";
@@ -327,12 +404,24 @@ export class CustomerMerchantLedger extends DurableObject<MerchantLedgerEnv> {
               message === "challenge_already_consumed" &&
               ledger.hasCustomerApprovalForQuote(quote)
             ) {
-              return Response.json(polled);
+              const faced = await this.withCustomerFacingPollStatus(
+                polled,
+                ledger,
+                body.challengeId,
+                body.actor,
+              );
+              return Response.json(faced);
             }
             throw error;
           }
         }
-        return Response.json(polled);
+        const faced = await this.withCustomerFacingPollStatus(
+          polled,
+          ledger,
+          body.challengeId,
+          body.actor,
+        );
+        return Response.json(faced);
       }
 
       if (body.op === "setQuoteExpiresAtForTest") {
