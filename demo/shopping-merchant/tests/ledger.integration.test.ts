@@ -19,12 +19,7 @@ const agent: AgentActor = {
   agentId: "agent-a",
   pairwiseUserId: "user-u",
   sessionId: "session-s",
-  scopes: [
-    "cart:write",
-    "checkout:write",
-    "addresses:read",
-    "order:execute",
-  ],
+  scopes: ["cart:write", "checkout:write", "addresses:read", "order:execute"],
 };
 const human: HumanActor = { kind: "human", customerId: CUSTOMER, scopes: [] };
 const otherHuman: HumanActor = {
@@ -299,11 +294,7 @@ test("bounded session scopes: cart and quote allowed; execute and reconcile requ
   ledger.updateCart(cart.id, sessionAgent, [
     { productId: "mug", quantity: 1, priceMinor: 1800, currency: "USD" },
   ]);
-  const quote = await ledger.createQuote(
-    cart.id,
-    sessionAgent,
-    "fixture-home",
-  );
+  const quote = await ledger.createQuote(cart.id, sessionAgent, "fixture-home");
   approval.approveForTest(quote);
   await host.injectCustomerApproval(quote.id, human);
   await assert.rejects(
