@@ -116,9 +116,13 @@ test("expired quote read returns 404 and resume clears checkout pointers", async
   });
   assert.equal(expire.status, 200);
 
-  const read = await apiJson(harness.mf, `/api/quote/${encodeURIComponent(quoteId)}`, {
-    cookie,
-  });
+  const read = await apiJson(
+    harness.mf,
+    `/api/quote/${encodeURIComponent(quoteId)}`,
+    {
+      cookie,
+    },
+  );
   assert.equal(read.status, 404);
 
   const resumed = await apiJson<{

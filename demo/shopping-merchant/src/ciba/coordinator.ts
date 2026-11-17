@@ -42,7 +42,7 @@ function sanitize(challenge: PurchaseCibaChallenge): SanitizedChallengeStatus {
   const failureCode =
     status === "pending" || status === "approved"
       ? undefined
-      : challenge.failureCode ?? undefined;
+      : (challenge.failureCode ?? undefined);
   return {
     challengeId: challenge.id,
     status,

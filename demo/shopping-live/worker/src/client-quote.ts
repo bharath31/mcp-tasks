@@ -21,15 +21,13 @@ export function merchantQuoteToClient(
     id: quote.id,
     cartId: quote.cartId,
     revision: quote.revision,
-    items: quote.items.map(
-      (item): ClientCartItem => ({
-        productId: item.productId,
-        quantity: item.quantity,
-        name: item.name,
-        priceMinor: item.priceMinor,
-        currency: item.currency,
-      }),
-    ),
+    items: quote.items.map((item): ClientCartItem => ({
+      productId: item.productId,
+      quantity: item.quantity,
+      name: item.name,
+      priceMinor: item.priceMinor,
+      currency: item.currency,
+    })),
     subtotalMinor: quote.subtotalMinor,
     taxMinor: quote.taxMinor,
     shippingMinor: quote.shippingMinor,

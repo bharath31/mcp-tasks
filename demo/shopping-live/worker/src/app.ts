@@ -238,7 +238,11 @@ export function createShoppingApp(deps: AgentHostDeps = {}) {
               decodeURIComponent(quoteRead[1]!),
             );
             if (!quote) {
-              return problem(404, "quote_not_found", "Quote is missing or expired.");
+              return problem(
+                404,
+                "quote_not_found",
+                "Quote is missing or expired.",
+              );
             }
             return json({ quote });
           }

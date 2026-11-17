@@ -121,7 +121,10 @@ test("capability flags gate agent, approval, and execute", () => {
   );
   assert.equal(
     canExecuteOrder(
-      { ...authed, capabilities: { ...authed.capabilities!, orderExecute: false } },
+      {
+        ...authed,
+        capabilities: { ...authed.capabilities!, orderExecute: false },
+      },
       quote,
       approved,
     ),

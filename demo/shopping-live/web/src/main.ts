@@ -136,9 +136,11 @@ function statusBanner(): HTMLElement {
   ];
   if (connected && ui.session) {
     children.push(
-      el("p", { className: "muted small", "data-nominee-capabilities": "true" }, [
-        capabilitySummary(ui.session),
-      ]),
+      el(
+        "p",
+        { className: "muted small", "data-nominee-capabilities": "true" },
+        [capabilitySummary(ui.session)],
+      ),
     );
   }
   return el(
@@ -186,50 +188,56 @@ function quoteDetailsPanel(quote: Quote): HTMLElement {
       ]),
     );
   }
-  return el("article", { className: "quote-detail", "data-nominee-quote": quote.id }, [
-    el("h4", {}, ["Merchant quote (ledger)"]),
-    list,
-    el("dl", { className: "quote-dl" }, [
-      el("div", {}, [
-        el("dt", {}, ["Subtotal"]),
-        el("dd", {}, [formatMoney(quote.subtotalMinor, quote.currency)]),
-      ]),
-      el("div", {}, [
-        el("dt", {}, ["Tax"]),
-        el("dd", {}, [formatMoney(quote.taxMinor, quote.currency)]),
-      ]),
-      el("div", {}, [
-        el("dt", {}, ["Shipping"]),
-        el("dd", {}, [formatMoney(quote.shippingMinor, quote.currency)]),
-      ]),
-      el("div", {}, [
-        el("dt", {}, ["Total"]),
-        el("dd", {}, [formatMoney(quote.totalMinor, quote.currency)]),
-      ]),
-      el("div", {}, [
-        el("dt", {}, ["Currency"]),
-        el("dd", {}, [quote.currency]),
-      ]),
-      el("div", {}, [
-        el("dt", {}, ["Expires"]),
-        el("dd", {}, [new Date(quote.expiresAt).toLocaleString()]),
-      ]),
-      el("div", {}, [
-        el("dt", {}, ["Ship-to"]),
-        el("dd", {}, [
-          `${quote.destination.label} (${quote.destination.id})`,
+  return el(
+    "article",
+    { className: "quote-detail", "data-nominee-quote": quote.id },
+    [
+      el("h4", {}, ["Merchant quote (ledger)"]),
+      list,
+      el("dl", { className: "quote-dl" }, [
+        el("div", {}, [
+          el("dt", {}, ["Subtotal"]),
+          el("dd", {}, [formatMoney(quote.subtotalMinor, quote.currency)]),
+        ]),
+        el("div", {}, [
+          el("dt", {}, ["Tax"]),
+          el("dd", {}, [formatMoney(quote.taxMinor, quote.currency)]),
+        ]),
+        el("div", {}, [
+          el("dt", {}, ["Shipping"]),
+          el("dd", {}, [formatMoney(quote.shippingMinor, quote.currency)]),
+        ]),
+        el("div", {}, [
+          el("dt", {}, ["Total"]),
+          el("dd", {}, [formatMoney(quote.totalMinor, quote.currency)]),
+        ]),
+        el("div", {}, [
+          el("dt", {}, ["Currency"]),
+          el("dd", {}, [quote.currency]),
+        ]),
+        el("div", {}, [
+          el("dt", {}, ["Expires"]),
+          el("dd", {}, [new Date(quote.expiresAt).toLocaleString()]),
+        ]),
+        el("div", {}, [
+          el("dt", {}, ["Ship-to"]),
+          el("dd", {}, [
+            `${quote.destination.label} (${quote.destination.id})`,
+          ]),
+        ]),
+        el("div", {}, [
+          el("dt", {}, ["Destination"]),
+          el("dd", { className: "mono small" }, [
+            quote.destination.detailsJson,
+          ]),
+        ]),
+        el("div", {}, [
+          el("dt", {}, ["Verified"]),
+          el("dd", {}, [quote.verified ? "Yes" : "No"]),
         ]),
       ]),
-      el("div", {}, [
-        el("dt", {}, ["Destination"]),
-        el("dd", { className: "mono small" }, [quote.destination.detailsJson]),
-      ]),
-      el("div", {}, [
-        el("dt", {}, ["Verified"]),
-        el("dd", {}, [quote.verified ? "Yes" : "No"]),
-      ]),
-    ]),
-  ]);
+    ],
+  );
 }
 
 function authControls(): HTMLElement {

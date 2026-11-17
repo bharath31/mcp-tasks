@@ -76,10 +76,7 @@ export async function resumeCustomerCheckout(
     await setActiveChallengeId(env, customer.customerId, null);
   }
 
-  if (
-    pointers.agentRunId &&
-    agentIntegrationConfigured(env)
-  ) {
+  if (pointers.agentRunId && agentIntegrationConfigured(env)) {
     const polled = await getShoppingAgentRunForPoll(
       {
         AGENT_RUNS: env.AGENT_RUNS!,

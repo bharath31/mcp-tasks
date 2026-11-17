@@ -16,8 +16,5 @@ test("merchantOriginConfigured accepts operator HTTPS origins", () => {
     ),
     true,
   );
-  assert.equal(
-    merchantOriginConfigured("https://shopping.nominee.dev"),
-    true,
-  );
+  assert.equal(merchantOriginConfigured("https://shopping.nominee.dev"), true);
 });

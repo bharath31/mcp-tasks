@@ -62,10 +62,7 @@ test("client quote monetary fields match Guardian authorization_details", () => 
     merchantDisplayName: MERCHANT,
     nowMs,
   });
-  assert.equal(
-    details.properties.subtotal_minor?.value,
-    client.subtotalMinor,
-  );
+  assert.equal(details.properties.subtotal_minor?.value, client.subtotalMinor);
   assert.equal(details.properties.total_minor?.value, client.totalMinor);
   assert.equal(details.properties.tax_minor?.value, client.taxMinor);
   assert.equal(details.properties.shipping_minor?.value, client.shippingMinor);
