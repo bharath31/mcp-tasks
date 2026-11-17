@@ -20,15 +20,20 @@ const agent = {
 };
 const human = { kind: "human", customerId: CUSTOMER, scopes: [] as string[] };
 
-type WorkerMode = "per-customer" | "singleton-do";
+type WorkerMode = "per-customer" | "singleton-do" | "production-ports";
 
 function workerEntry(mode: WorkerMode): string {
+  const doImport =
+    mode === "production-ports"
+      ? `import { CustomerMerchantLedger } from "./src/merchant-do.js";
+export { CustomerMerchantLedger };`
+      : `import { RpcTestCustomerMerchantLedger as CustomerMerchantLedger } from "./tests/support/rpc-test-merchant-do.js";
+export { CustomerMerchantLedger };`;
   const idRouting =
     mode === "singleton-do"
       ? `const id = env.LEDGER.idFromName("singleton-binding-test");`
       : `const id = env.LEDGER.idFromName(customerId);`;
-  return `import { CustomerMerchantLedger } from "./merchant-do.js";
-export { CustomerMerchantLedger };
+  return `${doImport}
 export default {
   async fetch(request, env) {
     const customerId = request.headers.get("x-nominee-customer-id");
@@ -43,7 +48,7 @@ async function buildMerchantWorker(mode: WorkerMode): Promise<string> {
   const bundle = await build({
     stdin: {
       contents: workerEntry(mode),
-      resolveDir: join(here, "../src"),
+      resolveDir: join(here, ".."),
       sourcefile: "worker-entry.ts",
     },
     bundle: true,
@@ -57,12 +62,14 @@ async function buildMerchantWorker(mode: WorkerMode): Promise<string> {
   return bundle.outputFiles[0]!.text;
 }
 
-function merchantMiniflare(script: string, opts?: { omitHostSecret?: boolean }): Miniflare {
-  const bindings: Record<string, string> = {
-    USE_FIXTURE_MERCHANT_PORTS: "1",
-    MERCHANT_FIXTURE_AUTO_APPROVE: "1",
-  };
-  if (!opts?.omitHostSecret) {
+function merchantMiniflare(
+  script: string,
+  opts?: { omitHostSecret?: boolean; productionPorts?: boolean },
+): Miniflare {
+  const bindings: Record<string, string> = {};
+  if (!opts?.productionPorts) {
+    bindings.MERCHANT_HOST_INTERNAL_SECRET = opts?.omitHostSecret ? "" : HOST_SECRET;
+  } else if (!opts?.omitHostSecret) {
     bindings.MERCHANT_HOST_INTERNAL_SECRET = HOST_SECRET;
   }
   return new Miniflare(
@@ -93,6 +100,7 @@ async function post(
     headers: {
       "x-nominee-customer-id": CUSTOMER,
       "content-type": "application/json",
+      [MERCHANT_HOST_INTERNAL_SECRET_HEADER]: HOST_SECRET,
       ...headers,
     },
     body: JSON.stringify(body),
@@ -101,10 +109,12 @@ async function post(
 
 let scriptPerCustomer: string;
 let scriptSingleton: string;
+let scriptProductionPorts: string;
 
 before(async () => {
   scriptPerCustomer = await buildMerchantWorker("per-customer");
   scriptSingleton = await buildMerchantWorker("singleton-do");
+  scriptProductionPorts = await buildMerchantWorker("production-ports");
 });
 
 test("DO fetch rejects injectCustomerApproval; approval is host-mediated only", async () => {
@@ -135,7 +145,10 @@ test("DO permanently binds customer id and rejects header mismatch", async () =>
     const mismatch = await post(
       mf,
       { op: "createCart", actor: { ...agent, customerId: "other-customer" } },
-      { "x-nominee-customer-id": "other-customer" },
+      {
+        "x-nominee-customer-id": "other-customer",
+        [MERCHANT_HOST_INTERNAL_SECRET_HEADER]: HOST_SECRET,
+      },
     );
     assert.equal(mismatch.status, 403);
     const body = (await mismatch.json()) as { error: string };
@@ -145,23 +158,70 @@ test("DO permanently binds customer id and rejects header mismatch", async () =>
   }
 });
 
-test("hostInjectCustomerApproval requires configured secret (fail-closed when unset)", async () => {
+test("DO RPC requires configured host secret (fail-closed when unset)", async () => {
   const mf = merchantMiniflare(scriptPerCustomer, { omitHostSecret: true });
   try {
     const response = await post(
       mf,
-      { op: "hostInjectCustomerApproval", quoteId: "q", actor: human },
+      { op: "createCart", actor: agent },
       { [MERCHANT_HOST_INTERNAL_SECRET_HEADER]: "wrong" },
     );
     assert.equal(response.status, 503);
     const body = (await response.json()) as { error: string };
-    assert.equal(body.error, "customer_approval_host_unavailable");
+    assert.equal(body.error, "merchant_host_unavailable");
   } finally {
     await mf.dispose();
   }
 });
 
-test("DO happy path: cart, quote, host approval transport, executeQuote", async () => {
+test("DO RPC rejects wrong host secret when transport is configured", async () => {
+  const mf = merchantMiniflare(scriptPerCustomer);
+  try {
+    const response = await post(
+      mf,
+      { op: "createCart", actor: agent },
+      { [MERCHANT_HOST_INTERNAL_SECRET_HEADER]: "wrong-secret" },
+    );
+    assert.equal(response.status, 403);
+    const body = (await response.json()) as { error: string };
+    assert.equal(body.error, "host_internal_forbidden");
+  } finally {
+    await mf.dispose();
+  }
+});
+
+test("hostInjectCustomerApproval fails without fixture test proof (parity with ledger integration)", async () => {
+  const mf = merchantMiniflare(scriptPerCustomer);
+  try {
+    const cartRes = await post(mf, { op: "createCart", actor: agent });
+    const cart = (await cartRes.json()) as { id: string };
+    await post(mf, {
+      op: "updateCart",
+      actor: agent,
+      cartId: cart.id,
+      items: [{ productId: "mug", quantity: 1, priceMinor: 1800, currency: "USD" }],
+    });
+    const quoteRes = await post(mf, {
+      op: "createQuote",
+      actor: agent,
+      cartId: cart.id,
+      shippingAddressId: "fixture-home",
+    });
+    const quote = (await quoteRes.json()) as { id: string };
+    const injectRes = await post(mf, {
+      op: "hostInjectCustomerApproval",
+      quoteId: quote.id,
+      actor: human,
+    });
+    assert.equal(injectRes.status, 409);
+    const err = (await injectRes.json()) as { error: string };
+    assert.match(err.error, /customer_approval_unverified/);
+  } finally {
+    await mf.dispose();
+  }
+});
+
+test("DO happy path: cart, quote, fixture proof + host approval transport, executeQuote", async () => {
   const mf = merchantMiniflare(scriptPerCustomer);
   try {
     const cartRes = await post(mf, { op: "createCart", actor: agent });
@@ -193,11 +253,18 @@ test("DO happy path: cart, quote, host approval transport, executeQuote", async 
     assert.equal(beforeExecute.status, 200);
     assert.deepEqual(await beforeExecute.json(), { status: "customer_verification_required" });
 
-    const injectRes = await post(
-      mf,
-      { op: "hostInjectCustomerApproval", quoteId: quote.id, actor: human },
-      { [MERCHANT_HOST_INTERNAL_SECRET_HEADER]: HOST_SECRET },
-    );
+    const testProof = await post(mf, {
+      op: "testFixtureApproveQuote",
+      actor: agent,
+      quoteId: quote.id,
+    });
+    assert.equal(testProof.status, 200);
+
+    const injectRes = await post(mf, {
+      op: "hostInjectCustomerApproval",
+      quoteId: quote.id,
+      actor: human,
+    });
     assert.equal(injectRes.status, 200);
 
     const executeRes = await post(mf, {
@@ -208,6 +275,26 @@ test("DO happy path: cart, quote, host approval transport, executeQuote", async 
     assert.equal(executeRes.status, 200);
     const executed = (await executeRes.json()) as { status: string };
     assert.equal(executed.status, "completed");
+  } finally {
+    await mf.dispose();
+  }
+});
+
+test("production DO ports stay unconfigured even with legacy fixture env keys", async () => {
+  const mf = merchantMiniflare(scriptProductionPorts, { productionPorts: true });
+  try {
+    const response = await mf.dispatchFetch("http://ledger/", {
+      method: "POST",
+      headers: {
+        "x-nominee-customer-id": CUSTOMER,
+        "content-type": "application/json",
+        [MERCHANT_HOST_INTERNAL_SECRET_HEADER]: HOST_SECRET,
+      },
+      body: JSON.stringify({ op: "createCart", actor: agent }),
+    });
+    assert.equal(response.status, 503);
+    const body = (await response.json()) as { error: string };
+    assert.match(body.error, /merchant_ports_unconfigured/);
   } finally {
     await mf.dispose();
   }

@@ -8,7 +8,7 @@ import {
   createFixtureApprovalVerifier,
   createFixtureCustomerAccount,
   createFixtureOrderProvider,
-} from "../src/fixtures.js";
+} from "./support/fixtures.js";
 import type { AgentActor, HumanActor } from "../src/types.js";
 
 const CUSTOMER = "fixture-customer";

@@ -3,7 +3,7 @@ import type {
   CustomerApprovalVerifier,
   OrderProviderPort,
   Quote,
-} from "./types.js";
+} from "../../src/types.js";
 
 const addresses = [
   {
@@ -58,7 +58,7 @@ export type FixtureOrderProvider = OrderProviderPort & {
   seedOrder(idempotencyKey: string, id?: string): void;
 };
 
-/** In-memory simulated order provider; never charges; not restart-durable. */
+/** In-memory simulated order provider; never charges; not restart-durable. Test bundle only. */
 export function createFixtureOrderProvider(): FixtureOrderProvider {
   const orders = new Map<string, { id: string }>();
   let placeMode: "success" | "null" | "throw" | "slow" = "success";

@@ -118,14 +118,7 @@ export class CustomerMerchantLedger extends DurableObject<MerchantLedgerEnv> {
       });
     }
 
-    try {
-      this.assertCustomerBinding(customerId);
-    } catch (error) {
-      const message = error instanceof Error ? error.message : "customer_binding_mismatch";
-      return Response.json({ error: message }, { status: 403 });
-    }
-
-  // Raw JSON actors are not authenticated on this surface; Worker must verify identity before forward.
+    // Raw JSON actors are not authenticated on this surface; Worker must verify identity before forward.
     if ((body as { op?: string }).op === "injectCustomerApproval") {
       return new Response(
         JSON.stringify({
@@ -137,33 +130,35 @@ export class CustomerMerchantLedger extends DurableObject<MerchantLedgerEnv> {
       );
     }
 
-    if (body.op === "hostInjectCustomerApproval") {
-      if (!readHostInternalSecret(this.env)) {
-        return Response.json(
-          {
-            error: "customer_approval_host_unavailable",
-            detail:
-              "MERCHANT_HOST_INTERNAL_SECRET is not configured; host approval transport stays disabled (fail-closed).",
-          },
-          { status: 503 },
-        );
-      }
-      if (!this.hostSecretMatches(request)) {
-        return Response.json({ error: "host_internal_forbidden" }, { status: 403 });
-      }
-      const ledger = this.ledgerFor(customerId);
-      try {
-        const result = await ledger.injectCustomerApproval(body.quoteId, body.actor);
-        return Response.json(result);
-      } catch (error) {
-        const message = error instanceof Error ? error.message : "error";
-        const status = message === "not_found_or_forbidden" ? 403 : 409;
-        return Response.json({ error: message }, { status });
-      }
+    if (!readHostInternalSecret(this.env)) {
+      return Response.json(
+        {
+          error: "merchant_host_unavailable",
+          detail:
+            "MERCHANT_HOST_INTERNAL_SECRET is not configured; DO ledger RPC stays disabled (fail-closed).",
+        },
+        { status: 503 },
+      );
+    }
+    if (!this.hostSecretMatches(request)) {
+      return Response.json({ error: "host_internal_forbidden" }, { status: 403 });
     }
 
-    const ledger = this.ledgerFor(customerId);
     try {
+      this.assertCustomerBinding(customerId);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "customer_binding_mismatch";
+      return Response.json({ error: message }, { status: 403 });
+    }
+
+    try {
+      if (body.op === "hostInjectCustomerApproval") {
+        const ledger = this.ledgerFor(customerId);
+        const result = await ledger.injectCustomerApproval(body.quoteId, body.actor);
+        return Response.json(result);
+      }
+
+      const ledger = this.ledgerFor(customerId);
       let result: unknown;
       switch (body.op) {
         case "createCart":
@@ -200,7 +195,12 @@ export class CustomerMerchantLedger extends DurableObject<MerchantLedgerEnv> {
       return Response.json(result);
     } catch (error) {
       const message = error instanceof Error ? error.message : "error";
-      const status = message === "not_found_or_forbidden" ? 403 : 409;
+      const status =
+        message === "not_found_or_forbidden"
+          ? 403
+          : message === "merchant_ports_unconfigured"
+            ? 503
+            : 409;
       return Response.json({ error: message }, { status });
     }
   }

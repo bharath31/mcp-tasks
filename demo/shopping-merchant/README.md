@@ -22,7 +22,7 @@ Every purchase requires **direct customer approval** (`requirement` is always `c
 - `src/sql.ts` — `SqlDatabase` adapter for DO `SqlStorage` and a Node test double
 - `src/merchant-do.ts` — `CustomerMerchantLedger` Durable Object (internal POST RPC only)
 - `src/host.ts` — trusted-host facade for approval injection and execution
-- `src/fixtures.ts` — simulated ports for local tests only
+- `tests/support/fixtures.ts` — simulated ports for Node/Miniflare tests only (never imported from `src/`)
 
 ## One DO per customer
 
@@ -30,11 +30,13 @@ Production routing should use `env.MERCHANT_LEDGER.idFromName(customerId)` so ea
 
 **Hard prerequisite:** identity and approval proof are established in the Worker (Auth0 / Task Authority / passkey, etc.). A shared secret header alone does not prove customer approval. The DO rejects `injectCustomerApproval` RPC; only the Worker-side trusted host may call `ledger.injectCustomerApproval` after `verifyCustomerApproval`.
 
-Port implementations (`customerAccount`, `verifyCustomerApproval`, `orderProvider`) cannot be Wrangler `env` bindings (they are functions). **`registerMerchantLedgerPorts` is not used** — each Durable Object isolate must build ports from `env` inside `merchantLedgerPortsFromEnv` (see `src/port-env.ts`), typically wiring service bindings to fetch external account/payment adapters. Do not register ports from `default.fetch` in the Worker only; that does not propagate into the DO isolate.
+Port implementations (`customerAccount`, `verifyCustomerApproval`, `orderProvider`) cannot be Wrangler `env` bindings (they are functions). Each Durable Object isolate builds ports in `merchantLedgerPortsFromEnv` (`src/port-env.ts`). In this slice that factory **always throws** (`merchant_ports_unconfigured`) until real account/approval/payment adapters are wired. Fixture ports live only under `tests/support/` (esbuild test bundles).
 
-The DO `fetch` RPC is **internal**: JSON `actor` fields are shape-checked only and **cannot authenticate** callers. The Worker must verify identity before forwarding. A mis-exposed DO stub remains unsafe without that Worker gate.
+The DO `fetch` RPC is **internal** and **host-gated**: every operation (including binding) requires a matching `MERCHANT_HOST_INTERNAL_SECRET` header on the request. JSON `actor` fields are shape-checked only and **cannot authenticate** callers; the Worker must verify identity before forwarding. If the secret is unset, the DO returns **503 fail-closed** (`merchant_host_unavailable`) — not header-trust alone.
 
-Host-only approval into DO state uses `hostInjectCustomerApproval` with `MERCHANT_HOST_INTERNAL_SECRET` (transport gate only — **not** customer proof). The DO still runs `verifyCustomerApproval` before recording approval. If `MERCHANT_HOST_INTERNAL_SECRET` is unset, that transport stays **disabled (503 fail-closed)** rather than trusting headers alone. Wire Auth0 / Task Authority into `verifyCustomerApproval` before exposing this in production.
+Host-only approval into DO state uses `hostInjectCustomerApproval` after the same transport gate. The DO still runs `verifyCustomerApproval` before recording approval (transport secret ≠ customer proof). Wire Auth0 / Task Authority into `verifyCustomerApproval` before any deploy.
+
+**`trustedForAgentCheckout` on ship-to addresses** is snapshotted on each quote (see `fixture-alternate` in tests). It records whether the address was marked low-friction for agent checkout in the address book; **every purchase still requires direct customer approval** (`requirement` is always `customer_verification`), so untrusted addresses do not bypass human approval.
 
 ## Remaining integration work
 

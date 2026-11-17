@@ -1,18 +1,10 @@
-import {
-  createFixtureApprovalVerifier,
-  createFixtureCustomerAccount,
-  createFixtureOrderProvider,
-} from "./fixtures.js";
 import type { MerchantLedgerPorts } from "./types.js";
 
 /** Wrangler-bindable env keys for port wiring inside each DO isolate (not Worker fetch). */
 export type MerchantLedgerEnv = {
-  USE_FIXTURE_MERCHANT_PORTS?: string;
-  /** Test-only: fixture verifier always returns true when set to "1". */
-  MERCHANT_FIXTURE_AUTO_APPROVE?: string;
   /**
-   * Shared secret for Worker→DO host-only RPC (transport gate only; not customer approval proof).
-   * Must be set via Wrangler secret / env binding before hostInjectCustomerApproval is enabled.
+   * Shared secret for Worker→DO internal RPC (transport gate only; not customer approval proof).
+   * Must be set via Wrangler secret / env binding before any DO ledger operation is enabled.
    */
   MERCHANT_HOST_INTERNAL_SECRET?: string;
   LEDGER?: DurableObjectNamespace;
@@ -23,20 +15,9 @@ export const MERCHANT_HOST_INTERNAL_SECRET_HEADER = "x-nominee-host-internal-sec
 
 /**
  * Build ledger ports from Worker env inside the Durable Object isolate.
- * Port implementations are not Wrangler binding values; this factory runs in the DO module.
+ * Production wiring (Task Authority, account service, payment provider) is not implemented in this slice.
  */
-export function merchantLedgerPortsFromEnv(env: MerchantLedgerEnv): MerchantLedgerPorts {
-  if (env.USE_FIXTURE_MERCHANT_PORTS === "1") {
-    const verify =
-      env.MERCHANT_FIXTURE_AUTO_APPROVE === "1"
-        ? async () => true
-        : createFixtureApprovalVerifier();
-    return {
-      customerAccount: createFixtureCustomerAccount(),
-      verifyCustomerApproval: verify,
-      orderProvider: createFixtureOrderProvider(),
-    };
-  }
+export function merchantLedgerPortsFromEnv(_env: MerchantLedgerEnv): MerchantLedgerPorts {
   throw new Error("merchant_ports_unconfigured");
 }
 
