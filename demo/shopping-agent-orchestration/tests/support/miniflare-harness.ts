@@ -90,7 +90,7 @@ export async function startOrchestrationHarness(): Promise<OrchestrationHarness>
         "x-nominee-owner-id": ownerId,
       },
       body: JSON.stringify(body),
-    }) as Promise<Response>;
+    }) as unknown as Promise<Response>;
   return {
     mf,
     dispatchRpc,
