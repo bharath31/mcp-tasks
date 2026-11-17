@@ -1,10 +1,12 @@
 import { DurableObject } from "cloudflare:workers";
 import {
   agentRunCredential,
+  assertCredentialNotExpired,
   hashAgentRunCredential,
   type AgentRunCredential,
 } from "./credential.js";
 import { assertPublicEventsSafe } from "./run-events.js";
+import { sanitizePublicText } from "./sanitize.js";
 import type { AgentRunRpc } from "./rpc.js";
 import type { PublicAgentRun, RunStatus } from "./types.js";
 import type { PublicRunEvent } from "./types.js";
@@ -13,6 +15,15 @@ const OWNER_KEY = "nominee:agent_run_owner";
 const RUNS_KEY = "nominee:agent_runs";
 const MAX_EVENTS_PER_RUN = 200;
 const MAX_RUNS_STORED = 32;
+const MAX_GOAL_LENGTH = 2000;
+
+function validateGoal(goal: string): string {
+  const trimmed = goal.trim();
+  if (!trimmed.length || trimmed.length > MAX_GOAL_LENGTH) {
+    throw new Error("goal_invalid");
+  }
+  return trimmed;
+}
 
 type RunRecord = {
   id: string;
@@ -24,6 +35,7 @@ type RunRecord = {
   sessionId: string | null;
   reply: string | null;
   credentialDigest: string;
+  credentialExpiresAtMs: number;
   events: PublicRunEvent[];
 };
 
@@ -90,14 +102,25 @@ export class ShoppingAgentRunState extends DurableObject {
   private async verifyCredential(
     run: RunRecord,
     cred: AgentRunCredential,
+    nowMs = Date.now(),
   ): Promise<void> {
     const parsed = agentRunCredential.parse(cred);
     if (parsed.runId !== run.id || parsed.ownerId !== run.ownerId) {
       throw new Error("credential_scope_mismatch");
     }
+    assertCredentialNotExpired(parsed, nowMs);
+    if (parsed.expiresAtMs !== run.credentialExpiresAtMs) {
+      throw new Error("credential_expired");
+    }
     const digest = await hashAgentRunCredential(parsed);
     if (digest !== run.credentialDigest) {
       throw new Error("credential_invalid");
+    }
+  }
+
+  private requireStatus(run: RunRecord, allowed: RunStatus[]): void {
+    if (!allowed.includes(run.status)) {
+      throw new Error("run_not_active");
     }
   }
 
@@ -114,6 +137,7 @@ export class ShoppingAgentRunState extends DurableObject {
       return Response.json({ ok: false, error: "invalid_json" }, { status: 400 });
     }
     await this.loadRuns();
+    const nowMs = Date.now();
     try {
       if (body.op === "bindOwner") {
         await this.assertOwner(body.ownerId);
@@ -130,17 +154,24 @@ export class ShoppingAgentRunState extends DurableObject {
               { status: 429 },
             );
           }
-          const now = Date.now();
+          const cred = agentRunCredential.parse(body.credential);
+          if (cred.runId !== body.runId || cred.ownerId !== ownerHeader) {
+            throw new Error("credential_scope_mismatch");
+          }
+          assertCredentialNotExpired(cred, nowMs);
+          const goal = validateGoal(body.goal);
+          const digest = await hashAgentRunCredential(cred);
           const record: RunRecord = {
             id: body.runId,
             ownerId: ownerHeader,
-            goal: body.goal,
+            goal,
             status: "pending",
-            createdAtMs: now,
-            updatedAtMs: now,
+            createdAtMs: nowMs,
+            updatedAtMs: nowMs,
             sessionId: null,
             reply: null,
-            credentialDigest: body.credentialDigest,
+            credentialDigest: digest,
+            credentialExpiresAtMs: cred.expiresAtMs,
             events: [],
           };
           this.runs.set(body.runId, record);
@@ -149,36 +180,42 @@ export class ShoppingAgentRunState extends DurableObject {
         }
         case "verifyAndStart": {
           const run = this.getRunOrThrow(body.runId);
-          if (run.status !== "pending") {
-            throw new Error("run_not_pending");
-          }
-          await this.verifyCredential(run, body.credential);
+          this.requireStatus(run, ["pending"]);
+          await this.verifyCredential(run, body.credential, nowMs);
           run.status = "running";
-          run.updatedAtMs = Date.now();
+          run.updatedAtMs = nowMs;
           await this.persistRuns();
           return Response.json({ ok: true, run: toPublic(run) });
         }
         case "markRunning": {
           const run = this.getRunOrThrow(body.runId);
+          this.requireStatus(run, ["running"]);
+          await this.verifyCredential(run, body.credential, nowMs);
           run.sessionId = body.sessionId;
-          run.updatedAtMs = Date.now();
+          run.updatedAtMs = nowMs;
           await this.persistRuns();
           return Response.json({ ok: true, run: toPublic(run) });
         }
         case "appendEvents": {
           const run = this.getRunOrThrow(body.runId);
-          assertPublicEventsSafe(body.events);
+          this.requireStatus(run, ["running"]);
+          await this.verifyCredential(run, body.credential, nowMs);
+          assertPublicEventsSafe(body.events, [body.credential.secret]);
           run.events.push(...body.events);
           this.trimEvents(run);
-          run.updatedAtMs = Date.now();
+          run.updatedAtMs = nowMs;
           await this.persistRuns();
           return Response.json({ ok: true, run: toPublic(run) });
         }
         case "finishRun": {
           const run = this.getRunOrThrow(body.runId);
+          this.requireStatus(run, ["running"]);
+          await this.verifyCredential(run, body.credential, nowMs);
           run.status = body.status;
-          run.reply = body.reply ? body.reply.slice(0, 4000) : null;
-          run.updatedAtMs = Date.now();
+          run.reply = body.reply
+            ? sanitizePublicText(body.reply, 4000, [body.credential.secret])
+            : null;
+          run.updatedAtMs = nowMs;
           await this.persistRuns();
           return Response.json({ ok: true, run: toPublic(run) });
         }
@@ -188,7 +225,14 @@ export class ShoppingAgentRunState extends DurableObject {
         }
         case "cleanupStale": {
           const cutoff = body.nowMs - body.maxAgeMs;
+          const runningCutoff = body.nowMs - body.maxRunningAgeMs;
           for (const [id, run] of this.runs) {
+            if (run.status === "running" && run.updatedAtMs < runningCutoff) {
+              run.status = "failed";
+              run.reply = "Run stopped (stale execution)";
+              run.updatedAtMs = body.nowMs;
+              continue;
+            }
             if (run.updatedAtMs < cutoff && run.status !== "running") {
               this.runs.delete(id);
             }

@@ -1,5 +1,9 @@
-import type { ShoppingAgentConfig } from "../../shopping-agent/src/config.js";
-import type { WorkersAiBinding } from "../../shopping-agent/src/model/workers-ai-adapter.js";
+import type {
+  BrowserLauncher,
+  ModelPort,
+  ShoppingAgentConfig,
+  WorkersAiBinding,
+} from "@nominee/shopping-agent";
 
 /** Wrangler-style bindings the shopping-live host must wire (not edited in this slice). */
 export type ShoppingAgentOrchestrationBindings = {
@@ -58,6 +62,6 @@ export type RunPortsFactory = (ctx: {
   config: ShoppingAgentConfig;
   env: ShoppingAgentOrchestrationEnv;
 }) => {
-  model: import("../../shopping-agent/src/ports.js").ModelPort;
-  launchBrowser: import("../../shopping-agent/src/ports.js").BrowserLauncher;
+  model: ModelPort;
+  launchBrowser: BrowserLauncher;
 };

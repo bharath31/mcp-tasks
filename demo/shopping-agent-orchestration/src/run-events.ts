@@ -1,20 +1,14 @@
-import { redactText } from "../../shopping-agent/src/redact.js";
-import type { ShoppingAgentEvent } from "../../shopping-agent/src/events.js";
+import type { ShoppingAgentEvent } from "@nominee/shopping-agent";
+import { sanitizePublicText, assertPublicBlobSafe } from "./sanitize.js";
 import type { PublicRunEvent } from "./types.js";
-
-const FORBIDDEN_IN_MESSAGE =
-  /bearer|authorization:|cf-brapi-live-view|api[_-]?key|password/i;
 
 export function shoppingEventToPublic(
   event: ShoppingAgentEvent,
   atMs: number,
+  knownSecrets: readonly string[] = [],
 ): PublicRunEvent {
   const kind = event.type;
-  let message = summarizeEvent(event);
-  message = redactText(message, 2000);
-  if (FORBIDDEN_IN_MESSAGE.test(message)) {
-    message = "[redacted]";
-  }
+  const message = sanitizePublicText(summarizeEvent(event), 2000, knownSecrets);
   return { atMs, kind, message };
 }
 
@@ -42,9 +36,19 @@ function summarizeEvent(event: ShoppingAgentEvent): string {
 }
 
 /** Fail closed if serialized public events would leak credential material. */
-export function assertPublicEventsSafe(events: PublicRunEvent[]): void {
-  const blob = JSON.stringify(events);
-  if (FORBIDDEN_IN_MESSAGE.test(blob)) {
+export function assertPublicEventsSafe(
+  events: PublicRunEvent[],
+  knownSecrets: readonly string[] = [],
+): void {
+  let blob = JSON.stringify(events);
+  for (const secret of knownSecrets) {
+    if (secret.length >= 8 && blob.includes(secret)) {
+      throw new Error("public_run_event_leak");
+    }
+  }
+  try {
+    assertPublicBlobSafe(blob);
+  } catch {
     throw new Error("public_run_event_leak");
   }
 }

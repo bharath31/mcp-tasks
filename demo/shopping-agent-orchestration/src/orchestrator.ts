@@ -8,11 +8,11 @@ import {
   type ShoppingAgentEvent,
 } from "@nominee/shopping-agent";
 import {
-  hashAgentRunCredential,
   mintAgentRunCredential,
   type AgentRunCredential,
 } from "./credential.js";
 import { shoppingEventToPublic } from "./run-events.js";
+import { sanitizePublicText } from "./sanitize.js";
 import {
   agentRunRpc,
   agentRunStub,
@@ -21,6 +21,7 @@ import {
 import type {
   PublicAgentRun,
   RunPortsFactory,
+  RunStatus,
   ShoppingAgentOrchestrationEnv,
   StartRunInput,
 } from "./types.js";
@@ -29,6 +30,8 @@ export const DEFAULT_PRODUCTION_PORTS: RunPortsFactory = ({ config, env }) => ({
   model: createWorkersAiModel(env.AI),
   launchBrowser: createPuppeteerLauncher(env.BROWSER, config),
 });
+
+export const DEFAULT_MAX_RUNNING_AGE_MS = 30 * 60 * 1000;
 
 export type OrchestrationBlockers = {
   /** Authenticated storefront session cookies are not injected into Browser Run yet. */
@@ -64,12 +67,11 @@ export async function prepareShoppingAgentRun(
   shoppingRequest.parse({ goal: input.goal });
   const cred = mintAgentRunCredential(input.ownerId);
   const stub = agentRunStub(env, input.ownerId);
-  const digest = await hashAgentRunCredential(cred);
   const res = await agentRunRpc(stub, input.ownerId, {
     op: "createRun",
     runId: cred.runId,
     goal: input.goal.trim(),
-    credentialDigest: digest,
+    credential: cred,
   });
   const parsed = await readAgentRunJson(res);
   if (!parsed.ok) throw new Error(parsed.error);
@@ -93,6 +95,24 @@ export async function getShoppingAgentRun(
   return parsed.run ?? null;
 }
 
+async function finishAgentRunFailed(
+  stub: DurableObjectStub,
+  ownerId: string,
+  credential: AgentRunCredential,
+  reply: string,
+): Promise<PublicAgentRun | null> {
+  const secrets = [credential.secret];
+  const finishRes = await agentRunRpc(stub, ownerId, {
+    op: "finishRun",
+    runId: credential.runId,
+    status: "failed",
+    reply: sanitizePublicText(reply, 4000, secrets),
+    credential,
+  });
+  const finished = await readAgentRunJson(finishRes);
+  return finished.ok && finished.run ? finished.run : null;
+}
+
 export async function executeShoppingAgentRun(opts: {
   env: ShoppingAgentOrchestrationEnv;
   ownerId: string;
@@ -105,81 +125,128 @@ export async function executeShoppingAgentRun(opts: {
   const config = resolveOrchestrationConfig(opts.env, opts.configPartial);
   const stub = agentRunStub(opts.env, opts.ownerId);
   const cred = opts.credential;
-
-  const startRes = await agentRunRpc(stub, opts.ownerId, {
-    op: "verifyAndStart",
-    runId: cred.runId,
-    credential: cred,
-  });
-  const started = await readAgentRunJson(startRes);
-  if (!started.ok) throw new Error(started.error);
-
-  const portsFactory = opts.ports ?? DEFAULT_PRODUCTION_PORTS;
-  const { model, launchBrowser } = portsFactory({ config, env: opts.env });
+  const secrets = [cred.secret];
   const now = opts.now ?? Date.now;
-  const pendingEvents: ReturnType<typeof shoppingEventToPublic>[] = [];
-
-  const flushEvents = async (events: ShoppingAgentEvent[]) => {
-    const mapped = events.map((e) => shoppingEventToPublic(e, now()));
-    pendingEvents.push(...mapped);
-    if (!mapped.length) return;
-    await agentRunRpc(stub, opts.ownerId, {
-      op: "appendEvents",
-      runId: cred.runId,
-      events: mapped,
-    });
-  };
-
+  let executionStarted = false;
   const buffer: ShoppingAgentEvent[] = [];
-  let markedSession = false;
-  const emit = (e: ShoppingAgentEvent) => {
-    if (e.type === "session_start" && !markedSession) {
-      markedSession = true;
-      void agentRunRpc(stub, opts.ownerId, {
-        op: "markRunning",
-        runId: cred.runId,
-        sessionId: e.sessionId,
-      });
-    }
-    buffer.push(e);
-    if (buffer.length >= 4) {
-      void flushEvents(buffer.splice(0, buffer.length));
-    }
+  let flushEventsImpl: ((events: ShoppingAgentEvent[]) => Promise<void>) | null =
+    null;
+
+  let persistenceTail: Promise<void> = Promise.resolve();
+  const queuePersistence = (work: () => Promise<void>): void => {
+    persistenceTail = persistenceTail.then(work, work);
   };
 
-  const result = await runShoppingAgent({
-    config,
-    request: { goal: opts.goal },
-    model,
-    launchBrowser,
-    sessionId: cred.runId,
-    now,
-    emit,
-  });
+  const drainPersistence = async (): Promise<void> => {
+    await persistenceTail;
+  };
 
-  if (buffer.length) await flushEvents(buffer.splice(0, buffer.length));
+  try {
+    const startRes = await agentRunRpc(stub, opts.ownerId, {
+      op: "verifyAndStart",
+      runId: cred.runId,
+      credential: cred,
+    });
+    const started = await readAgentRunJson(startRes);
+    if (!started.ok) throw new Error(started.error);
+    executionStarted = true;
 
-  const status: import("./types.js").RunStatus =
-    result.status === "completed"
-      ? "completed"
-      : result.status === "stopped"
-        ? "stopped"
-        : result.status === "budget_exhausted"
-          ? "budget_exhausted"
-          : "failed";
+    flushEventsImpl = async (events: ShoppingAgentEvent[]) => {
+      const mapped = events.map((e) => shoppingEventToPublic(e, now(), secrets));
+      if (!mapped.length) return;
+      const res = await agentRunRpc(stub, opts.ownerId, {
+        op: "appendEvents",
+        runId: cred.runId,
+        events: mapped,
+        credential: cred,
+      });
+      const parsed = await readAgentRunJson(res);
+      if (!parsed.ok) throw new Error(parsed.error);
+    };
 
-  const finishRes = await agentRunRpc(stub, opts.ownerId, {
-    op: "finishRun",
-    runId: cred.runId,
-    status,
-    reply: result.reply,
-  });
-  const finished = await readAgentRunJson(finishRes);
-  if (!finished.ok || !finished.run) {
-    const err = finished.ok ? "finish_failed" : finished.error;
-    throw new Error(err);
+    const portsFactory = opts.ports ?? DEFAULT_PRODUCTION_PORTS;
+    const { model, launchBrowser } = portsFactory({ config, env: opts.env });
+    let markedSession = false;
+    const emit = (e: ShoppingAgentEvent) => {
+      if (e.type === "session_start" && !markedSession) {
+        markedSession = true;
+        queuePersistence(async () => {
+          const res = await agentRunRpc(stub, opts.ownerId, {
+            op: "markRunning",
+            runId: cred.runId,
+            sessionId: e.sessionId,
+            credential: cred,
+          });
+          const parsed = await readAgentRunJson(res);
+          if (!parsed.ok) throw new Error(parsed.error);
+        });
+      }
+      buffer.push(e);
+      if (buffer.length >= 4) {
+        const batch = buffer.splice(0, buffer.length);
+        queuePersistence(() => flushEventsImpl!(batch));
+      }
+    };
+
+    const result = await runShoppingAgent({
+      config,
+      request: { goal: opts.goal },
+      model,
+      launchBrowser,
+      sessionId: cred.runId,
+      now,
+      emit,
+    });
+
+    if (buffer.length) {
+      queuePersistence(() => flushEventsImpl!(buffer.splice(0, buffer.length)));
+    }
+    await drainPersistence();
+
+    const status: RunStatus =
+      result.status === "completed"
+        ? "completed"
+        : result.status === "stopped"
+          ? "stopped"
+          : result.status === "budget_exhausted"
+            ? "budget_exhausted"
+            : "failed";
+
+    const finishRes = await agentRunRpc(stub, opts.ownerId, {
+      op: "finishRun",
+      runId: cred.runId,
+      status,
+      reply: sanitizePublicText(result.reply ?? "", 4000, secrets),
+      credential: cred,
+    });
+    const finished = await readAgentRunJson(finishRes);
+    if (!finished.ok || !finished.run) {
+      const err = finished.ok ? "finish_failed" : finished.error;
+      throw new Error(err);
+    }
+    return finished.run;
+  } catch (error) {
+    if (executionStarted) {
+      if (buffer.length && flushEventsImpl) {
+        queuePersistence(() =>
+          flushEventsImpl!(buffer.splice(0, buffer.length)),
+        );
+      }
+      await drainPersistence();
+      const message =
+        error instanceof Error ? error.message : "execution_failed";
+      const leaked = cred.secret;
+      const safeMessage = sanitizePublicText(message, 4000, [leaked]);
+      const failedRun = await finishAgentRunFailed(
+        stub,
+        opts.ownerId,
+        cred,
+        safeMessage,
+      );
+      if (failedRun) return failedRun;
+    }
+    throw error;
   }
-  return finished.run;
 }
 
 export async function cleanupStaleAgentRuns(
@@ -187,10 +254,12 @@ export async function cleanupStaleAgentRuns(
   ownerId: string,
   nowMs: number,
   maxAgeMs: number,
+  maxRunningAgeMs = DEFAULT_MAX_RUNNING_AGE_MS,
 ): Promise<void> {
   await agentRunRpc(agentRunStub(env, ownerId), ownerId, {
     op: "cleanupStale",
     nowMs,
     maxAgeMs,
+    maxRunningAgeMs,
   });
 }

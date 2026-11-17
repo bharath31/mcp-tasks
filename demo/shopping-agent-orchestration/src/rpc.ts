@@ -11,7 +11,7 @@ export type AgentRunRpc =
       op: "createRun";
       runId: string;
       goal: string;
-      credentialDigest: string;
+      credential: AgentRunCredential;
     }
   | {
       op: "verifyAndStart";
@@ -22,17 +22,20 @@ export type AgentRunRpc =
       op: "markRunning";
       runId: string;
       sessionId: string;
+      credential: AgentRunCredential;
     }
   | {
       op: "appendEvents";
       runId: string;
       events: PublicRunEvent[];
+      credential: AgentRunCredential;
     }
   | {
       op: "finishRun";
       runId: string;
       status: RunStatus;
       reply: string | null;
+      credential: AgentRunCredential;
     }
   | {
       op: "getRun";
@@ -42,6 +45,7 @@ export type AgentRunRpc =
       op: "cleanupStale";
       nowMs: number;
       maxAgeMs: number;
+      maxRunningAgeMs: number;
     };
 
 export type AgentRunRpcResponse =
