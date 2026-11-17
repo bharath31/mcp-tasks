@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { STILLROOM_PRODUCT_IDS } from "../src/catalog.js";
 import {
+  assertUniqueGridProductName,
   buildCartFromDom,
   buildCatalogFromGrid,
   parseDisplayedPriceMinor,
@@ -9,6 +10,7 @@ import {
   type CartLineSnapshot,
   type GridArticleSnapshot,
 } from "../src/dom.js";
+import { countExactGridProductNames } from "../src/browser/storefront-dom.js";
 import { expectedProductDisplayName } from "../src/selectors.js";
 
 const canonicalGrid: GridArticleSnapshot[] = [
@@ -99,4 +101,26 @@ test("buildCartFromDom rejects bogus first-word heuristics", () => {
 
 test("host-owned product display names are fixed per id", () => {
   assert.equal(expectedProductDisplayName("tray"), "Catchall tray");
+});
+
+test("buildCatalogFromGrid does not coerce invalid prices to zero", () => {
+  const badPrice: GridArticleSnapshot[] = [
+    {
+      name: "Catchall tray",
+      priceText: "TBD",
+      buttonLabel: "Add to cart",
+      buttonDisabled: false,
+    },
+  ];
+  const { products } = buildCatalogFromGrid(badPrice, ["tray"]);
+  assert.equal(products[0]?.priceMinor, null);
+});
+
+test("assertUniqueGridProductName blocks duplicate live names", () => {
+  const grid = [
+    ...canonicalGrid,
+    { ...canonicalGrid[0]!, name: "Catchall tray" },
+  ];
+  assert.equal(countExactGridProductNames(grid, "Catchall tray"), 2);
+  assert.ok("error" in assertUniqueGridProductName("Catchall tray", 2));
 });

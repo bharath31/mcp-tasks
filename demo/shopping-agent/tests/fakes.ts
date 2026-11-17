@@ -66,7 +66,8 @@ export class FakeBrowserSession implements BrowserSessionPort {
 export function fakeBrowserLauncher(
   factory?: (id: string) => FakeBrowserSession,
 ): BrowserLauncher {
-  return async ({ sessionId }) => factory?.(sessionId) ?? new FakeBrowserSession(sessionId);
+  return async ({ sessionId, sessionDeadlineMs: _deadline }) =>
+    factory?.(sessionId) ?? new FakeBrowserSession(sessionId);
 }
 
 export function scriptedModel(

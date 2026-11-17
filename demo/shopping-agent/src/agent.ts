@@ -20,6 +20,7 @@ import type {
 } from "./ports.js";
 import { safeEvent, type ShoppingAgentEvent } from "./events.js";
 import { redactText } from "./redact.js";
+import { assertWithinBudget, SessionBudgetExceededError } from "./session-budget.js";
 
 export const shoppingRequest = z
   .object({
@@ -79,6 +80,7 @@ export async function runShoppingAgent(opts: {
       sessionId,
       merchantHostname: merchantHostname(config),
       allowedDomains: [merchantHostname(config)],
+      sessionDeadlineMs: deadline,
     });
 
     const messages: ModelMessage[] = [
@@ -93,12 +95,18 @@ export async function runShoppingAgent(opts: {
       }
 
       emit({ type: "model_start", n: i + 1 });
+      assertWithinBudget({ deadlineMs: deadline, now });
       const raw = await opts.model.run(config.model, {
         messages: [{ role: "system", content: SYSTEM(config) }, ...messages],
         tools: [...AGENT_TOOLS],
         temperature: config.temperature,
         max_completion_tokens: 1200,
       });
+      if (now() > deadline) {
+        emit({ type: "budget_exhausted", kind: "timeout" });
+        status = "budget_exhausted";
+        break;
+      }
       modelCalls++;
       const { content, toolCalls } = opts.model.parseOutput(raw);
       emit({
@@ -176,6 +184,11 @@ export async function runShoppingAgent(opts: {
           break;
         }
 
+        if (now() > deadline) {
+          emit({ type: "budget_exhausted", kind: "timeout" });
+          status = "budget_exhausted";
+          break;
+        }
         const result = await executeHostAction(config, browser, action);
         emit({
           type: "host_action",
@@ -216,8 +229,13 @@ export async function runShoppingAgent(opts: {
       status = "budget_exhausted";
     }
   } catch (e) {
-    status = "error";
-    reply = e instanceof Error ? e.message : String(e);
+    if (e instanceof SessionBudgetExceededError) {
+      emit({ type: "budget_exhausted", kind: "timeout" });
+      status = "budget_exhausted";
+    } else {
+      status = "error";
+      reply = e instanceof Error ? e.message : String(e);
+    }
   } finally {
     if (browser) {
       try {

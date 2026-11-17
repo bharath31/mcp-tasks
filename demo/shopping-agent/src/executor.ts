@@ -7,6 +7,7 @@ import {
   buildNavigationUrl,
 } from "./guard.js";
 import type { BrowserSessionPort, HostActionResult } from "./ports.js";
+import { SessionBudgetExceededError } from "./session-budget.js";
 
 export async function executeHostAction(
   config: ShoppingAgentConfig,
@@ -58,6 +59,9 @@ export async function executeHostAction(
       }
     }
   } catch (e) {
+    if (e instanceof SessionBudgetExceededError) {
+      throw e;
+    }
     if (e instanceof ActionRefusedError) {
       return { ok: false, error: e.message, code: e.code };
     }

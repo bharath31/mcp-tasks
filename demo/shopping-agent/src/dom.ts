@@ -53,6 +53,20 @@ export function reconcileExactProductName(
   return { error: `unsupported product name: ${name}` };
 }
 
+/** Fail closed when the live grid shows the same display name more than once. */
+export function assertUniqueGridProductName(
+  displayName: string,
+  matchCount: number,
+): { ok: true } | { error: string } {
+  if (matchCount === 0) {
+    return { error: `product not on shop grid: ${displayName.trim()}` };
+  }
+  if (matchCount > 1) {
+    return { error: `duplicate product name on shop grid: ${displayName.trim()}` };
+  }
+  return { ok: true };
+}
+
 export function productNameForId(
   productId: StillroomProductId,
 ): string {

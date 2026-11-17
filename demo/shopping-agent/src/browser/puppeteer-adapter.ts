@@ -3,6 +3,7 @@ import type { HostAction } from "../actions.js";
 import { CHECKOUT_CONTROL_LABELS, type StillroomProductId } from "../catalog.js";
 import type { ShoppingAgentConfig } from "../config.js";
 import {
+  assertUniqueGridProductName,
   buildCartFromDom,
   buildCatalogFromGrid,
   type CartLineSnapshot,
@@ -25,6 +26,17 @@ import type {
   CartSnapshot,
   HostActionResult,
 } from "../ports.js";
+import {
+  assertWithinBudget,
+  capWaitMs,
+  type SessionBudget,
+} from "../session-budget.js";
+import { waitForShopGridReady } from "./grid-waits.js";
+import {
+  countExactGridProductNames,
+  scrapeCartLinesFromDocument,
+  scrapeGridArticlesFromDocument,
+} from "./storefront-dom.js";
 type Page = Awaited<
   ReturnType<Awaited<ReturnType<typeof puppeteer.launch>>["newPage"]>
 >;
@@ -32,6 +44,7 @@ type Page = Awaited<
 const GRID_WAIT_MS = 20_000;
 const CART_POLL_MS = 8_000;
 const CART_POLL_INTERVAL_MS = 250;
+const SHOP_GRID_PROBE_MS = 5_000;
 
 async function attachRequestPolicy(
   page: Page,
@@ -60,56 +73,63 @@ async function refuseCheckoutClicks(page: Page): Promise<void> {
   }, [...CHECKOUT_CONTROL_LABELS]);
 }
 
-async function waitForShopGridReady(page: Page, timeoutMs: number): Promise<void> {
-  const grid = await page.$(SHOP_GRID_SELECTOR);
-  if (!grid) {
-    throw new ActionRefusedError(
-      "selector_missing",
-      "Shop grid is not present on the page",
-    );
+async function maybeWaitForShopGrid(
+  page: Page,
+  budget: SessionBudget,
+  url: string,
+): Promise<void> {
+  if (url.includes("#shop")) {
+    await waitForShopGridReady(page, budget, GRID_WAIT_MS);
+    return;
   }
+  const probeMs = capWaitMs(budget, SHOP_GRID_PROBE_MS);
   try {
-    await page.waitForSelector(SHOP_READY_SELECTOR, { timeout: timeoutMs });
+    await page.waitForSelector(SHOP_GRID_SELECTOR, { timeout: probeMs });
+    await waitForShopGridReady(page, budget, GRID_WAIT_MS);
   } catch {
-    throw new ActionRefusedError(
-      "shop_not_ready",
-      "Shop grid is not ready (session or products still loading)",
-    );
+    /* no shop grid on this page */
   }
 }
 
 async function scrapeGridArticles(page: Page): Promise<GridArticleSnapshot[]> {
-  return page.evaluate((gridSel) => {
-    const grid = document.querySelector(gridSel);
-    if (!grid) return [];
-    return Array.from(grid.querySelectorAll("article")).map((article) => {
-      const name =
-        article.querySelector(".product-heading h3")?.textContent?.trim() ?? "";
-      const priceText =
-        article.querySelector(".product-heading b")?.textContent?.trim() ?? "";
-      const button = article.querySelector("button");
-      return {
-        name,
-        priceText,
-        buttonLabel: (button?.textContent ?? "").trim(),
-        buttonDisabled: Boolean(
-          button?.hasAttribute("disabled") || (button as HTMLButtonElement | null)?.disabled,
-        ),
-      };
-    });
-  }, SHOP_GRID_SELECTOR);
+  return page.evaluate(
+    (gridSel) => {
+      const grid = document.querySelector(gridSel);
+      if (!grid) return [];
+      return Array.from(grid.querySelectorAll("article")).map((article) => {
+        const name =
+          article.querySelector(".product-heading h3")?.textContent?.trim() ?? "";
+        const priceText =
+          article.querySelector(".product-heading b")?.textContent?.trim() ?? "";
+        const button = article.querySelector("button");
+        return {
+          name,
+          priceText,
+          buttonLabel: (button?.textContent ?? "").trim(),
+          buttonDisabled: Boolean(
+            button?.hasAttribute("disabled") ||
+              (button as HTMLButtonElement | null)?.disabled,
+          ),
+        };
+      });
+    },
+    SHOP_GRID_SELECTOR,
+  );
 }
 
 async function scrapeCartLines(page: Page): Promise<CartLineSnapshot[]> {
-  return page.evaluate((listSel) => {
-    const root = document.querySelector(listSel);
-    if (!root) return [];
-    return Array.from(root.querySelectorAll("li")).map((li) => ({
-      nameLine: li.querySelector(":scope > span")?.textContent?.trim() ?? "",
-      quantityText:
-        li.querySelector("div > span")?.textContent?.trim() ?? "0",
-    }));
-  }, CART_LIST_SELECTOR);
+  return page.evaluate(
+    (listSel) => {
+      const root = document.querySelector(listSel);
+      if (!root) return [];
+      return Array.from(root.querySelectorAll("li")).map((li) => ({
+        nameLine: li.querySelector(":scope > span")?.textContent?.trim() ?? "",
+        quantityText:
+          li.querySelector("div > span")?.textContent?.trim() ?? "0",
+      }));
+    },
+    CART_LIST_SELECTOR,
+  );
 }
 
 async function readCartSnapshot(
@@ -170,45 +190,102 @@ async function clickAddToCartForProduct(
   }
 }
 
+async function sleepMs(ms: number): Promise<void> {
+  await new Promise((r) => setTimeout(r, ms));
+}
+
 async function waitForCartIncrease(
   page: Page,
   config: ShoppingAgentConfig,
   productId: StillroomProductId,
   beforeQty: number,
-  timeoutMs: number,
+  budget: SessionBudget,
+  defaultPollMs: number,
 ): Promise<boolean> {
-  const deadline = Date.now() + timeoutMs;
-  while (Date.now() < deadline) {
+  const pollMs = capWaitMs(budget, defaultPollMs);
+  const endAt = budget.now() + pollMs;
+  while (budget.now() < endAt) {
+    assertWithinBudget(budget);
     try {
       const cart = await readCartSnapshot(page, config);
-      const after = cart.items.find((i) => i.productId === productId)?.quantity ?? 0;
+      const after =
+        cart.items.find((i) => i.productId === productId)?.quantity ?? 0;
       if (after > beforeQty) return true;
     } catch {
       /* cart may not be ready yet */
     }
-    await new Promise((r) => setTimeout(r, CART_POLL_INTERVAL_MS));
+    const slice = Math.min(
+      CART_POLL_INTERVAL_MS,
+      endAt - budget.now(),
+      remainingOrZero(budget),
+    );
+    if (slice <= 0) break;
+    await sleepMs(slice);
   }
   return false;
 }
 
+function remainingOrZero(budget: SessionBudget): number {
+  return Math.max(0, budget.deadlineMs - budget.now());
+}
+
+function catalogProductsForHost(
+  products: ReturnType<typeof buildCatalogFromGrid>["products"],
+): {
+  catalogProducts: {
+    id: string;
+    name: string;
+    priceMinor: number;
+    currency: string;
+  }[];
+  errors: string[];
+} {
+  const errors: string[] = [];
+  const catalogProducts: {
+    id: string;
+    name: string;
+    priceMinor: number;
+    currency: string;
+  }[] = [];
+  for (const p of products) {
+    if (p.priceMinor == null || p.currency == null) {
+      errors.push(`invalid displayed price for ${p.id}`);
+      continue;
+    }
+    catalogProducts.push({
+      id: p.id,
+      name: p.name,
+      priceMinor: p.priceMinor,
+      currency: p.currency,
+    });
+  }
+  return { catalogProducts, errors };
+}
+
 class PuppeteerBrowserSession implements BrowserSessionPort {
+  private readonly budget: SessionBudget;
+
   constructor(
     readonly sessionId: string,
     private readonly config: ShoppingAgentConfig,
     private browser: Awaited<ReturnType<typeof puppeteer.launch>>,
     private page: Page,
-  ) {}
+    sessionDeadlineMs: number,
+    now: () => number = Date.now,
+  ) {
+    this.budget = { deadlineMs: sessionDeadlineMs, now };
+  }
 
   async gotoTrusted(url: string): Promise<void> {
+    assertWithinBudget(this.budget);
     assertTrustedAbsoluteUrl(this.config, url);
     await this.page.goto(url, { waitUntil: "domcontentloaded", timeout: 30_000 });
     await refuseCheckoutClicks(this.page);
-    if (url.includes("#shop") || (await this.page.$(SHOP_GRID_SELECTOR))) {
-      await waitForShopGridReady(this.page, GRID_WAIT_MS);
-    }
+    await maybeWaitForShopGrid(this.page, this.budget, url);
   }
 
   async runHostAction(action: HostAction): Promise<HostActionResult> {
+    assertWithinBudget(this.budget);
     switch (action.kind) {
       case "navigate":
         return {
@@ -217,43 +294,39 @@ class PuppeteerBrowserSession implements BrowserSessionPort {
         };
       case "view_catalog": {
         await refuseCheckoutClicks(this.page);
-        await waitForShopGridReady(this.page, GRID_WAIT_MS);
+        await waitForShopGridReady(this.page, this.budget, GRID_WAIT_MS);
         const articles = await scrapeGridArticles(this.page);
         const { products, errors } = buildCatalogFromGrid(
           articles,
           this.config.productIds,
         );
-        if (!products.length && errors.length) {
+        const { catalogProducts, errors: priceErrors } =
+          catalogProductsForHost(products);
+        const allErrors = [...errors, ...priceErrors];
+        if (!catalogProducts.length && allErrors.length) {
           return {
             ok: false,
-            error: errors.join("; "),
+            error: allErrors.join("; "),
             code: "catalog_parse",
           };
         }
         return {
           ok: true,
           kind: "view_catalog",
-          catalog: {
-            products: products.map((p) => ({
-              id: p.id,
-              name: p.name,
-              priceMinor: p.priceMinor ?? 0,
-              currency: p.currency ?? "USD",
-            })),
-          },
+          catalog: { products: catalogProducts },
         };
       }
       case "add_to_cart": {
         await refuseCheckoutClicks(this.page);
-        await waitForShopGridReady(this.page, GRID_WAIT_MS);
+        await waitForShopGridReady(this.page, this.budget, GRID_WAIT_MS);
         const expectedName = expectedProductDisplayName(action.productId);
         const articles = await scrapeGridArticles(this.page);
-        const inGrid = articles.some((a) => a.name === expectedName);
-        if (!inGrid) {
-          throw new ActionRefusedError(
-            "product_missing",
-            `Product not visible on shop grid: ${action.productId}`,
-          );
+        const unique = assertUniqueGridProductName(
+          expectedName,
+          countExactGridProductNames(articles, expectedName),
+        );
+        if ("error" in unique) {
+          throw new ActionRefusedError("product_ambiguous", unique.error);
         }
         const cartBefore = await readCartSnapshot(this.page, this.config);
         const beforeQty =
@@ -270,6 +343,7 @@ class PuppeteerBrowserSession implements BrowserSessionPort {
           this.config,
           action.productId,
           beforeQty,
+          this.budget,
           CART_POLL_MS,
         );
         if (!increased) {
@@ -307,14 +381,20 @@ export function createPuppeteerLauncher(
   binding: Fetcher,
   config: ShoppingAgentConfig,
 ): BrowserLauncher {
-  return async ({ sessionId, allowedDomains }) => {
+  return async ({ sessionId, allowedDomains, sessionDeadlineMs }) => {
     const browser = await puppeteer.launch(binding, {
       guardrails: { allowedDomains },
     });
     try {
       const page = await browser.newPage();
       await attachRequestPolicy(page, config);
-      return new PuppeteerBrowserSession(sessionId, config, browser, page);
+      return new PuppeteerBrowserSession(
+        sessionId,
+        config,
+        browser,
+        page,
+        sessionDeadlineMs,
+      );
     } catch (e) {
       try {
         await browser.close();
@@ -327,3 +407,9 @@ export function createPuppeteerLauncher(
 }
 
 export type { PuppeteerBrowserSession };
+
+/** @internal Used by fixture tests to mirror live DOM scrape paths. */
+export {
+  scrapeCartLinesFromDocument,
+  scrapeGridArticlesFromDocument,
+};

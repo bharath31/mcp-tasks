@@ -65,4 +65,6 @@ export type BrowserLauncher = (opts: {
   sessionId: string;
   merchantHostname: string;
   allowedDomains: string[];
+  /** Wall-clock millis after which host waits must fail closed. */
+  sessionDeadlineMs: number;
 }) => Promise<BrowserSessionPort>;
