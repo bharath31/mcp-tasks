@@ -1,0 +1,14 @@
+{
+  "name": "@nominee/shopping-merchant",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Cloudflare Durable Object merchant ledger prototype for Nominee shopping (simulated payments only).",
+  "scripts": {
+    "build": "tsc -p tsconfig.json --noEmit",
+    "test": "node --import tsx --test tests/*.test.ts"
+  },
+  "engines": {
+    "node": ">=22"
+  }
+}

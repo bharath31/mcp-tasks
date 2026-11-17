@@ -18,6 +18,8 @@
     "demo/refund-desk/web",
     "demo/policy-desk/web",
     "auth0/approval-ui",
-    "demo/refund-workflow"
+    "demo/refund-workflow",
+    "demo/shopping-agent",
+    "demo/shopping-merchant"
   ]
 }
