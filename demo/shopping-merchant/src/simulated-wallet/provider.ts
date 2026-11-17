@@ -22,6 +22,26 @@ function assertOrderTermsMatch(
   }
 }
 
+function isSqliteUniqueViolation(error: unknown): boolean {
+  if (!(error instanceof Error)) return false;
+  const message = error.message.toLowerCase();
+  return (
+    message.includes("unique constraint") ||
+    message.includes("constraint failed") ||
+    message.includes("sqlite_constraint_unique")
+  );
+}
+
+function readBalanceMinor(db: SqlDatabase, customerId: string): number {
+  const wallet = db
+    .exec(
+      "SELECT balance_minor FROM sim_wallet_balances WHERE customer_id = ?",
+      customerId,
+    )
+    .one();
+  return wallet ? (wallet.balance_minor as number) : 0;
+}
+
 /**
  * Restart-durable simulated wallet implementing {@link OrderProviderPort}.
  * Debits integer USD cents only; never calls live payment processors.
@@ -58,19 +78,29 @@ export function createSimulatedWalletOrderProvider(
           return { id: prior.order_id as string };
         }
 
+        const priorOperation = db
+          .exec(
+            "SELECT idempotency_key, order_id, terms_fingerprint, quote_id, customer_id, total_minor, currency FROM sim_wallet_orders WHERE customer_id = ? AND operation_id = ?",
+            customerId,
+            quote.operationId,
+          )
+          .one();
+        if (priorOperation) {
+          assertOrderTermsMatch(priorOperation, terms, quote);
+          throw new Error("sim_wallet_operation_debited");
+        }
+
         db.exec(
           "INSERT OR IGNORE INTO sim_wallet_balances (customer_id, balance_minor) VALUES (?, 0)",
           customerId,
         );
-        const wallet = db
-          .exec(
-            "SELECT balance_minor FROM sim_wallet_balances WHERE customer_id = ?",
-            customerId,
-          )
-          .one();
-        const balanceBefore = wallet ? (wallet.balance_minor as number) : 0;
+        const balanceBefore = readBalanceMinor(db, customerId);
         if (balanceBefore < quote.totalMinor) {
           return null;
+        }
+        const balanceAfterExpected = balanceBefore - quote.totalMinor;
+        if (!Number.isSafeInteger(balanceAfterExpected)) {
+          throw new Error("sim_wallet_balance_overflow");
         }
         db.exec(
           `UPDATE sim_wallet_balances
@@ -80,33 +110,32 @@ export function createSimulatedWalletOrderProvider(
           customerId,
           quote.totalMinor,
         );
-        const after = db
-          .exec(
-            "SELECT balance_minor FROM sim_wallet_balances WHERE customer_id = ?",
-            customerId,
-          )
-          .one();
-        const balanceAfter = after
-          ? (after.balance_minor as number)
-          : balanceBefore;
-        if (balanceAfter !== balanceBefore - quote.totalMinor) {
-          return null;
+        const balanceAfter = readBalanceMinor(db, customerId);
+        if (balanceAfter !== balanceAfterExpected) {
+          throw new Error("sim_wallet_balance_inconsistency");
         }
 
         const orderId = crypto.randomUUID();
-        db.exec(
-          `INSERT INTO sim_wallet_orders
-           (idempotency_key, order_id, customer_id, quote_id, operation_id, total_minor, currency, terms_fingerprint)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
-          idempotencyKey,
-          orderId,
-          quote.customerId,
-          quote.id,
-          quote.operationId,
-          quote.totalMinor,
-          quote.currency,
-          terms,
-        );
+        try {
+          db.exec(
+            `INSERT INTO sim_wallet_orders
+             (idempotency_key, order_id, customer_id, quote_id, operation_id, total_minor, currency, terms_fingerprint)
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+            idempotencyKey,
+            orderId,
+            quote.customerId,
+            quote.id,
+            quote.operationId,
+            quote.totalMinor,
+            quote.currency,
+            terms,
+          );
+        } catch (error) {
+          if (isSqliteUniqueViolation(error)) {
+            throw new Error("sim_wallet_operation_debited");
+          }
+          throw error;
+        }
         return { id: orderId };
       });
     },

@@ -13,7 +13,8 @@ CREATE TABLE IF NOT EXISTS sim_wallet_orders (
   operation_id TEXT NOT NULL,
   total_minor INTEGER NOT NULL,
   currency TEXT NOT NULL,
-  terms_fingerprint TEXT NOT NULL
+  terms_fingerprint TEXT NOT NULL,
+  UNIQUE (customer_id, operation_id)
 );
 `;
 
