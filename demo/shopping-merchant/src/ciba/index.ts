@@ -40,6 +40,10 @@ export {
   type VerifiedCibaApproval,
 } from "./verify.js";
 export {
-  LEDGER_CIBA_WIRING_BLOCKED,
+  createCustomerApprovalLedgerBridge,
+  recordApprovalWithConsumedChallenge,
   type CustomerApprovalLedgerBridge,
+  type RecordCibaLedgerApprovalInput,
+  type RecordCibaLedgerApprovalOptions,
+  type RecordCibaLedgerApprovalResult,
 } from "./ledger-bridge.js";

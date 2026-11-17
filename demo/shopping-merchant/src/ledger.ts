@@ -2,6 +2,10 @@ import { catalogProduct } from "./catalog.js";
 import { initMerchantSchema, type SqlDatabase, type SqlRow } from "./sql.js";
 
 import { SERVER_CATALOG } from "./catalog.js";
+import {
+  recordApprovalWithConsumedChallenge,
+  type RecordCibaLedgerApprovalOptions,
+} from "./ciba/ledger-bridge.js";
 import type {
   AgentActor,
   Cart,
@@ -728,6 +732,26 @@ export function createMerchantLedger(
 
     // Only an adapter that atomically fences all dispatch and updates this ledger
     // in the same transaction may provide atomicAbandonAbsent on ports.
+    /**
+     * Trusted-host-only: atomically consume an approved CIBA challenge and record ledger approval.
+     * Does not call verifyCustomerApproval; challenge + quote rows in this DB are the proof boundary.
+     */
+    recordCustomerApprovalFromCibaChallenge(
+      challengeId: string,
+      actor: HumanActor,
+      quote: Quote,
+      options?: RecordCibaLedgerApprovalOptions,
+    ) {
+      validateActor(actor);
+      if (actor.kind !== "human") fail();
+      return recordApprovalWithConsumedChallenge(
+        db,
+        customerId,
+        { challengeId, quote, actor },
+        options,
+      );
+    },
+
     async abandonQuote(
       quoteId: string,
       actor: TrustedActor,
