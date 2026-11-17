@@ -59,6 +59,11 @@ test("sessionVerified requires authenticated customer id", () => {
 test("checkout gates fail closed without server state", () => {
   assert.equal(canStartAgent(null), "no_session");
   assert.equal(canStartAgent({ authenticated: false }), "unauthenticated");
+  assert.equal(
+    canStartAgent({ authenticated: true }),
+    "unauthenticated",
+    "verified customer id required",
+  );
   assert.equal(canStartAgent(authed), "ok");
 
   assert.equal(canRequestQuote(authed, null), "no_cart");

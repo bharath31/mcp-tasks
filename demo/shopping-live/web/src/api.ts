@@ -93,6 +93,12 @@ export const shoppingApi = {
 
   cart: () => request<{ cart: Cart | null }>("/cart"),
 
+  addCartItem: (productId: string, quantity = 1) =>
+    request<{ cart: Cart | null }>("/cart/items", {
+      method: "POST",
+      body: JSON.stringify({ productId, quantity }),
+    }),
+
   quote: () =>
     request<{ quote: Quote }>("/quote", {
       method: "POST",

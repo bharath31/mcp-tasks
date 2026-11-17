@@ -18,7 +18,7 @@ export function sessionVerified(session: SessionResponse | null): boolean {
 
 export function canStartAgent(session: SessionResponse | null): GateReason {
   if (!session) return "no_session";
-  if (!session.authenticated) return "unauthenticated";
+  if (!sessionVerified(session)) return "unauthenticated";
   return "ok";
 }
 

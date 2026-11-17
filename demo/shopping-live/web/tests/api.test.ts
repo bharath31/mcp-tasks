@@ -22,6 +22,7 @@ test("api routes match the live shopping contract", () => {
     '"/agent/start"',
     "`/agent/${",
     '"/cart"',
+    '"/cart/items"',
     '"/quote"',
     '"/approval/start"',
     "`/approval/${",

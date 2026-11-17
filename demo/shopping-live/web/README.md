@@ -20,6 +20,7 @@ Output lands in `dist/`. Serve it as static assets; the Worker must implement th
 | `POST` | `/api/agent/start` | `{ "goal": string }` | Start an agent run |
 | `GET` | `/api/agent/{id}` | — | Agent status and **only** server-originated events |
 | `GET` | `/api/cart` | — | Cart snapshot for the signed-in customer |
+| `POST` | `/api/cart/items` | `{ "productId": string, "quantity": number }` | Add or update a line (UI sends `quantity: 1`) |
 | `POST` | `/api/quote` | `{}` | Create or refresh a verified quote |
 | `POST` | `/api/approval/start` | `{ "quoteId": string }` | Begin Guardian approval |
 | `GET` | `/api/approval/{id}` | — | Approval status (optional `reviewUrl`) |

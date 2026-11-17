@@ -1,5 +1,6 @@
 import { shoppingApi } from "./api.js";
 import { formatMoney, STORE_PRODUCTS } from "./catalog.js";
+import { safeNavHref } from "./nav.js";
 import {
   canExecuteOrder,
   canRequestQuote,
@@ -52,7 +53,21 @@ const ui: UiState = {
   apiAvailable: false,
 };
 
-let pollTimer: number | undefined;
+let pollGeneration = 0;
+let agentPollTimer: number | undefined;
+let approvalPollTimer: number | undefined;
+
+function cancelPolls(): void {
+  pollGeneration += 1;
+  if (agentPollTimer !== undefined) {
+    window.clearTimeout(agentPollTimer);
+    agentPollTimer = undefined;
+  }
+  if (approvalPollTimer !== undefined) {
+    window.clearTimeout(approvalPollTimer);
+    approvalPollTimer = undefined;
+  }
+}
 
 function el<K extends keyof HTMLElementTagNameMap>(
   tag: K,
@@ -106,7 +121,8 @@ function authControls(): HTMLElement {
     );
     return wrap;
   }
-  if (ui.session?.authenticated && ui.session.logoutUrl) {
+  const logoutHref = safeNavHref(ui.session?.logoutUrl, window.location.origin);
+  if (ui.session?.authenticated && logoutHref) {
     wrap.append(
       el("span", { className: "auth-label" }, [
         ui.session.customerId
@@ -117,7 +133,7 @@ function authControls(): HTMLElement {
         "a",
         {
           className: "button button--ghost",
-          href: ui.session.logoutUrl,
+          href: logoutHref,
           "data-nominee-action": "logout",
         },
         ["Sign out"],
@@ -125,15 +141,15 @@ function authControls(): HTMLElement {
     );
     return wrap;
   }
-  const login = ui.session?.loginUrl;
+  const loginHref = safeNavHref(ui.session?.loginUrl, window.location.origin);
   wrap.append(
     el("span", { className: "auth-label" }, ["Not signed in"]),
-    login
+    loginHref
       ? el(
           "a",
           {
             className: "button button--coral",
-            href: login,
+            href: loginHref,
             "data-nominee-action": "login",
           },
           ["Sign in"],
@@ -325,15 +341,16 @@ function checkoutPanel(): HTMLElement {
   section.append(approvalBtn, el("p", { className: "hint" }, [gateLabel(approvalGate)]));
 
   if (ui.approval) {
+    const reviewHref = safeNavHref(ui.approval.reviewUrl, window.location.origin);
     const review =
-      ui.approval.reviewUrl && ui.approval.status === "pending"
+      reviewHref && ui.approval.status === "pending"
         ? el(
             "a",
             {
-              href: ui.approval.reviewUrl,
+              href: reviewHref,
               className: "button button--ghost",
               target: "_blank",
-              rel: "noreferrer",
+              rel: "noopener noreferrer",
               "data-nominee-action": "approval-open",
             },
             ["Open Guardian review"],
@@ -428,7 +445,7 @@ function merchantBrowser(): HTMLElement {
         );
         article
           .querySelector("button")!
-          .addEventListener("click", () => void refreshCart());
+          .addEventListener("click", () => void addToCart(p.id));
         return article;
       }),
     ]),
@@ -442,7 +459,7 @@ function merchantBrowser(): HTMLElement {
     cartSection.append(
       el("p", { className: "muted" }, [
         signedIn
-          ? "No items yet. Poppy or you can add products once the cart API is wired."
+          ? "No items yet. Add products from the catalog or ask Poppy to shop."
           : "Cart sync requires a verified session.",
       ]),
     );
@@ -516,6 +533,7 @@ function layout(): HTMLElement {
 
 function render(): void {
   root.replaceChildren(layout());
+  root.setAttribute("aria-busy", "false");
 }
 
 async function withBusy<T>(label: string, fn: () => Promise<T>): Promise<T> {
@@ -558,6 +576,22 @@ async function refreshCart(): Promise<void> {
   }
 }
 
+async function addToCart(productId: string): Promise<void> {
+  if (!sessionVerified(ui.session)) return;
+  await withBusy("cart-add", async () => {
+    const result = await shoppingApi.addCartItem(productId, 1);
+    if (result.ok) {
+      ui.cart = result.data.cart;
+      ui.cartError = null;
+      if (ui.cart === null) {
+        await refreshCart();
+      }
+    } else {
+      ui.cartError = result.error.message;
+    }
+  });
+}
+
 async function requestQuote(): Promise<void> {
   await withBusy("quote", async () => {
     ui.quoteError = null;
@@ -578,7 +612,7 @@ async function startApproval(): Promise<void> {
     const result = await shoppingApi.startApproval(ui.quote!.id);
     if (result.ok) {
       ui.approval = result.data;
-      await pollApproval(ui.approval.id);
+      await pollApproval(ui.approval.id, pollGeneration);
     } else {
       ui.approval = null;
       ui.approvalError = result.error.message;
@@ -586,12 +620,17 @@ async function startApproval(): Promise<void> {
   });
 }
 
-async function pollApproval(id: string): Promise<void> {
+async function pollApproval(id: string, generation: number): Promise<void> {
+  if (generation !== pollGeneration) return;
   const result = await shoppingApi.approval(id);
+  if (generation !== pollGeneration) return;
   if (result.ok) {
     ui.approval = result.data;
     if (result.data.status === "pending") {
-      window.setTimeout(() => void pollApproval(id), POLL_MS);
+      approvalPollTimer = window.setTimeout(
+        () => void pollApproval(id, generation),
+        POLL_MS,
+      );
     }
   } else {
     ui.approvalError = result.error.message;
@@ -632,16 +671,25 @@ async function startAgent(goal: string): Promise<void> {
 }
 
 function scheduleAgentPoll(id: string): void {
-  if (pollTimer) window.clearTimeout(pollTimer);
-  void pollAgent(id);
+  const generation = pollGeneration;
+  if (agentPollTimer !== undefined) {
+    window.clearTimeout(agentPollTimer);
+    agentPollTimer = undefined;
+  }
+  void pollAgent(id, generation);
 }
 
-async function pollAgent(id: string): Promise<void> {
+async function pollAgent(id: string, generation: number): Promise<void> {
+  if (generation !== pollGeneration) return;
   const result = await shoppingApi.agent(id);
+  if (generation !== pollGeneration) return;
   if (result.ok) {
     ui.agent = result.data;
     if (result.data.status === "running" || result.data.status === "pending") {
-      pollTimer = window.setTimeout(() => void pollAgent(id), POLL_MS);
+      agentPollTimer = window.setTimeout(
+        () => void pollAgent(id, generation),
+        POLL_MS,
+      );
     } else {
       await refreshCart();
     }
@@ -652,6 +700,7 @@ async function pollAgent(id: string): Promise<void> {
 }
 
 async function bootstrap(): Promise<void> {
+  cancelPolls();
   ui.quote = null;
   ui.approval = null;
   ui.orderMessage = null;
