@@ -74,6 +74,7 @@ test("maps quote into Auth0 Guardian purchase authorization_details", () => {
   assert.equal(details.properties.total_minor?.value, 4300);
   assert.equal(details.properties.total?.value, "USD 43.00");
   assert.equal(details.properties.item_0_unit_price_minor?.value, 1800);
+  assert.equal(details.properties.item_0_currency?.value, "USD");
   assert.equal(
     details.properties.destination_details?.value,
     '{"country":"US","postalCode":"10001"}',

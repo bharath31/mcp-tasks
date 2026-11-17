@@ -94,6 +94,7 @@ export function buildGuardianPurchaseAuthorizationDetails(
     add(`${prefix}_product_id`, `Item ${index + 1} id`, item.productId);
     add(`${prefix}_name`, `Item ${index + 1} name`, item.name);
     add(`${prefix}_quantity`, `Item ${index + 1} quantity`, item.quantity);
+    add(`${prefix}_currency`, `Item ${index + 1} currency`, item.currency);
     add(
       `${prefix}_unit_price_minor`,
       `Item ${index + 1} unit price (minor)`,
