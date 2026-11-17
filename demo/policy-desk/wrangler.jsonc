@@ -3,9 +3,10 @@
   "name": "mcp-tasks-policy-desk",
   "main": "src/worker.ts",
   "compatibility_date": "2026-10-09",
-  // Live at mcp-tasks.dev. The old hostname stays attached so LEGACY_HOSTS can redirect it.
+  // Two primary domains and one legacy hostname, which LEGACY_HOSTS redirects.
   "routes": [
     { "pattern": "mcp-tasks.dev", "custom_domain": true },
+    { "pattern": "nominee.dev", "custom_domain": true },
     { "pattern": "mcp-tasks.bharath.sh", "custom_domain": true },
   ],
   "compatibility_flags": ["nodejs_compat"],

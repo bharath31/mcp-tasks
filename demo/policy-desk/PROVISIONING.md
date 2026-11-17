@@ -160,7 +160,7 @@ The numbered list below documents what the script configures, for review and for
   Order for an existing deployment: create the runtime role, run `tools/migrate.ts` as the owner, set
   `DATABASE_URL` to the runtime role, then deploy.
 
-- Build the UI (`npm run build:web`). For your own deployment use `npm run deploy` with the root config and `npm run setup`. The maintainer's `demo/policy-desk/wrangler.jsonc` attaches `mcp-tasks.dev` and its legacy redirect; do not use it as-is for another deployment.
+- Build the UI (`npm run build:web`). For your own deployment use `npm run deploy` with the root config and `npm run setup`. The maintainer's `demo/policy-desk/wrangler.jsonc` attaches `mcp-tasks.dev`, `nominee.dev`, and the legacy hostname; do not use it as-is for another deployment. The hosted Policy Desk SPA client must allow both primary origins for callbacks, logout, and web origins; preserve these entries when changing its Auth0 settings.
 - Worker vars: see `wrangler.jsonc` (`AUTH0_DOMAIN`, `TASK_AUTHORITY_AUDIENCE`, `SPA_CLIENT_ID`, `AUTH0_ORG_ID`,
   `AGENT_ID`, `HIGH_VALUE_QUORUM`, `FGA_API_URL`, `FGA_STORE_ID`).
 - Worker secrets: `wrangler secret put <NAME>` for every secret above and the optional `IP_HASH_SALT`.
