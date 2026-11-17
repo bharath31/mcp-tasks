@@ -10,6 +10,8 @@ declare module "cloudflare:workers" {
 interface DurableObjectStorage {
   readonly sql: SqlStorage;
   transactionSync<T>(closure: () => T): T;
+  get<T = unknown>(key: string): T | undefined;
+  put<T>(key: string, value: T): void;
 }
 
 interface DurableObjectState {

@@ -165,6 +165,19 @@ test("provider uncertainty stays processing; reconcile recovers", async () => {
   db.close();
 });
 
+test("agent-bound carts: human cannot executeQuote (commerce executionActor parity)", async () => {
+  const { ledger, host, approval, db } = memoryLedger();
+  const cart = ledger.createCart(agent);
+  ledger.updateCart(cart.id, agent, [
+    { productId: "mug", quantity: 1, priceMinor: 1800, currency: "USD" },
+  ]);
+  const quote = await ledger.createQuote(cart.id, agent, "fixture-home");
+  approval.approveForTest(quote);
+  await host.injectCustomerApproval(quote.id, human);
+  await assert.rejects(ledger.executeQuote(quote.id, human), /not_found_or_forbidden/);
+  db.close();
+});
+
 test("agent session continuity: same agent and user with a different session is denied", async () => {
   const { ledger, db } = memoryLedger();
   const cart = ledger.createCart(agent);

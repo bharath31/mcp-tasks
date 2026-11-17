@@ -34,6 +34,8 @@ function mockStorage(handlers: {
     transactionSync<T>(fn: () => T): T {
       return fn();
     },
+    get: () => undefined,
+    put: () => {},
   } as DurableObjectStorage;
 }
 

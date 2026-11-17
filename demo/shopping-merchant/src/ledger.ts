@@ -111,6 +111,13 @@ export function createMerchantLedger(
     }
   }
 
+  /** Commerce parity: agent-bound carts may only be executed by the agent principal. */
+  function executionActor(cartRow: SqlRow, actor: TrustedActor): void {
+    quoteActor(actor);
+    authorizeCart(cartRow, actor, false);
+    if (cartRow.agent_id && actor.kind !== "agent") fail();
+  }
+
   function activeExecution(cartId: string) {
     return db
       .exec(
@@ -453,12 +460,11 @@ export function createMerchantLedger(
 
     async executeQuote(quoteId: string, actor: TrustedActor): Promise<CompletionResult> {
       validateActor(actor);
-      quoteActor(actor);
       const record = requireRow(
         db.exec("SELECT * FROM quotes WHERE id = ?", quoteId).one(),
       );
-      const cartRow = getCartRow(record.cart_id as string);
-      authorizeCart(cartRow, actor, false);
+      const cartRow = requireRow(getCartRow(record.cart_id as string));
+      executionActor(cartRow, actor);
 
       const existing = db
         .exec(
@@ -503,9 +509,8 @@ export function createMerchantLedger(
         const latest = requireRow(
           db.exec("SELECT * FROM quotes WHERE id = ?", quoteId).one(),
         );
-        const row = getCartRow(latest.cart_id as string);
-        authorizeCart(row, actor, false);
-        quoteActor(actor);
+        const row = requireRow(getCartRow(latest.cart_id as string));
+        executionActor(row, actor);
         const current = quoteView(latest.data as string);
         const op = db
           .exec(
@@ -607,11 +612,11 @@ export function createMerchantLedger(
     },
 
     async reconcileQuote(quoteId: string, actor: TrustedActor): Promise<CompletionResult> {
-      quoteActor(actor);
       const record = requireRow(
         db.exec("SELECT * FROM quotes WHERE id = ?", quoteId).one(),
       );
-      authorizeCart(getCartRow(record.cart_id as string), actor, false);
+      const cartRow = requireRow(getCartRow(record.cart_id as string));
+      executionActor(cartRow, actor);
       const quote = quoteView(record.data as string);
       const execution = db
         .exec(

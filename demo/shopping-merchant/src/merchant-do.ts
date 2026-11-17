@@ -4,22 +4,19 @@
  */
 import { DurableObject } from "cloudflare:workers";
 import { createMerchantLedger } from "./ledger.js";
-import { createDoSqlDatabase } from "./sql.js";
-import type { MerchantLedgerPorts } from "./types.js";
+import {
+  MERCHANT_HOST_INTERNAL_SECRET_HEADER,
+  merchantLedgerPortsFromEnv,
+  readHostInternalSecret,
+  type MerchantLedgerEnv,
+} from "./port-env.js";
+import { createDoSqlDatabase, initMerchantSchema } from "./sql.js";
 import type { TrustedActor } from "./types.js";
+import type { HumanActor } from "./types.js";
 
-/**
- * Worker `env` may only carry Wrangler-bindable values (KV, secrets, service bindings).
- * Port implementations live in the Worker module and are registered at cold start via
- * {@link registerMerchantLedgerPorts} before the DO stub is used.
- */
-export type MerchantLedgerEnv = Record<string, unknown>;
+const BOUND_CUSTOMER_KEY = "nominee:bound_customer_id";
 
-declare global {
-  var __nomineeMerchantLedgerPorts: MerchantLedgerPorts | undefined;
-}
-
-type RpcBody =
+type PublicRpcBody =
   | { op: "createCart"; actor: TrustedActor }
   | { op: "readCart"; actor: TrustedActor; cartId: string }
   | {
@@ -33,25 +30,52 @@ type RpcBody =
   | { op: "executeQuote"; actor: TrustedActor; quoteId: string }
   | { op: "reconcileQuote"; actor: TrustedActor; quoteId: string };
 
-/** Called from the Worker entry module after env is available (not from client fetch). */
-export function registerMerchantLedgerPorts(ports: MerchantLedgerPorts): void {
-  globalThis.__nomineeMerchantLedgerPorts = ports;
-}
+type RpcBody =
+  | PublicRpcBody
+  | { op: "hostInjectCustomerApproval"; quoteId: string; actor: HumanActor }
+  | { op: "injectCustomerApproval" };
+
+export type { MerchantLedgerEnv };
 
 export class CustomerMerchantLedger extends DurableObject<MerchantLedgerEnv> {
   private customerId: string | undefined;
   private ledger: ReturnType<typeof createMerchantLedger> | undefined;
+  private portsCache: ReturnType<typeof merchantLedgerPortsFromEnv> | undefined;
 
   constructor(ctx: DurableObjectState, env: MerchantLedgerEnv) {
     super(ctx, env);
   }
 
-  private ports(): MerchantLedgerPorts {
-    const ports = globalThis.__nomineeMerchantLedgerPorts;
-    if (!ports?.customerAccount || !ports.verifyCustomerApproval || !ports.orderProvider) {
-      throw new Error("merchant_ports_unconfigured");
+  private ports() {
+    if (!this.portsCache) {
+      this.portsCache = merchantLedgerPortsFromEnv(this.env);
     }
-    return ports;
+    return this.portsCache;
+  }
+
+  /**
+   * Permanently bind this DO instance to the first authenticated customer id.
+   * Rejects a later request that presents a different header value (including after isolate restart).
+   */
+  private assertCustomerBinding(customerId: string): void {
+    const db = createDoSqlDatabase(this.ctx.storage);
+    initMerchantSchema(db);
+    db.transaction(() => {
+      const row = db
+        .exec("SELECT value FROM merchant_do_meta WHERE key = ?", BOUND_CUSTOMER_KEY)
+        .one();
+      if (!row) {
+        db.exec(
+          "INSERT INTO merchant_do_meta VALUES (?, ?)",
+          BOUND_CUSTOMER_KEY,
+          customerId,
+        );
+        return;
+      }
+      if ((row.value as string) !== customerId) {
+        throw new Error("customer_binding_mismatch");
+      }
+    });
   }
 
   private ledgerFor(customerId: string) {
@@ -65,6 +89,13 @@ export class CustomerMerchantLedger extends DurableObject<MerchantLedgerEnv> {
     return this.ledger;
   }
 
+  private hostSecretMatches(request: Request): boolean {
+    const configured = readHostInternalSecret(this.env);
+    if (!configured) return false;
+    const presented = request.headers.get(MERCHANT_HOST_INTERNAL_SECRET_HEADER);
+    return presented !== null && presented.length > 0 && presented === configured;
+  }
+
   async fetch(request: Request): Promise<Response> {
     if (request.method !== "POST") {
       return new Response(null, { status: 405 });
@@ -76,8 +107,7 @@ export class CustomerMerchantLedger extends DurableObject<MerchantLedgerEnv> {
         headers: { "content-type": "application/json" },
       });
     }
-    // Internal RPC only: the Worker must authenticate identity before forwarding actors.
-    // Customer approval is never accepted on this surface; the host calls ledger.injectCustomerApproval.
+
     let body: RpcBody;
     try {
       body = (await request.json()) as RpcBody;
@@ -87,16 +117,51 @@ export class CustomerMerchantLedger extends DurableObject<MerchantLedgerEnv> {
         headers: { "content-type": "application/json" },
       });
     }
+
+    try {
+      this.assertCustomerBinding(customerId);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "customer_binding_mismatch";
+      return Response.json({ error: message }, { status: 403 });
+    }
+
+  // Raw JSON actors are not authenticated on this surface; Worker must verify identity before forward.
     if ((body as { op?: string }).op === "injectCustomerApproval") {
       return new Response(
         JSON.stringify({
           error: "customer_approval_host_only",
           detail:
-            "Approval must be injected by the authenticated Worker via createTrustedMerchantHost after independent proof; never from raw DO fetch.",
+            "Approval must be injected by the authenticated Worker via hostInjectCustomerApproval after independent proof; never from raw DO fetch actor JSON.",
         }),
         { status: 403, headers: { "content-type": "application/json" } },
       );
     }
+
+    if (body.op === "hostInjectCustomerApproval") {
+      if (!readHostInternalSecret(this.env)) {
+        return Response.json(
+          {
+            error: "customer_approval_host_unavailable",
+            detail:
+              "MERCHANT_HOST_INTERNAL_SECRET is not configured; host approval transport stays disabled (fail-closed).",
+          },
+          { status: 503 },
+        );
+      }
+      if (!this.hostSecretMatches(request)) {
+        return Response.json({ error: "host_internal_forbidden" }, { status: 403 });
+      }
+      const ledger = this.ledgerFor(customerId);
+      try {
+        const result = await ledger.injectCustomerApproval(body.quoteId, body.actor);
+        return Response.json(result);
+      } catch (error) {
+        const message = error instanceof Error ? error.message : "error";
+        const status = message === "not_found_or_forbidden" ? 403 : 409;
+        return Response.json({ error: message }, { status });
+      }
+    }
+
     const ledger = this.ledgerFor(customerId);
     try {
       let result: unknown;

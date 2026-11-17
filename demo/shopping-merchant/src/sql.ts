@@ -47,6 +47,10 @@ CREATE TABLE IF NOT EXISTS checkout_executions (
   status TEXT NOT NULL,
   provider_key TEXT NOT NULL UNIQUE,
   order_data TEXT
+);
+CREATE TABLE IF NOT EXISTS merchant_do_meta (
+  key TEXT PRIMARY KEY NOT NULL,
+  value TEXT NOT NULL
 );`;
 
 export function initMerchantSchema(db: SqlDatabase): void {

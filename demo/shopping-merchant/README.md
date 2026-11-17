@@ -30,7 +30,11 @@ Production routing should use `env.MERCHANT_LEDGER.idFromName(customerId)` so ea
 
 **Hard prerequisite:** identity and approval proof are established in the Worker (Auth0 / Task Authority / passkey, etc.). A shared secret header alone does not prove customer approval. The DO rejects `injectCustomerApproval` RPC; only the Worker-side trusted host may call `ledger.injectCustomerApproval` after `verifyCustomerApproval`.
 
-Port implementations (`customerAccount`, `verifyCustomerApproval`, `orderProvider`) cannot be Wrangler `env` bindings (they are functions). The Worker entry module must call `registerMerchantLedgerPorts(...)` at startup, wiring env-backed service fetches into those ports. Do not pass port objects from untrusted request bodies.
+Port implementations (`customerAccount`, `verifyCustomerApproval`, `orderProvider`) cannot be Wrangler `env` bindings (they are functions). **`registerMerchantLedgerPorts` is not used** — each Durable Object isolate must build ports from `env` inside `merchantLedgerPortsFromEnv` (see `src/port-env.ts`), typically wiring service bindings to fetch external account/payment adapters. Do not register ports from `default.fetch` in the Worker only; that does not propagate into the DO isolate.
+
+The DO `fetch` RPC is **internal**: JSON `actor` fields are shape-checked only and **cannot authenticate** callers. The Worker must verify identity before forwarding. A mis-exposed DO stub remains unsafe without that Worker gate.
+
+Host-only approval into DO state uses `hostInjectCustomerApproval` with `MERCHANT_HOST_INTERNAL_SECRET` (transport gate only — **not** customer proof). The DO still runs `verifyCustomerApproval` before recording approval. If `MERCHANT_HOST_INTERNAL_SECRET` is unset, that transport stays **disabled (503 fail-closed)** rather than trusting headers alone. Wire Auth0 / Task Authority into `verifyCustomerApproval` before exposing this in production.
 
 ## Remaining integration work
 
