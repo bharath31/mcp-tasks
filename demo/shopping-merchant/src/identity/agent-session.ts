@@ -36,6 +36,10 @@ export type AgentSessionStore = {
 };
 
 export type AgentSessionService = {
+  /**
+   * Trusted-server-only: `customer` must come from {@link verifyCustomerAccessToken}, not client JSON.
+   * Not exposed on routes that accept arbitrary actor bodies.
+   */
   grantSession(
     customer: HumanActor,
   ): Promise<
@@ -56,6 +60,11 @@ export type AgentSessionOptions = {
 
 const DEFAULT_TTL_MS = 8 * 60 * 60 * 1000;
 const BEARER_PREFIX = "nsh_";
+const MIN_BEARER_LEN = BEARER_PREFIX.length + 16;
+const MAX_BEARER_LEN = 512;
+
+const nonempty = (value: unknown): value is string =>
+  typeof value === "string" && value.length > 0;
 
 function assertHumanCustomer(customer: HumanActor): boolean {
   return (
@@ -84,6 +93,36 @@ function randomOpaque(): string {
     .replace(/\//g, "_")
     .replace(/=+$/, "");
   return `${BEARER_PREFIX}${b64}`;
+}
+
+function grantScopesAllowed(scopes: unknown): scopes is string[] {
+  if (!Array.isArray(scopes) || scopes.length !== AGENT_SESSION_SCOPES.length) {
+    return false;
+  }
+  const allowed = new Set<string>(AGENT_SESSION_SCOPES);
+  return scopes.every(
+    (s) => typeof s === "string" && s.length > 0 && allowed.has(s),
+  );
+}
+
+function storedGrantValid(
+  grant: AgentSessionGrant,
+  merchantAgentId: string,
+  nowMs: number,
+): boolean {
+  if (grant.revokedAtMs !== null) return false;
+  if (!Number.isFinite(grant.expiresAtMs) || grant.expiresAtMs <= nowMs) {
+    return false;
+  }
+  if (grant.agentId !== merchantAgentId) return false;
+  if (
+    !nonempty(grant.sessionId) ||
+    !nonempty(grant.pairwiseUserId) ||
+    !nonempty(grant.customerId)
+  ) {
+    return false;
+  }
+  return grantScopesAllowed(grant.scopes);
 }
 
 function grantToAgentActor(grant: AgentSessionGrant): AgentActor {
@@ -131,12 +170,19 @@ export function createAgentSessionService(
     },
 
     async verifyBearer(bearer) {
-      if (!bearer?.startsWith(BEARER_PREFIX)) return null;
+      if (
+        typeof bearer !== "string" ||
+        !bearer.startsWith(BEARER_PREFIX) ||
+        bearer.length < MIN_BEARER_LEN ||
+        bearer.length > MAX_BEARER_LEN
+      ) {
+        return null;
+      }
       const hash = await hashBearer(bearer);
       const grant = await store.get(hash);
-      if (!grant) return null;
-      if (grant.revokedAtMs !== null) return null;
-      if (grant.expiresAtMs <= now()) return null;
+      if (!grant || !storedGrantValid(grant, merchantAgentId, now())) {
+        return null;
+      }
       return grantToAgentActor(grant);
     },
 
@@ -146,12 +192,4 @@ export function createAgentSessionService(
       return store.revoke(hash);
     },
   };
-}
-
-/**
- * Reject caller-supplied agent JSON: only values produced by {@link verifyBearer}
- * may be forwarded to the merchant ledger as a {@link TrustedActor}.
- */
-export function rejectUntrustedAgentActor(_actor: unknown): null {
-  return null;
 }

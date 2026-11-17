@@ -5,6 +5,8 @@ import {
   createAgentSessionService,
   verifyCustomerAccessToken,
   verifiedCustomerAsHumanActor,
+  type AgentSessionGrant,
+  type AgentSessionStore,
 } from "../src/identity/index.js";
 import { createMemoryAgentSessionStore } from "./support/memory-agent-session-store.js";
 import {
@@ -55,6 +57,7 @@ test("grantSession ignores caller actor JSON and binds server ids + fixed scopes
     "missing bounded capabilities",
   );
   assert.ok(!(actor.scopes as string[]).includes("orders:read"));
+  assert.ok(!(actor.scopes as string[]).includes("order:execute"));
 });
 
 test("verifyBearer fails closed on expiry, revocation, and tampering", async () => {
@@ -90,6 +93,36 @@ test("cross-customer: grant for one customer cannot authorize another", async ()
   assert.ok(actor && actor.kind === "agent");
   assert.notEqual(actor!.customerId, "other-customer");
   assert.equal(actor!.customerId, TEST_CUSTOMER);
+});
+
+test("verifyBearer fails closed on corrupt stored grant scopes", async () => {
+  let stored: AgentSessionGrant | undefined;
+  const store: AgentSessionStore = {
+    async put(_hash: string, grant: AgentSessionGrant) {
+      stored = { ...grant };
+      return true;
+    },
+    async get() {
+      return stored ?? null;
+    },
+    async revoke() {
+      return false;
+    },
+  };
+  const sessions = createAgentSessionService({
+    store,
+    merchantAgentId: MERCHANT_AGENT,
+    ttlMs: 60_000,
+  });
+  const granted = await sessions.grantSession(await verifiedHuman());
+  assert.equal(granted.ok, true);
+  if (!granted.ok) return;
+  assert.ok(await sessions.verifyBearer(granted.bearer));
+  stored = {
+    ...stored!,
+    scopes: [...AGENT_SESSION_SCOPES, "order:execute"],
+  };
+  assert.equal(await sessions.verifyBearer(granted.bearer), null);
 });
 
 test("grantSession requires verified human actor shape", async () => {

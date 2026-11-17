@@ -88,6 +88,25 @@ test("rejects machine tokens and unconfigured verifier", async () => {
   assert.equal(await verifyCustomerAccessToken({}, token, deps), null);
 });
 
+test("rejects empty sub claim", async () => {
+  const jwks = await shoppingTestJwks();
+  const token = await mintCustomerAccessToken({ sub: "" });
+  assert.equal(
+    await verifyCustomerAccessToken(testShoppingEnv, token, {
+      testVerifyKey: jwks,
+    }),
+    null,
+  );
+});
+
+test("customerBearerToken rejects oversize bearer tokens", () => {
+  const huge = "x".repeat(20_000);
+  const req = new Request("https://shop.example", {
+    headers: { authorization: `Bearer ${huge}` },
+  });
+  assert.equal(customerBearerToken(req), null);
+});
+
 test("customerBearerToken reads Authorization bearer only", () => {
   const ok = new Request("https://shop.example", {
     headers: { authorization: `Bearer tok-${TEST_CUSTOMER}` },

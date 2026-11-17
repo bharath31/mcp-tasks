@@ -16,7 +16,7 @@ const agent = {
   agentId: "agent-a",
   pairwiseUserId: "user-u",
   sessionId: "session-s",
-  scopes: ["cart:write", "checkout:write", "addresses:read"],
+  scopes: ["cart:write", "checkout:write", "addresses:read", "order:execute"],
 };
 const human = { kind: "human", customerId: CUSTOMER, scopes: [] as string[] };
 

@@ -15,7 +15,6 @@ export {
 export {
   AGENT_SESSION_SCOPES,
   createAgentSessionService,
-  rejectUntrustedAgentActor,
   type AgentSessionGrant,
   type AgentSessionOptions,
   type AgentSessionService,

@@ -27,6 +27,7 @@ export type CustomerAccessTokenDeps = {
 };
 
 const jwksCache = new Map<string, ReturnType<typeof createRemoteJWKSet>>();
+const MAX_ACCESS_TOKEN_LEN = 16_384;
 
 function parseScopes(scopeClaim: unknown): string[] | null {
   if (typeof scopeClaim !== "string" || !scopeClaim.trim()) return null;
@@ -51,8 +52,17 @@ function remoteJwks(domain: string) {
 }
 
 /** Extract a Bearer access token; does not validate. */
-export const customerBearerToken = (req: Request) =>
-  req.headers.get("authorization")?.match(/^Bearer (\S+)$/)?.[1] ?? null;
+export const customerBearerToken = (req: Request) => {
+  const token = req.headers.get("authorization")?.match(/^Bearer (\S+)$/)?.[1];
+  if (
+    !token ||
+    token.length === 0 ||
+    token.length > MAX_ACCESS_TOKEN_LEN
+  ) {
+    return null;
+  }
+  return token;
+};
 
 /**
  * Verify an Auth0 **access** token for the shopping API audience.
@@ -65,7 +75,14 @@ export async function verifyCustomerAccessToken(
   token: string,
   deps: CustomerAccessTokenDeps = {},
 ): Promise<VerifiedCustomer | null> {
-  if (!shoppingIdentityConfigured(env) || !token?.trim()) return null;
+  if (
+    !shoppingIdentityConfigured(env) ||
+    typeof token !== "string" ||
+    token.length === 0 ||
+    token.length > MAX_ACCESS_TOKEN_LEN
+  ) {
+    return null;
+  }
   const issuer = shoppingIssuer(env.SHOPPING_AUTH0_DOMAIN);
   const audience = env.SHOPPING_API_AUDIENCE;
   const key: JWTVerifyGetKey =
@@ -77,8 +94,10 @@ export async function verifyCustomerAccessToken(
       algorithms: ["RS256", "ES256", "PS256"],
       requiredClaims: ["sub", "exp", "iat"],
     });
-    const sub = String(payload.sub);
-    if (!sub || isMachineSubject(sub, payload)) return null;
+    const sub = payload.sub;
+    if (typeof sub !== "string" || sub.length === 0 || isMachineSubject(sub, payload)) {
+      return null;
+    }
     const scopes = parseScopes(payload.scope);
     if (!scopes || !scopes.includes(SHOPPING_CUSTOMER_SCOPE)) return null;
     return { customerId: sub, scopes, payload };
