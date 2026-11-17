@@ -8,13 +8,13 @@ import { handleTestMintAgentCap } from "./mint-agent-cap.js";
 import { handleTestRevokeAgentCap } from "./revoke-agent-cap.js";
 import { handleTestSeedSession } from "./seed-session.js";
 import { httpAgentCapabilityPortsFactory } from "./http-capability-ports.js";
-
 const HTTP_CAPABILITY_API_ORIGIN = "http://localhost:8787";
 
 const appPromise = shoppingTestJwks().then((jwks) =>
   createShoppingApp({
     testVerifyKey: jwks,
     agentPorts: httpAgentCapabilityPortsFactory(HTTP_CAPABILITY_API_ORIGIN),
+    awaitAgentRunInRequest: true,
   }),
 );
 

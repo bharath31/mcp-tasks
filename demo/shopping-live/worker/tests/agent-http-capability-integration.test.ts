@@ -21,7 +21,7 @@ after(async () => {
   await harness.mf.dispose();
 });
 
-// Browser UI / Puppeteer not exercised; capability cookie → agent-browser HTTP → ledger.
+// In-worker HTTP ports only (not Cloudflare Browser Run). Storefront Chromium coverage: web/tests/browser-agent-capability.test.ts
 test("agent start with HTTP capability ports updates customer cart", async () => {
   const { cookie, csrf } = await harness.login(TEST_CUSTOMER);
   const start = await apiJson<{ id?: string }>(harness.mf, "/api/agent/start", {

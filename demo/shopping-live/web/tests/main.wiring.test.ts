@@ -8,8 +8,10 @@ const mainSrc = readFileSync(
   "utf8",
 );
 
-test("main wires add-to-cart through cart items API", () => {
+test("main wires add-to-cart through session or agent-browser cart API", () => {
   assert.match(mainSrc, /shoppingApi\.addCartItem/);
+  assert.match(mainSrc, /shoppingApi\.agentBrowserAddCartItem/);
+  assert.match(mainSrc, /ui\.agentBrowserCart/);
   assert.match(mainSrc, /addToCart\(p\.id\)/);
 });
 

@@ -9,8 +9,10 @@ import {
   TEST_DOMAIN,
 } from "../../../../shopping-merchant/tests/support/identity-jwt.js";
 import type { JWTVerifyGetKey } from "jose";
+import { createStaticAssetsFetcher } from "./static-assets.js";
 
 const here = dirname(fileURLToPath(import.meta.url));
+const webDistDir = join(here, "../../../web/dist");
 const puppeteerStubPath = join(here, "puppeteer-stub.ts");
 
 function puppeteerStubPlugin(): import("esbuild").Plugin {
@@ -107,6 +109,10 @@ export async function startHarness(options?: {
   bindings?: Record<string, string>;
   workerEntry?: string;
   selfSubfetch?: boolean;
+  /** Serve built shopping-live web dist through the Worker ASSETS binding. */
+  serveAssets?: boolean;
+  /** Align mutation CSRF origin checks with HTTPS merchant storefront (local Chromium). */
+  secureStorefrontOrigin?: boolean;
 }): Promise<Harness> {
   const script = await buildShoppingWorker({
     merchantDo: options?.merchantDo,
@@ -125,14 +131,15 @@ export async function startHarness(options?: {
       SHOPPING_AUTH0_CLIENT_ID: "test-client",
       SHOPPING_AUTH0_CLIENT_SECRET: "test-secret",
       SHOPPING_SESSION_SECRET: SESSION_SECRET,
-      SHOPPING_PUBLIC_ORIGIN: ORIGIN,
+      SHOPPING_PUBLIC_ORIGIN: options?.secureStorefrontOrigin
+        ? MERCHANT_ORIGIN
+        : ORIGIN,
       SHOPPING_MERCHANT_SHIPPING_ADDRESS_ID: "merchant-default",
       SHOPPING_BROWSER_AGENT_ID: "browser-shopping",
       SHOPPING_MERCHANT_WALLET_MODE: "simulated",
       SHOPPING_MERCHANT_WALLET_LABEL: "Stillroom wallet",
       SHOPPING_MERCHANT_DISPLAY_NAME: "Stillroom",
       MERCHANT_ORIGIN,
-      SHOPPING_AGENT_AWAIT_RUN: "1",
       AI: {},
       BROWSER: {},
       ...options?.bindings,
@@ -157,8 +164,14 @@ export async function startHarness(options?: {
   }
   if (options?.selfSubfetch) {
     (worker.bindings as Record<string, unknown>).SELF_SUBFETCH = {};
-    serviceBindings.SELF_SUBFETCH = (request: Request) =>
-      runtime.mf!.dispatchFetch(request.url, request);
+    serviceBindings.SELF_SUBFETCH = ((request: Request) =>
+      runtime.mf!.dispatchFetch(request.url, request as never)) as never;
+  }
+  if (options?.serveAssets) {
+    (worker.bindings as Record<string, unknown>).ASSETS = {};
+    const serveAssets = createStaticAssetsFetcher(webDistDir);
+    serviceBindings.ASSETS = ((request: Request) =>
+      serveAssets(request)) as never;
   }
   if (Object.keys(serviceBindings).length > 0) {
     worker.serviceBindings = serviceBindings;

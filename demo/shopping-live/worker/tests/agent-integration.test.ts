@@ -66,8 +66,19 @@ test("authenticated agent start persists sanitized run events (orchestration-onl
   assert.doesNotMatch(blob, /nsh_agent_cap/i);
 });
 
-test("agent-browser capability adds to same customer cart", async () => {
+test("agent-browser capability merges with existing session cart", async () => {
   const { cookie, csrf } = await harness.login();
+  const seed = await apiJson(harness.mf, "/api/cart/items", {
+    method: "POST",
+    headers: {
+      "content-type": "application/json",
+      origin: ORIGIN,
+      "x-nominee-csrf": csrf,
+    },
+    cookie,
+    body: JSON.stringify({ productId: "cup", quantity: 1 }),
+  });
+  assert.equal(seed.status, 200);
   const cap = await harness.mintAgentCap(TEST_CUSTOMER, csrf);
   const add = await apiJson(harness.mf, "/api/agent-browser/cart/items", {
     method: "POST",
@@ -85,5 +96,7 @@ test("agent-browser capability adds to same customer cart", async () => {
     "/api/cart",
     { cookie },
   );
-  assert.ok((cart.body.cart?.items ?? []).some((i) => i.productId === "tray"));
+  const ids = (cart.body.cart?.items ?? []).map((i) => i.productId);
+  assert.ok(ids.includes("cup"));
+  assert.ok(ids.includes("tray"));
 });

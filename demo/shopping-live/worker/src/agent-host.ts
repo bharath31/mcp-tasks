@@ -26,6 +26,8 @@ import type { AuthenticatedCustomer } from "./session.js";
 
 export type AgentHostDeps = CustomerAccessTokenDeps & {
   agentPorts?: RunPortsFactory;
+  /** Test harness only — run agent work before returning (avoids waitUntil drain deadlocks in Miniflare). */
+  awaitAgentRunInRequest?: boolean;
 };
 
 export function agentIntegrationConfigured(
@@ -167,7 +169,7 @@ export async function handleAgentStart(
       );
     }
   };
-  if (env.SHOPPING_AGENT_AWAIT_RUN === "1") {
+  if (deps.awaitAgentRunInRequest) {
     await runExecution();
   } else {
     ctx.waitUntil(runExecution());

@@ -8,9 +8,12 @@ import { handleTestMintAgentCap } from "./mint-agent-cap.js";
 import { handleTestRevokeAgentCap } from "./revoke-agent-cap.js";
 import { handleTestSeedSession } from "./seed-session.js";
 import { harnessAgentPorts } from "./test-agent-ports.js";
-
 const appPromise = shoppingTestJwks().then((jwks) =>
-  createShoppingApp({ testVerifyKey: jwks, agentPorts: harnessAgentPorts }),
+  createShoppingApp({
+    testVerifyKey: jwks,
+    agentPorts: harnessAgentPorts,
+    awaitAgentRunInRequest: true,
+  }),
 );
 
 export { CustomerHostState, CustomerMerchantLedger, ShoppingAgentRunState };

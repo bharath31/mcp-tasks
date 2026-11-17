@@ -28,8 +28,6 @@ export type ShoppingLiveEnv = MerchantLedgerEnv &
     SHOPPING_MERCHANT_WALLET_LABEL?: string;
     /** Fail-closed unless explicitly enabled by operator after live Guardian confirmation. */
     SHOPPING_GUARDIAN_EXECUTE_ENABLED?: string;
-    /** Test harness: await agent execution in-request instead of waitUntil. */
-    SHOPPING_AGENT_AWAIT_RUN?: string;
     /** Test harness only — loopback fetcher for in-worker agent-browser HTTP. */
     SELF_SUBFETCH?: Fetcher;
   };

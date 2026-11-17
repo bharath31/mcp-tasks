@@ -1,5 +1,5 @@
 /**
- * Host integration contract for demo/shopping-live/worker (wired later; not edited in this slice).
+ * Host integration contract for demo/shopping-live/worker (see shopping-live/worker/wrangler.jsonc).
  */
 
 export const WRANGLER_AGENT_RUN_SNIPPET = `{
@@ -42,13 +42,15 @@ export const HOST_HTTP_CONTRACT = {
     response: "PublicAgentRun",
     notes: [
       "Resolve ownerId from session, then AGENT_RUNS.idFromName(ownerId).",
+      "Poll requires the same parent customer session (innerSid) that started the run.",
       "Cross-customer polling returns 404 (DO owner binding), not another user's run.",
     ],
   },
 } as const;
 
 export const UNIMPLEMENTED_HOST_CONSTRAINTS = [
-  "Agent browser cart access uses host-minted capability cookies (see shopping-live worker); never customer session/JWT.",
+  "Agent browser cart access uses host-minted capability cookies (Path=/api/agent-browser); never customer session/JWT.",
+  "Storefront agent mode calls /api/agent-browser/* (not /api/cart/*) when only the capability cookie is present.",
   "No Guardian approval, quote execution, or order placement in this orchestration slice.",
-  "Production Workers AI and Browser Run calls require deployed bindings; CI uses injectable ports only.",
+  "Production Workers AI and Browser Run calls require deployed bindings; CI uses injectable ports and local Chromium proofs.",
 ] as const;
