@@ -12,6 +12,7 @@ import { REQUEST_INTERCEPTION_LIMITS } from "./guard.js";
 import type {
   BrowserLauncher,
   BrowserSessionPort,
+  HostActionResult,
   ModelMessage,
   ModelPort,
 } from "./ports.js";
@@ -19,7 +20,9 @@ import { safeEvent, type ShoppingAgentEvent } from "./events.js";
 import { redactText } from "./redact.js";
 import {
   assertWithinBudget,
+  boundBrowserClose,
   discardLateBrowserSession,
+  discardLateHostAction,
   discardLateModelRun,
   raceWithSessionBudget,
   SessionBudgetExceededError,
@@ -209,7 +212,16 @@ export async function runShoppingAgent(opts: {
           status = "budget_exhausted";
           break;
         }
-        const result = await executeHostAction(config, browser, action);
+        const actionWork = executeHostAction(config, browser, action);
+        let result: HostActionResult;
+        try {
+          result = await raceWithSessionBudget(budget, actionWork);
+        } catch (e) {
+          if (e instanceof SessionBudgetExceededError) {
+            discardLateHostAction(actionWork);
+          }
+          throw e;
+        }
         emit({
           type: "host_action",
           action,
@@ -255,11 +267,7 @@ export async function runShoppingAgent(opts: {
     }
   } finally {
     if (browser) {
-      try {
-        await browser.close();
-      } catch {
-        /* ensure cleanup attempt */
-      }
+      await boundBrowserClose(budget, () => browser!.close());
     }
     emit({ type: "session_end", sessionId, reason: status });
   }

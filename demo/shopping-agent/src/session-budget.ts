@@ -85,3 +85,45 @@ export function discardLateBrowserSession(
 export function discardLateModelRun(run: Promise<unknown>): void {
   void run.catch(() => {});
 }
+
+/** Swallow a late host action after the host already stopped waiting. */
+export function discardLateHostAction(run: Promise<unknown>): void {
+  void run.catch(() => {});
+}
+
+/** Upper bound on how long the host waits for `browser.close()` after the session ends. */
+export const BROWSER_CLOSE_CLEANUP_CAP_MS = 5_000;
+
+/**
+ * Wait for browser shutdown once, without hanging past the cleanup cap.
+ * Does **not** cancel an in-flight close; a late `close()` may still run at the provider.
+ */
+export async function boundBrowserClose(
+  budget: SessionBudget,
+  close: () => Promise<void>,
+  cleanupCapMs = BROWSER_CLOSE_CLEANUP_CAP_MS,
+): Promise<void> {
+  const remaining = remainingBudgetMs(budget);
+  const waitMs =
+    budget.now() > budget.deadlineMs
+      ? cleanupCapMs
+      : Math.min(cleanupCapMs, Math.max(remaining, 1));
+
+  const work = close();
+  let timeoutId: ReturnType<typeof setTimeout> | undefined;
+  const timeout = new Promise<never>((_, reject) => {
+    timeoutId = setTimeout(
+      () => reject(new Error("browser close timed out")),
+      waitMs,
+    );
+  });
+
+  try {
+    await Promise.race([work, timeout]);
+  } catch {
+    /* bounded cleanup */
+  } finally {
+    if (timeoutId !== undefined) clearTimeout(timeoutId);
+    void work.catch(() => {});
+  }
+}

@@ -3,6 +3,7 @@ import test from "node:test";
 import { runShoppingAgent } from "../src/agent.js";
 import { shoppingAgentConfig } from "../src/config.js";
 import {
+  boundBrowserClose,
   capWaitMs,
   createSessionBudget,
   raceWithSessionBudget,
@@ -49,37 +50,112 @@ test("agent marks budget_exhausted when model call spans deadline", async () => 
   assert.equal(result.status, "budget_exhausted");
 });
 
-test("slow host step aborts with budget_exhausted (no dangling waits)", async () => {
+test("host action that never settles ends as budget_exhausted", async () => {
   const config = shoppingAgentConfig.parse({
     merchantOrigin: "https://shop.example.test",
     sessionTimeoutMs: 5_000,
     maxModelCalls: 2,
     maxHostSteps: 4,
   });
-  let now = 1000;
   const model = scriptedModel([
     {
       content: null,
       toolCalls: [{ id: "1", name: "view_catalog", arguments: "{}" }],
     },
+    {
+      content: "should not run",
+      toolCalls: [],
+    },
   ]);
-  class SlowBrowserSession extends FakeBrowserSession {
-    override async runHostAction(
-      _action: HostAction,
-    ): Promise<HostActionResult> {
-      now = 7000;
-      throw new SessionBudgetExceededError();
+  class HangActionBrowser extends FakeBrowserSession {
+    override runHostAction(_action: HostAction): Promise<HostActionResult> {
+      return new Promise(() => {});
     }
   }
+  const t0 = Date.now();
   const result = await runShoppingAgent({
     config,
     request: { goal: "catalog" },
     model,
-    launchBrowser: fakeBrowserLauncher((id) => new SlowBrowserSession(id)),
-    now: () => now,
-    sessionId: "budget-2",
+    launchBrowser: fakeBrowserLauncher((id) => new HangActionBrowser(id)),
+    sessionId: "budget-hang-action",
   });
   assert.equal(result.status, "budget_exhausted");
+  assert.equal(result.modelCalls, 1);
+  assert.equal(result.hostSteps, 1);
+  assert.ok(Date.now() - t0 < 6500);
+});
+
+test("late host action result is not applied and model is not called again", async () => {
+  const config = shoppingAgentConfig.parse({
+    merchantOrigin: "https://shop.example.test",
+    sessionTimeoutMs: 5_000,
+    maxModelCalls: 4,
+    maxHostSteps: 4,
+  });
+  let modelCalls = 0;
+  const model = {
+    async run() {
+      modelCalls++;
+      return {
+        content: null,
+        toolCalls: [{ id: "1", name: "view_catalog", arguments: "{}" }],
+      };
+    },
+    parseOutput: (raw: unknown) =>
+      raw as import("../src/ports.js").ParsedModelOutput,
+  };
+  class DelayedActionBrowser extends FakeBrowserSession {
+    override async runHostAction(
+      action: HostAction,
+    ): Promise<HostActionResult> {
+      await new Promise((r) => setTimeout(r, 8_000));
+      return super.runHostAction(action);
+    }
+  }
+  const hostOk: boolean[] = [];
+  const result = await runShoppingAgent({
+    config,
+    request: { goal: "catalog" },
+    model,
+    launchBrowser: fakeBrowserLauncher((id) => new DelayedActionBrowser(id)),
+    emit: (e) => {
+      if (e.type === "host_action") hostOk.push(e.ok);
+    },
+    sessionId: "budget-late-action",
+  });
+  assert.equal(result.status, "budget_exhausted");
+  assert.equal(modelCalls, 1);
+  assert.deepEqual(hostOk, []);
+});
+
+test("never-settling browser.close does not hang session teardown", async () => {
+  const config = shoppingAgentConfig.parse({
+    merchantOrigin: "https://shop.example.test",
+    sessionTimeoutMs: 120_000,
+    maxModelCalls: 2,
+  });
+  class HangCloseBrowser extends FakeBrowserSession {
+    override close(): Promise<void> {
+      return new Promise(() => {});
+    }
+  }
+  const model = {
+    async run() {
+      return { content: "done", toolCalls: [] };
+    },
+    parseOutput: () => ({ content: "done", toolCalls: [] }),
+  };
+  const t0 = Date.now();
+  const result = await runShoppingAgent({
+    config,
+    request: { goal: "quick" },
+    model,
+    launchBrowser: fakeBrowserLauncher((id) => new HangCloseBrowser(id)),
+    sessionId: "budget-hang-close",
+  });
+  assert.equal(result.status, "completed");
+  assert.ok(Date.now() - t0 < 6500);
 });
 
 test("agent budget_exhausted when model.run never settles", async () => {
@@ -160,4 +236,11 @@ test("raceWithSessionBudget rejects when work exceeds remaining budget", async (
       ),
     SessionBudgetExceededError,
   );
+});
+
+test("boundBrowserClose stops waiting when close never settles", async () => {
+  const budget = createSessionBudget(Date.now(), 120_000, Date.now);
+  const t0 = Date.now();
+  await boundBrowserClose(budget, () => new Promise<void>(() => {}), 50);
+  assert.ok(Date.now() - t0 < 500);
 });
