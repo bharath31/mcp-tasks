@@ -83,6 +83,24 @@ test("login redirects to Auth0 with PKCE challenge", async () => {
   assert.ok(cookieHeader(res, OAUTH_COOKIE));
 });
 
+test("login selects the configured Auth0 connection", async () => {
+  const configured = await startHarness({
+    bindings: { SHOPPING_AUTH0_CONNECTION: "email" },
+  });
+  try {
+    const res = await configured.mf.dispatchFetch(`${ORIGIN}/auth/login`, {
+      redirect: "manual",
+    });
+    assert.equal(res.status, 302);
+    assert.equal(
+      new URL(res.headers.get("location")!).searchParams.get("connection"),
+      "email",
+    );
+  } finally {
+    await configured.mf.dispose();
+  }
+});
+
 test("callback rejects forged oauth cookie", async () => {
   const res = await harness.mf.dispatchFetch(
     `${ORIGIN}/auth/callback?code=x&state=y`,

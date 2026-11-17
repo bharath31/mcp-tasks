@@ -76,6 +76,8 @@ export async function handleAuthLogin(
     "openid profile offline_access shopping:customer",
   );
   authorize.searchParams.set("audience", env.SHOPPING_API_AUDIENCE);
+  const connection = env.SHOPPING_AUTH0_CONNECTION?.trim();
+  if (connection) authorize.searchParams.set("connection", connection);
   authorize.searchParams.set("state", state);
   authorize.searchParams.set("code_challenge", challenge);
   authorize.searchParams.set("code_challenge_method", "S256");

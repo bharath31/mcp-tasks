@@ -21,6 +21,7 @@ Optional vars (see `wrangler.jsonc`):
 
 - `MERCHANT_ORIGIN` — **required** for agent runs and Browser Run capability cookies. Set to the deployed Worker HTTPS origin (`https://<worker>.<your-subdomain>.workers.dev`) or a custom domain such as `https://shopping.nominee.dev`. Do **not** use the invalid two-label placeholder `https://nominee-shopping-live.workers.dev` (omits the account subdomain). Agent runs stay **503** until this is set.
 - `SHOPPING_PUBLIC_ORIGIN` — canonical origin when the Worker sits behind multiple hostnames (defaults to request origin)
+- `SHOPPING_AUTH0_CONNECTION` — optional connection name to select during login, such as `email` for an enabled passwordless email connection
 - `SHOPPING_MERCHANT_SHIPPING_ADDRESS_ID` — merchant-owned simulated destination id (must exist in the account port)
 - `SHOPPING_BROWSER_AGENT_ID` — server-assigned agent id for human browser carts (not client-supplied)
 - `SHOPPING_MERCHANT_WALLET_MODE` / `LABEL` — reported to the UI in `/api/session`

@@ -18,6 +18,7 @@ export type ShoppingLiveEnv = MerchantLedgerEnv &
     AGENT_RUNS?: DurableObjectNamespace;
     SHOPPING_AUTH0_CLIENT_ID?: string;
     SHOPPING_AUTH0_CLIENT_SECRET?: string;
+    SHOPPING_AUTH0_CONNECTION?: string;
     SHOPPING_SESSION_SECRET?: string;
     SHOPPING_PUBLIC_ORIGIN?: string;
     SHOPPING_BROWSER_AGENT_ID?: string;
