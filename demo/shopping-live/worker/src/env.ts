@@ -4,6 +4,7 @@ import type { MerchantLedgerEnv } from "../../../shopping-merchant/src/port-env.
 export type ShoppingLiveEnv = MerchantLedgerEnv &
   ShoppingIdentityEnv & {
     ASSETS: Fetcher;
+    MERCHANT_LEDGER?: DurableObjectNamespace;
     CUSTOMER_STATE: DurableObjectNamespace;
     SHOPPING_AUTH0_CLIENT_ID?: string;
     SHOPPING_AUTH0_CLIENT_SECRET?: string;

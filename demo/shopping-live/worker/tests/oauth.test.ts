@@ -12,12 +12,13 @@ import {
   apiJson,
   buildProductionWorkerBundle,
   startHarness,
+  type DispatchResponse,
   type Harness,
 } from "./support/harness.js";
 
 let harness: Harness;
 
-function cookieHeader(res: Response, name: string): string | undefined {
+function cookieHeader(res: DispatchResponse, name: string): string | undefined {
   const raw = res.headers.getSetCookie?.() ?? [];
   const joined =
     raw.length > 0

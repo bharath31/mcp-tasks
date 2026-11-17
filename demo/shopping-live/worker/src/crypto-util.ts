@@ -78,6 +78,11 @@ export async function verifySignedValue(
   } catch {
     return null;
   }
-  const ok = await crypto.subtle.verify("HMAC", key, sigBytes, bodyBytes);
+  const ok = await crypto.subtle.verify(
+    "HMAC",
+    key,
+    sigBytes as BufferSource,
+    bodyBytes as BufferSource,
+  );
   return ok ? payload : null;
 }

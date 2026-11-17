@@ -61,6 +61,8 @@ export async function buildProductionWorkerBundle(): Promise<{
   };
 }
 
+export type DispatchResponse = Awaited<ReturnType<Miniflare["dispatchFetch"]>>;
+
 export type OutboundHandler = (
   request: Request,
   miniflare: Miniflare,
@@ -112,7 +114,7 @@ export async function startHarness(options?: {
       ...first.dev,
       outboundService: {
         type: "fetcher",
-        handler: options.outbound,
+        handler: options.outbound as never,
       },
     };
   }
@@ -135,7 +137,7 @@ export async function startHarness(options?: {
   return { mf, jwks, login };
 }
 
-export function assertOk(res: Response): void {
+export function assertOk(res: DispatchResponse): void {
   if (!res.ok) {
     throw new Error(`unexpected status ${res.status}: ${res.statusText}`);
   }
@@ -149,10 +151,16 @@ export async function apiJson<T>(
   const headers = new Headers(init.headers);
   headers.set("accept", "application/json");
   if (init.cookie) headers.set("cookie", init.cookie);
-  const res = await mf.dispatchFetch(`${ORIGIN}${path}`, {
-    ...init,
-    headers,
-  });
+  const fetchInit: RequestInit = {
+    method: init.method,
+    redirect: init.redirect,
+    headers: Object.fromEntries(headers.entries()),
+  };
+  if (init.body != null) fetchInit.body = init.body;
+  const res = await mf.dispatchFetch(
+    `${ORIGIN}${path}`,
+    fetchInit as Parameters<Miniflare["dispatchFetch"]>[1],
+  );
   let body: T;
   try {
     body = (await res.json()) as T;

@@ -79,6 +79,8 @@ jobs:
       - run: npm --prefix demo/shopping-agent test
       - run: npm --prefix demo/shopping-live/web run build
       - run: npm --prefix demo/shopping-live/web test
+      - run: npm --prefix demo/shopping-live/worker run build
+      - run: npm --prefix demo/shopping-live/worker run typecheck:tests
       - run: npm --prefix examples/storefront exec -- playwright-core install --with-deps chromium
       - name: Fixture browser smoke (actual local backend)
         run: |

@@ -150,9 +150,10 @@ export async function addCartItem(
   const cart = (await current.json()) as Cart;
   const items = [...cart.items];
   const idx = items.findIndex((i) => i.productId === productId);
-  if (idx >= 0)
-    items[idx] = { ...items[idx], quantity: items[idx].quantity + quantity };
-  else {
+  if (idx >= 0) {
+    const existing = items[idx]!;
+    items[idx] = { ...existing, quantity: existing.quantity + quantity };
+  } else {
     items.push({
       productId: product.id,
       quantity,
