@@ -29,6 +29,9 @@ const nonempty = (value: unknown): value is string =>
 
 const QUOTE_TTL_MS = 15 * 60 * 1000;
 
+/** Required on agent actors for executeQuote / reconcileQuote; never granted to bounded sessions. */
+export const ORDER_EXECUTE_SCOPE = "order:execute";
+
 export function validateActor(actor: TrustedActor): void {
   if (
     !actor ||
@@ -111,10 +114,16 @@ export function createMerchantLedger(
     }
   }
 
-  /** Commerce parity: agent-bound carts may only be executed by the agent principal. */
+  /**
+   * Checkout execution is separate from quote capability: agents need {@link ORDER_EXECUTE_SCOPE},
+   * which bounded agent sessions intentionally omit.
+   */
   function executionActor(cartRow: SqlRow, actor: TrustedActor): void {
-    quoteActor(actor);
+    validateActor(actor);
     authorizeCart(cartRow, actor, false);
+    if (actor.kind === "agent" && !actor.scopes.includes(ORDER_EXECUTE_SCOPE)) {
+      fail();
+    }
     if (cartRow.agent_id && actor.kind !== "agent") fail();
   }
 

@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { DatabaseSync } from "node:sqlite";
 import { test } from "node:test";
+import { AGENT_SESSION_SCOPES } from "../src/identity/index.js";
 import { createMerchantLedger } from "../src/ledger.js";
 import { createTrustedMerchantHost } from "../src/host.js";
 import { createNodeSqlDatabase } from "../src/sql.js";
@@ -18,7 +19,7 @@ const agent: AgentActor = {
   agentId: "agent-a",
   pairwiseUserId: "user-u",
   sessionId: "session-s",
-  scopes: ["cart:write", "checkout:write", "addresses:read"],
+  scopes: ["cart:write", "checkout:write", "addresses:read", "order:execute"],
 };
 const human: HumanActor = { kind: "human", customerId: CUSTOMER, scopes: [] };
 const otherHuman: HumanActor = {
@@ -227,7 +228,7 @@ test("malformed agent principal is rejected on every surface", async () => {
     agentId: "agent-a",
     pairwiseUserId: "user-u",
     sessionId: "",
-    scopes: ["cart:write", "checkout:write", "addresses:read"],
+    scopes: ["cart:write", "checkout:write", "addresses:read", "order:execute"],
   };
   assert.throws(
     () => ledger.readCart(cart.id, badAgent),
@@ -275,6 +276,35 @@ test("async interleave: cart mutation during execute claim surfaces stale quote"
     { productId: "mug", quantity: 2, priceMinor: 1800, currency: "USD" },
   ]);
   await assert.rejects(executeP, /stale_quote/);
+  db.close();
+});
+
+test("bounded session scopes: cart and quote allowed; execute and reconcile require order:execute", async () => {
+  const { ledger, approval, host, db } = memoryLedger();
+  const sessionAgent: AgentActor = {
+    kind: "agent",
+    customerId: CUSTOMER,
+    agentId: "agent-a",
+    pairwiseUserId: "user-u",
+    sessionId: "bounded-session",
+    scopes: [...AGENT_SESSION_SCOPES],
+  };
+  assert.ok(!sessionAgent.scopes.includes("order:execute"));
+  const cart = ledger.createCart(sessionAgent);
+  ledger.updateCart(cart.id, sessionAgent, [
+    { productId: "mug", quantity: 1, priceMinor: 1800, currency: "USD" },
+  ]);
+  const quote = await ledger.createQuote(cart.id, sessionAgent, "fixture-home");
+  approval.approveForTest(quote);
+  await host.injectCustomerApproval(quote.id, human);
+  await assert.rejects(
+    ledger.executeQuote(quote.id, sessionAgent),
+    /not_found_or_forbidden/,
+  );
+  await assert.rejects(
+    ledger.reconcileQuote(quote.id, sessionAgent),
+    /not_found_or_forbidden/,
+  );
   db.close();
 });
 

@@ -1,0 +1,235 @@
+import type { AgentActor, HumanActor, TrustedActor } from "../types.js";
+import { SHOPPING_CUSTOMER_SCOPE } from "./config.js";
+
+/** Capabilities granted to bounded shopping agent sessions (no approval or execution). */
+export const AGENT_SESSION_SCOPES = [
+  "cart:write",
+  "checkout:write",
+  "addresses:read",
+] as const;
+
+export type AgentSessionGrant = {
+  sessionId: string;
+  agentId: string;
+  pairwiseUserId: string;
+  customerId: string;
+  scopes: readonly string[];
+  expiresAtMs: number;
+  revokedAtMs: number | null;
+};
+
+/**
+ * Durable storage for agent session grants, keyed by SHA-256 hash of the opaque bearer.
+ *
+ * **Atomicity expectations (callers must not assume more than the implementation provides):**
+ * - `put` must reject duplicate hashes (collision) without overwriting an existing grant.
+ * - `revoke` must be idempotent: revoking an unknown or already-revoked hash returns false.
+ * - `get` after a successful `revoke` must return a grant with `revokedAtMs` set (or null if deleted).
+ *
+ * A Durable Object with a single-threaded isolate can satisfy these within one object.
+ * Cross-request instant revocation is **not** guaranteed globally: the host must re-verify
+ * the bearer on every merchant call; delayed revocation may still allow one in-flight request.
+ */
+export type AgentSessionStore = {
+  put(hash: string, grant: AgentSessionGrant): Promise<boolean>;
+  get(hash: string): Promise<AgentSessionGrant | null>;
+  revoke(hash: string): Promise<boolean>;
+};
+
+export type AgentSessionService = {
+  /**
+   * Trusted-server-only: `customer` must come from {@link verifyCustomerAccessToken}, not client JSON.
+   * Not exposed on routes that accept arbitrary actor bodies.
+   */
+  grantSession(
+    customer: HumanActor,
+  ): Promise<
+    | { ok: true; bearer: string; expiresAt: string }
+    | { ok: false; reason: "invalid_customer" | "storage_failed" }
+  >;
+  verifyBearer(bearer: string): Promise<TrustedActor | null>;
+  revokeBearer(bearer: string): Promise<boolean>;
+};
+
+export type AgentSessionOptions = {
+  store: AgentSessionStore;
+  ttlMs?: number;
+  now?: () => number;
+  /** Server-accepted agent id for this merchant deployment. */
+  merchantAgentId: string;
+};
+
+const DEFAULT_TTL_MS = 8 * 60 * 60 * 1000;
+export const MAX_AGENT_SESSION_TTL_MS = DEFAULT_TTL_MS;
+const BEARER_PREFIX = "nsh_";
+const MIN_BEARER_LEN = BEARER_PREFIX.length + 16;
+const MAX_BEARER_LEN = 512;
+
+const nonempty = (value: unknown): value is string =>
+  typeof value === "string" && value.length > 0;
+
+function assertHumanCustomer(customer: HumanActor): boolean {
+  return (
+    customer?.kind === "human" &&
+    typeof customer.customerId === "string" &&
+    customer.customerId.length > 0 &&
+    Array.isArray(customer.scopes) &&
+    customer.scopes.includes(SHOPPING_CUSTOMER_SCOPE)
+  );
+}
+
+async function hashBearer(raw: string): Promise<string> {
+  const digest = await crypto.subtle.digest(
+    "SHA-256",
+    new TextEncoder().encode(raw),
+  );
+  return [...new Uint8Array(digest)]
+    .map((b) => b.toString(16).padStart(2, "0"))
+    .join("");
+}
+
+function randomOpaque(): string {
+  const bytes = new Uint8Array(32);
+  crypto.getRandomValues(bytes);
+  const b64 = btoa(String.fromCharCode(...bytes))
+    .replace(/\+/g, "-")
+    .replace(/\//g, "_")
+    .replace(/=+$/, "");
+  return `${BEARER_PREFIX}${b64}`;
+}
+
+function grantScopesAllowed(scopes: unknown): scopes is string[] {
+  if (!Array.isArray(scopes) || scopes.length !== AGENT_SESSION_SCOPES.length) {
+    return false;
+  }
+  if (new Set(scopes).size !== scopes.length) return false;
+  const allowed = new Set<string>(AGENT_SESSION_SCOPES);
+  return scopes.every(
+    (s) => typeof s === "string" && s.length > 0 && allowed.has(s),
+  );
+}
+
+export class AgentSessionConfigError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "AgentSessionConfigError";
+  }
+}
+
+function assertAgentSessionConfig(options: AgentSessionOptions): {
+  merchantAgentId: string;
+  ttlMs: number;
+} {
+  const merchantAgentId =
+    typeof options.merchantAgentId === "string"
+      ? options.merchantAgentId.trim()
+      : "";
+  if (!merchantAgentId) {
+    throw new AgentSessionConfigError("invalid_merchant_agent_id");
+  }
+  const ttlMs = options.ttlMs ?? DEFAULT_TTL_MS;
+  if (
+    !Number.isFinite(ttlMs) ||
+    ttlMs <= 0 ||
+    ttlMs > MAX_AGENT_SESSION_TTL_MS
+  ) {
+    throw new AgentSessionConfigError("invalid_session_ttl");
+  }
+  return { merchantAgentId, ttlMs };
+}
+
+function storedGrantValid(
+  grant: AgentSessionGrant,
+  merchantAgentId: string,
+  nowMs: number,
+): boolean {
+  if (grant.revokedAtMs !== null) return false;
+  if (!Number.isFinite(grant.expiresAtMs) || grant.expiresAtMs <= nowMs) {
+    return false;
+  }
+  if (grant.agentId !== merchantAgentId) return false;
+  if (
+    !nonempty(grant.sessionId) ||
+    !nonempty(grant.pairwiseUserId) ||
+    !nonempty(grant.customerId)
+  ) {
+    return false;
+  }
+  return grantScopesAllowed(grant.scopes);
+}
+
+function grantToAgentActor(grant: AgentSessionGrant): AgentActor {
+  return {
+    kind: "agent",
+    customerId: grant.customerId,
+    agentId: grant.agentId,
+    pairwiseUserId: grant.pairwiseUserId,
+    sessionId: grant.sessionId,
+    scopes: [...grant.scopes],
+  };
+}
+
+export function createAgentSessionService(
+  options: AgentSessionOptions,
+): AgentSessionService {
+  const { merchantAgentId, ttlMs } = assertAgentSessionConfig(options);
+  const now = options.now ?? (() => Date.now());
+  const { store } = options;
+
+  return {
+    async grantSession(customer) {
+      if (!assertHumanCustomer(customer)) {
+        return { ok: false, reason: "invalid_customer" };
+      }
+      const bearer = randomOpaque();
+      const hash = await hashBearer(bearer);
+      const expiresAtMs = now() + ttlMs;
+      const grant: AgentSessionGrant = {
+        sessionId: crypto.randomUUID(),
+        agentId: merchantAgentId,
+        pairwiseUserId: crypto.randomUUID(),
+        customerId: customer.customerId,
+        scopes: [...AGENT_SESSION_SCOPES],
+        expiresAtMs,
+        revokedAtMs: null,
+      };
+      const inserted = await store.put(hash, grant);
+      if (!inserted) return { ok: false, reason: "storage_failed" };
+      return {
+        ok: true,
+        bearer,
+        expiresAt: new Date(expiresAtMs).toISOString(),
+      };
+    },
+
+    async verifyBearer(bearer) {
+      if (
+        typeof bearer !== "string" ||
+        !bearer.startsWith(BEARER_PREFIX) ||
+        bearer.length < MIN_BEARER_LEN ||
+        bearer.length > MAX_BEARER_LEN
+      ) {
+        return null;
+      }
+      const hash = await hashBearer(bearer);
+      const grant = await store.get(hash);
+      if (!grant || !storedGrantValid(grant, merchantAgentId, now())) {
+        return null;
+      }
+      return grantToAgentActor(grant);
+    },
+
+    async revokeBearer(bearer) {
+      if (
+        typeof bearer !== "string" ||
+        !bearer.startsWith(BEARER_PREFIX) ||
+        bearer.length < MIN_BEARER_LEN ||
+        bearer.length > MAX_BEARER_LEN
+      ) {
+        return false;
+      }
+      const hash = await hashBearer(bearer);
+      return store.revoke(hash);
+    },
+  };
+}

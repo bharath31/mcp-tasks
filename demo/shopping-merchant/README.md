@@ -18,6 +18,7 @@ Every purchase requires **direct customer approval** (`requirement` is always `c
 
 ## Layout
 
+- `src/identity/` — **unwired** Auth0 customer access-token verification and revocable agent session grants (no HTTP routes)
 - `src/ledger.ts` — domain logic (Worker-compatible; no Node imports)
 - `src/sql.ts` — `SqlDatabase` adapter for DO `SqlStorage` and a Node test double
 - `src/merchant-do.ts` — `CustomerMerchantLedger` Durable Object (internal POST RPC only)
@@ -38,8 +39,26 @@ Host-only approval into DO state uses `hostInjectCustomerApproval` after the sam
 
 **`trustedForAgentCheckout` on ship-to addresses** is snapshotted on each quote (see `fixture-alternate` in tests). It records whether the address was marked low-friction for agent checkout in the address book; **every purchase still requires direct customer approval** (`requirement` is always `customer_verification`), so untrusted addresses do not bypass human approval.
 
+## Customer and agent identity (unwired)
+
+`src/identity/` provides Worker-safe building blocks only; nothing here is mounted on a public route.
+
+| Piece                       | Role                                                                                                                                                                                                                                                                                                                                                                                                                                            |
+| --------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `verifyCustomerAccessToken` | Validates Auth0 **access** tokens against `SHOPPING_AUTH0_DOMAIN` issuer and `SHOPPING_API_AUDIENCE` via JWKS (`jose`). Requires `sub`, `exp`, `iat`, and the `shopping:customer` scope. Rejects client-credentials / `@clients` subjects and fails closed when env is unset. Tests inject a local JWKS via `testVerifyKey` only.                                                                                                               |
+| `createAgentSessionService` | After a verified human customer, mints a high-entropy `nsh_…` bearer; storage holds **SHA-256 hash** only. Server assigns `agentId`, `sessionId`, `pairwiseUserId`, customer binding, and fixed scopes (`cart:write`, `checkout:write`, `addresses:read`). Never grants `order:execute`; the ledger enforces that scope on `executeQuote` / `reconcileQuote`. `grantSession` is trusted-server-only (verified human from JWT, not client JSON). |
+| `AgentSessionStore`         | Injectable persistence with documented `put` / `get` / `revoke` atomicity expectations. **No default durable implementation** — wire a Durable Object (or equivalent) before production.                                                                                                                                                                                                                                                        |
+
+**Host obligations:** On every merchant call, resolve the actor from `verifyCustomerAccessToken` (human) or `verifyBearer` (agent session), never from request JSON. Re-check revocation and expiry per request; instant global revocation across isolates is not claimed. Purchase approval remains a separate `verifyCustomerApproval` injection.
+
+**Env (Worker):** `SHOPPING_AUTH0_DOMAIN` (bare DNS hostname only — tenant or custom domain, no URL/path/port/localhost/IP), `SHOPPING_API_AUDIENCE`, plus a non-empty `merchantAgentId` and session TTL ≤ 8h when constructing the session service.
+
+**Configured issuer trust:** Verification fetches JWKS from whatever domain and audience the operator binds. Syntax validation catches whitespace skew and URL-shaped mistakes; it does **not** stop a deploy from trusting an attacker's legitimate Auth0 tenant if env values are wrong.
+
 ## Remaining integration work
 
+- Bind `src/identity` into a Worker entrypoint (customer login → grant session → forward `TrustedActor` to DO RPC)
+- Implement `AgentSessionStore` on a Durable Object with the documented atomic revoke semantics
 - Wire Auth0 / Task Authority (or CIBA) into `verifyCustomerApproval` with operation-bound proof
 - Attach a real Worker entrypoint, wrangler bindings, and northstar storefront (out of scope for this slice)
 - Replace `createFixtureOrderProvider` with a restart-durable provider that honors idempotency keys
