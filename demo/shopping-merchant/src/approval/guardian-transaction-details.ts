@@ -34,7 +34,19 @@ function prop(
 export function buildGuardianPurchaseAuthorizationDetails(
   input: BuildGuardianPurchaseAuthorizationDetailsInput,
 ): GuardianPurchaseAuthorizationDetails {
-  const merchantDisplayName = input.merchantDisplayName.trim();
+  const merchantDisplayName = input.merchantDisplayName;
+  if (typeof merchantDisplayName !== "string") {
+    throw new GuardianTransactionDetailsError(
+      "invalid_merchant",
+      "merchantDisplayName must be a string",
+    );
+  }
+  if (merchantDisplayName !== merchantDisplayName.trim()) {
+    throw new GuardianTransactionDetailsError(
+      "invalid_merchant",
+      "merchantDisplayName must not have leading or trailing whitespace",
+    );
+  }
   if (!merchantDisplayName) {
     throw new GuardianTransactionDetailsError(
       "invalid_merchant",
@@ -43,6 +55,12 @@ export function buildGuardianPurchaseAuthorizationDetails(
   }
 
   const nowMs = input.nowMs ?? Date.now();
+  if (!Number.isFinite(nowMs)) {
+    throw new GuardianTransactionDetailsError(
+      "invalid_input",
+      "nowMs must be a finite number",
+    );
+  }
   validateQuoteForGuardianDetails(input.quote, nowMs);
 
   const quote = input.quote;
@@ -65,6 +83,8 @@ export function buildGuardianPurchaseAuthorizationDetails(
   add("quote_revision", "Quote revision", quote.revision);
   add("expires_at", "Quote expires", quote.expiresAt);
   add("customer_id", "Customer", quote.customerId);
+  add("cart_id", "Cart", quote.cartId);
+  add("cart_version", "Cart version", quote.cartVersion);
   if (quote.agentId !== null) {
     add("agent_id", "Agent", quote.agentId);
   }
@@ -103,6 +123,7 @@ export function buildGuardianPurchaseAuthorizationDetails(
 
   const dest = quote.destination;
   add("destination_id", "Ship-to id", dest.id);
+  add("destination_customer_id", "Ship-to customer", dest.customerId);
   add("destination_label", "Ship-to label", dest.label);
   add("destination_version", "Ship-to version", dest.version);
   add(
@@ -115,8 +136,9 @@ export function buildGuardianPurchaseAuthorizationDetails(
     "Ship-to address",
     stableDestinationJson(dest.destination),
   );
+  add("approval_requirement", "Approval requirement", quote.requirement);
 
-  const instruction = `Review and approve this purchase from ${merchantDisplayName}.`;
+  const instruction = `Review and approve this purchase from ${merchantDisplayName} for ${formatUsdMinor(quote.totalMinor)}.`;
 
   return {
     type: GUARDIAN_PURCHASE_AUTHORIZATION_DETAILS_TYPE,

@@ -4,6 +4,7 @@ import {
   buildGuardianPurchaseAuthorizationDetails,
   GUARDIAN_PURCHASE_AUTHORIZATION_DETAILS_TYPE,
   GuardianTransactionDetailsError,
+  stableDestinationJson,
 } from "../src/approval/index.js";
 import type { Quote } from "../src/types.js";
 
@@ -60,7 +61,15 @@ test("maps quote into Auth0 Guardian purchase authorization_details", () => {
   });
   assert.equal(details.type, GUARDIAN_PURCHASE_AUTHORIZATION_DETAILS_TYPE);
   assert.match(details.instruction, /Nominee Fixture Shop/);
+  assert.match(details.instruction, /USD 43\.00/);
   assert.equal(details.properties.merchant?.value, MERCHANT);
+  assert.equal(details.properties.cart_id?.value, "cart-1");
+  assert.equal(details.properties.cart_version?.value, 1);
+  assert.equal(details.properties.destination_customer_id?.value, "customer-1");
+  assert.equal(
+    details.properties.approval_requirement?.value,
+    "customer_verification",
+  );
   assert.equal(details.properties.total_minor?.value, 4300);
   assert.equal(details.properties.total?.value, "USD 43.00");
   assert.equal(details.properties.item_0_unit_price_minor?.value, 1800);
@@ -219,6 +228,181 @@ test("fail closed on empty merchant display name", () => {
     (err: unknown) => {
       assert.ok(err instanceof GuardianTransactionDetailsError);
       assert.equal(err.code, "invalid_merchant");
+      return true;
+    },
+  );
+});
+
+test("fail closed on material string whitespace without silent normalization", () => {
+  assert.throws(
+    () =>
+      buildGuardianPurchaseAuthorizationDetails({
+        quote: fakeQuote({ id: "  quote-1  " }),
+        merchantDisplayName: MERCHANT,
+        nowMs: Date.parse("2098-01-01T00:00:00.000Z"),
+      }),
+    (err: unknown) => {
+      assert.ok(err instanceof GuardianTransactionDetailsError);
+      assert.equal(err.code, "invalid_quote");
+      assert.match(String(err.message), /whitespace/);
+      return true;
+    },
+  );
+});
+
+test("fail closed on subtotal mismatch", () => {
+  assert.throws(
+    () =>
+      buildGuardianPurchaseAuthorizationDetails({
+        quote: fakeQuote({ subtotalMinor: 1 }),
+        merchantDisplayName: MERCHANT,
+        nowMs: Date.parse("2098-01-01T00:00:00.000Z"),
+      }),
+    (err: unknown) => {
+      assert.ok(err instanceof GuardianTransactionDetailsError);
+      assert.equal(err.code, "invalid_quote");
+      assert.match(String(err.message), /subtotalMinor/);
+      return true;
+    },
+  );
+});
+
+test("fail closed on non-USD quote currency", () => {
+  assert.throws(
+    () =>
+      buildGuardianPurchaseAuthorizationDetails({
+        quote: fakeQuote({ currency: "EUR" as Quote["currency"] }),
+        merchantDisplayName: MERCHANT,
+        nowMs: Date.parse("2098-01-01T00:00:00.000Z"),
+      }),
+    (err: unknown) => {
+      assert.ok(err instanceof GuardianTransactionDetailsError);
+      assert.equal(err.code, "invalid_quote");
+      return true;
+    },
+  );
+});
+
+test("fail closed when destination customer does not match quote customer", () => {
+  assert.throws(
+    () =>
+      buildGuardianPurchaseAuthorizationDetails({
+        quote: fakeQuote({
+          customerId: "customer-a",
+          destination: {
+            ...fakeQuote().destination,
+            customerId: "customer-b",
+          },
+        }),
+        merchantDisplayName: MERCHANT,
+        nowMs: Date.parse("2098-01-01T00:00:00.000Z"),
+      }),
+    (err: unknown) => {
+      assert.ok(err instanceof GuardianTransactionDetailsError);
+      assert.equal(err.code, "invalid_quote");
+      assert.match(String(err.message), /must match/);
+      return true;
+    },
+  );
+});
+
+test("fail closed on non-finite nowMs", () => {
+  assert.throws(
+    () =>
+      buildGuardianPurchaseAuthorizationDetails({
+        quote: fakeQuote(),
+        merchantDisplayName: MERCHANT,
+        nowMs: Number.NaN,
+      }),
+    (err: unknown) => {
+      assert.ok(err instanceof GuardianTransactionDetailsError);
+      assert.equal(err.code, "invalid_input");
+      return true;
+    },
+  );
+});
+
+test("fail closed on Date object inside destination.destination", () => {
+  assert.throws(
+    () =>
+      buildGuardianPurchaseAuthorizationDetails({
+        quote: fakeQuote({
+          destination: {
+            ...fakeQuote().destination,
+            destination: { shippedAt: new Date() as unknown as string },
+          },
+        }),
+        merchantDisplayName: MERCHANT,
+        nowMs: Date.parse("2098-01-01T00:00:00.000Z"),
+      }),
+    (err: unknown) => {
+      assert.ok(err instanceof GuardianTransactionDetailsError);
+      assert.ok(
+        err.code === "invalid_quote" || err.code === "invalid_destination",
+      );
+      return true;
+    },
+  );
+});
+
+test("stableDestinationJson preserves __proto__ own key from JSON.parse", () => {
+  const parsed = JSON.parse('{"__proto__":{"x":1},"country":"US"}') as Record<
+    string,
+    unknown
+  >;
+  assert.equal(
+    stableDestinationJson(parsed),
+    '{"__proto__":{"x":1},"country":"US"}',
+  );
+});
+
+test("stableDestinationJson rejects accessor properties without invoking getters", () => {
+  const bad = { country: "US" };
+  let invoked = false;
+  Object.defineProperty(bad, "leak", {
+    enumerable: true,
+    get() {
+      invoked = true;
+      return "x";
+    },
+  });
+  assert.throws(
+    () => stableDestinationJson(bad),
+    (err: unknown) => {
+      assert.ok(err instanceof GuardianTransactionDetailsError);
+      assert.equal(err.code, "invalid_destination");
+      return true;
+    },
+  );
+  assert.equal(invoked, false);
+});
+
+test("stableDestinationJson rejects cyclic references", () => {
+  const cycle: Record<string, unknown> = { country: "US" };
+  cycle.child = cycle;
+  assert.throws(
+    () => stableDestinationJson(cycle),
+    (err: unknown) => {
+      assert.ok(err instanceof GuardianTransactionDetailsError);
+      assert.equal(err.code, "invalid_destination");
+      assert.match(String(err.message), /cyclic/);
+      return true;
+    },
+  );
+});
+
+test("stableDestinationJson rejects sparse arrays", () => {
+  const sparse = [1];
+  sparse[2] = 3;
+  assert.throws(
+    () =>
+      stableDestinationJson({
+        lines: sparse,
+      }),
+    (err: unknown) => {
+      assert.ok(err instanceof GuardianTransactionDetailsError);
+      assert.equal(err.code, "invalid_destination");
+      assert.match(String(err.message), /sparse/);
       return true;
     },
   );

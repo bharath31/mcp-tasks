@@ -10,6 +10,7 @@ export class GuardianTransactionDetailsError extends Error {
   }
 }
 
+/** Material strings are encoded verbatim; leading/trailing whitespace is rejected, not stripped. */
 function requireNonEmptyString(value: unknown, field: string): string {
   if (typeof value !== "string") {
     throw new GuardianTransactionDetailsError(
@@ -17,14 +18,19 @@ function requireNonEmptyString(value: unknown, field: string): string {
       `${field} must be a string`,
     );
   }
-  const trimmed = value.trim();
-  if (!trimmed) {
+  if (value !== value.trim()) {
+    throw new GuardianTransactionDetailsError(
+      "invalid_quote",
+      `${field} must not have leading or trailing whitespace`,
+    );
+  }
+  if (!value) {
     throw new GuardianTransactionDetailsError(
       "invalid_quote",
       `${field} must be non-empty`,
     );
   }
-  return trimmed;
+  return value;
 }
 
 function requireSafeInteger(value: unknown, field: string): number {
@@ -83,6 +89,15 @@ function validateItem(item: QuoteItemSnapshot, index: number): void {
   requireUsdCurrency(item.currency, `items[${index}].currency`);
 }
 
+function isPlainRecord(value: unknown): value is Record<string, unknown> {
+  return (
+    value !== null &&
+    typeof value === "object" &&
+    !Array.isArray(value) &&
+    Object.prototype.toString.call(value) === "[object Object]"
+  );
+}
+
 function validateDestination(destination: TrustedDestination): void {
   requireNonEmptyString(destination.id, "destination.id");
   requireNonEmptyString(destination.customerId, "destination.customerId");
@@ -94,11 +109,7 @@ function validateDestination(destination: TrustedDestination): void {
       "destination.trustedForAgentCheckout must be boolean",
     );
   }
-  if (
-    destination.destination === null ||
-    typeof destination.destination !== "object" ||
-    Array.isArray(destination.destination)
-  ) {
+  if (!isPlainRecord(destination.destination)) {
     throw new GuardianTransactionDetailsError(
       "invalid_quote",
       "destination.destination must be a plain object",
@@ -123,11 +134,8 @@ export function validateQuoteForGuardianDetails(
       "quote.agentId must be null or string",
     );
   }
-  if (quote.agentId !== null && !quote.agentId.trim()) {
-    throw new GuardianTransactionDetailsError(
-      "invalid_quote",
-      "quote.agentId must not be blank",
-    );
+  if (quote.agentId !== null) {
+    requireNonEmptyString(quote.agentId, "quote.agentId");
   }
   if (!Array.isArray(quote.items) || quote.items.length === 0) {
     throw new GuardianTransactionDetailsError(
@@ -196,6 +204,12 @@ export function validateQuoteForGuardianDetails(
   }
 
   validateDestination(quote.destination);
+  if (quote.destination.customerId !== quote.customerId) {
+    throw new GuardianTransactionDetailsError(
+      "invalid_quote",
+      "destination.customerId must match quote.customerId",
+    );
+  }
 
   const expiresAt = requireNonEmptyString(quote.expiresAt, "quote.expiresAt");
   const expiryMs = Date.parse(expiresAt);
