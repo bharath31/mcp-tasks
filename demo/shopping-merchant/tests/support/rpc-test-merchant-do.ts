@@ -39,6 +39,7 @@ type PublicRpcBody =
   | { op: "getQuote"; actor: TrustedActor; quoteId: string }
   | { op: "executeQuote"; actor: TrustedActor; quoteId: string }
   | { op: "reconcileQuote"; actor: TrustedActor; quoteId: string }
+  | { op: "abandonQuote"; actor: TrustedActor; quoteId: string }
   | { op: "testFixtureApproveQuote"; actor: TrustedActor; quoteId: string };
 
 type RpcBody =
@@ -204,6 +205,9 @@ export class RpcTestCustomerMerchantLedger extends DurableObject<MerchantLedgerE
           break;
         case "reconcileQuote":
           result = await ledger.reconcileQuote(body.quoteId, body.actor);
+          break;
+        case "abandonQuote":
+          result = await ledger.abandonQuote(body.quoteId, body.actor);
           break;
         case "testFixtureApproveQuote": {
           const quote = ledger.getQuote(body.quoteId, body.actor);
