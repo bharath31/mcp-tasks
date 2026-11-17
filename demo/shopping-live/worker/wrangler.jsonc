@@ -21,11 +21,11 @@
   "migrations": [
     {
       "tag": "v1",
-      "new_classes": ["CustomerHostState", "CustomerMerchantLedger"],
+      "new_sqlite_classes": ["CustomerHostState", "CustomerMerchantLedger"],
     },
     {
       "tag": "v2",
-      "new_classes": ["ShoppingAgentRunState"],
+      "new_sqlite_classes": ["ShoppingAgentRunState"],
     },
   ],
   "vars": {
