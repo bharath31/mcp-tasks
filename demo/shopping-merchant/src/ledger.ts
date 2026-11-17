@@ -772,28 +772,6 @@ export function createMerchantLedger(
       );
     },
 
-    setQuoteExpiresAtForTest(
-      quoteId: string,
-      actor: TrustedActor,
-      expiresAt: string,
-    ): Quote {
-      quoteActor(actor);
-      const record = requireRow(
-        db.exec("SELECT * FROM quotes WHERE id = ?", quoteId).one(),
-      );
-      const row = getCartRow(record.cart_id as string);
-      authorizeCart(row, actor, false);
-      const quote = quoteView(record.data as string);
-      if (quote.customerId !== customerId) fail();
-      const next = { ...quote, expiresAt };
-      db.exec(
-        "UPDATE quotes SET data = ? WHERE id = ?",
-        JSON.stringify(next),
-        quoteId,
-      );
-      return next;
-    },
-
     async abandonQuote(
       quoteId: string,
       actor: TrustedActor,

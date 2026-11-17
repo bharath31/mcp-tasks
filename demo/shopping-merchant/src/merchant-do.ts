@@ -54,12 +54,6 @@ type PublicRpcBody =
     }
   | { op: "getQuote"; actor: TrustedActor; quoteId: string }
   | { op: "validateQuote"; actor: TrustedActor; quoteId: string }
-  | {
-      op: "setQuoteExpiresAtForTest";
-      actor: TrustedActor;
-      quoteId: string;
-      expiresAt: string;
-    }
   | { op: "executeQuote"; actor: TrustedActor; quoteId: string }
   | { op: "reconcileQuote"; actor: TrustedActor; quoteId: string }
   | { op: "abandonQuote"; actor: TrustedActor; quoteId: string }
@@ -80,12 +74,7 @@ type PublicRpcBody =
       browserSessionId: string | null;
       agentId: string | null;
     }
-  | { op: "getCibaChallenge"; actor: HumanActor; challengeId: string }
-  | {
-      op: "setCibaChallengeApprovedUnbridgedForTest";
-      actor: HumanActor;
-      challengeId: string;
-    };
+  | { op: "getCibaChallenge"; actor: HumanActor; challengeId: string };
 
 type RpcBody =
   | PublicRpcBody
@@ -309,44 +298,6 @@ export class CustomerMerchantLedger extends DurableObject<MerchantLedgerEnv> {
         });
       }
 
-      if (body.op === "setCibaChallengeApprovedUnbridgedForTest") {
-        if (this.env.SHOPPING_LEDGER_TEST_HOOKS !== "1") {
-          return Response.json({ error: "forbidden" }, { status: 403 });
-        }
-        this.assertHumanActor(body.actor, customerId);
-        const store = this.cibaStore();
-        const row = await store.get(body.challengeId);
-        if (!row || row.customerId !== customerId) {
-          return Response.json(
-            { error: "challenge_not_found" },
-            { status: 404 },
-          );
-        }
-        if (row.status === "approved" && row.consumedAtMs == null) {
-          return Response.json({ ok: true });
-        }
-        const from =
-          row.status === "starting" || row.status === "polling"
-            ? ([row.status] as const)
-            : null;
-        if (!from) {
-          return Response.json(
-            { error: "challenge_not_simulatable" },
-            { status: 409 },
-          );
-        }
-        const transitioned = await store.transition(
-          body.challengeId,
-          [...from],
-          "approved",
-          { decidedAtMs: Date.now() },
-        );
-        if (!transitioned.ok) {
-          return Response.json({ error: transitioned.reason }, { status: 409 });
-        }
-        return Response.json({ ok: true });
-      }
-
       if (body.op === "pollPurchaseCiba") {
         this.assertHumanActor(body.actor, customerId);
         const ledger = this.ledgerFor(customerId);
@@ -422,19 +373,6 @@ export class CustomerMerchantLedger extends DurableObject<MerchantLedgerEnv> {
           body.actor,
         );
         return Response.json(faced);
-      }
-
-      if (body.op === "setQuoteExpiresAtForTest") {
-        if (this.env.SHOPPING_LEDGER_TEST_HOOKS !== "1") {
-          return Response.json({ error: "forbidden" }, { status: 403 });
-        }
-        const ledger = this.ledgerFor(customerId);
-        const quote = ledger.setQuoteExpiresAtForTest(
-          body.quoteId,
-          body.actor,
-          body.expiresAt,
-        );
-        return Response.json(quote);
       }
 
       const ledger = this.ledgerFor(customerId);

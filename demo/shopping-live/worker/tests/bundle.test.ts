@@ -8,6 +8,11 @@ test("production Worker bundle excludes test-only session seeding", async () => 
   assert.doesNotMatch(script, /mint-agent-cap/);
   assert.doesNotMatch(script, /revoke-agent-cap/);
   assert.doesNotMatch(script, /SHOPPING_TEST_HOOKS/);
+  assert.doesNotMatch(script, /SHOPPING_LEDGER_TEST_HOOKS/);
+  assert.doesNotMatch(script, /setQuoteExpiresAtForTest/);
+  assert.doesNotMatch(script, /setCibaChallengeApprovedUnbridgedForTest/);
+  assert.doesNotMatch(script, /harnessSetQuoteExpiresAt/);
+  assert.doesNotMatch(script, /harnessSetCibaChallengeApprovedUnbridged/);
   assert.doesNotMatch(script, /identity-jwt/);
 
   const inputs = Object.keys(metafile.inputs);

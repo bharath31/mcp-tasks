@@ -31,15 +31,20 @@ export const ORIGIN = "http://localhost:8787";
 export const MERCHANT_ORIGIN = "https://localhost:8787";
 
 export async function buildShoppingWorker(options?: {
-  merchantDo?: "fixture" | "production";
+  merchantDo?: "fixture" | "production" | "production-strict";
   entry?: string;
 }): Promise<string> {
   const merchantShim =
     options?.merchantDo === "production"
       ? join(here, "merchant-do-production-shim.ts")
-      : join(here, "merchant-do-shim.ts");
+      : options?.merchantDo === "production-strict"
+        ? join(here, "merchant-do-production-strict-shim.ts")
+        : join(here, "merchant-do-shim.ts");
   const plugins: import("esbuild").Plugin[] = [puppeteerStubPlugin()];
-  if (options?.merchantDo === "production") {
+  if (
+    options?.merchantDo === "production" ||
+    options?.merchantDo === "production-strict"
+  ) {
     plugins.push({
       name: "merchant-do-shim",
       setup(build: import("esbuild").PluginBuild) {
@@ -105,7 +110,7 @@ export type Harness = {
 
 export async function startHarness(options?: {
   outbound?: OutboundHandler;
-  merchantDo?: "fixture" | "production";
+  merchantDo?: "fixture" | "production" | "production-strict";
   bindings?: Record<string, string>;
   workerEntry?: string;
   selfSubfetch?: boolean;
@@ -140,7 +145,6 @@ export async function startHarness(options?: {
       SHOPPING_MERCHANT_WALLET_LABEL: "Stillroom wallet",
       SHOPPING_MERCHANT_DISPLAY_NAME: "Stillroom",
       MERCHANT_ORIGIN,
-      SHOPPING_LEDGER_TEST_HOOKS: "1",
       AI: {},
       BROWSER: {},
       ...options?.bindings,

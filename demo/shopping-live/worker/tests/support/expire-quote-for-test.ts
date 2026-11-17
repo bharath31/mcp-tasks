@@ -6,15 +6,13 @@ import {
 import type { ShoppingLiveEnv } from "../../src/env.js";
 import { json, problem } from "../../src/http.js";
 import { merchantLedgerRpc } from "../../src/merchant-client.js";
+import { HARNESS_SET_QUOTE_EXPIRES_OP } from "../../../../shopping-merchant/tests/support/harness-ledger-mutations.js";
 
 /** Test harness only — not reachable from the production Worker entry. */
 export async function handleTestExpireQuote(
   req: Request,
   env: ShoppingLiveEnv,
 ): Promise<Response> {
-  if (env.SHOPPING_LEDGER_TEST_HOOKS !== "1") {
-    return problem(403, "forbidden", "Test quote expiry is disabled.");
-  }
   const body = (await req.json().catch(() => null)) as {
     customerId?: string;
     quoteId?: string;
@@ -31,9 +29,15 @@ export async function handleTestExpireQuote(
   const sessionRes = await customerStateRpc(stub, body.customerId, {
     op: "getBrowserSessionId",
   });
-  const sessionBody = (await sessionRes.json()) as { browserSessionId?: string };
+  const sessionBody = (await sessionRes.json()) as {
+    browserSessionId?: string;
+  };
   if (!sessionBody.browserSessionId) {
-    return problem(404, "browser_session_missing", "Browser session not found.");
+    return problem(
+      404,
+      "browser_session_missing",
+      "Browser session not found.",
+    );
   }
   const actor = browserShoppingActor(
     env,
@@ -41,7 +45,7 @@ export async function handleTestExpireQuote(
     sessionBody.browserSessionId,
   );
   const updated = await merchantLedgerRpc(env, body.customerId, {
-    op: "setQuoteExpiresAtForTest",
+    op: HARNESS_SET_QUOTE_EXPIRES_OP,
     actor,
     quoteId: body.quoteId,
     expiresAt: body.expiresAt,

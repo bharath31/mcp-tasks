@@ -5,15 +5,13 @@ import {
 import type { ShoppingLiveEnv } from "../../src/env.js";
 import { json, problem } from "../../src/http.js";
 import { merchantLedgerRpc } from "../../src/merchant-client.js";
+import { HARNESS_CIBA_UNBRIDGED_OP } from "../../../../shopping-merchant/tests/support/harness-ledger-mutations.js";
 
 /** Test harness only — simulates coordinator approval before the ledger bridge runs. */
 export async function handleTestCibaUnbridged(
   req: Request,
   env: ShoppingLiveEnv,
 ): Promise<Response> {
-  if (env.SHOPPING_LEDGER_TEST_HOOKS !== "1") {
-    return problem(403, "forbidden", "Test CIBA hooks are disabled.");
-  }
   const body = (await req.json().catch(() => null)) as {
     customerId?: string;
     challengeId?: string;
@@ -45,7 +43,7 @@ export async function handleTestCibaUnbridged(
     scopes: [] as string[],
   };
   const result = await merchantLedgerRpc(env, body.customerId, {
-    op: "setCibaChallengeApprovedUnbridgedForTest",
+    op: HARNESS_CIBA_UNBRIDGED_OP,
     actor: human,
     challengeId: body.challengeId,
   });

@@ -13,6 +13,11 @@ import {
 } from "./merchant-ports-fixture.js";
 import { createDoSqlDatabase, initMerchantSchema } from "../../src/sql.js";
 import type { HumanActor, TrustedActor } from "../../src/types.js";
+import {
+  HARNESS_SET_QUOTE_EXPIRES_OP,
+  harnessOpenMerchantDatabase,
+  harnessSetQuoteExpiresAt,
+} from "./harness-ledger-mutations.js";
 
 const BOUND_CUSTOMER_KEY = "nominee:bound_customer_id";
 
@@ -39,7 +44,7 @@ type PublicRpcBody =
   | { op: "getQuote"; actor: TrustedActor; quoteId: string }
   | { op: "validateQuote"; actor: TrustedActor; quoteId: string }
   | {
-      op: "setQuoteExpiresAtForTest";
+      op: typeof HARNESS_SET_QUOTE_EXPIRES_OP;
       actor: TrustedActor;
       quoteId: string;
       expiresAt: string;
@@ -210,10 +215,11 @@ export class RpcTestCustomerMerchantLedger extends DurableObject<MerchantLedgerE
         case "validateQuote":
           result = await ledger.validateQuote(body.quoteId, body.actor);
           break;
-        case "setQuoteExpiresAtForTest":
-          result = ledger.setQuoteExpiresAtForTest(
+        case "harnessSetQuoteExpiresAt":
+          result = harnessSetQuoteExpiresAt(
+            harnessOpenMerchantDatabase(this.ctx.storage),
+            customerId,
             body.quoteId,
-            body.actor,
             body.expiresAt,
           );
           break;
