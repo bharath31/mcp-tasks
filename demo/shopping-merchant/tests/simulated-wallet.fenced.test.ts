@@ -70,6 +70,67 @@ async function processingQuote(
   return { cart, quote };
 }
 
+test("fenced wallet: funded executeQuote completes with single debit", async () => {
+  const { ledger, host, approval, db, raw } = fencedLedger(10_000);
+  const cart = ledger.createCart(agent);
+  ledger.updateCart(cart.id, agent, [
+    { productId: "mug", quantity: 1, priceMinor: 1800, currency: "USD" },
+  ]);
+  const quote = await ledger.createQuote(cart.id, agent, "fixture-home");
+  approval.approveForTest(quote);
+  await host.injectCustomerApproval(quote.id, human);
+  const balanceBefore = readSimulatedWalletBalanceMinor(db, CUSTOMER);
+  const done = await ledger.executeQuote(quote.id, agent);
+  assert.equal(done.status, "completed");
+  if (done.status !== "completed") throw new Error("expected completed");
+  assert.equal(
+    readSimulatedWalletBalanceMinor(db, CUSTOMER),
+    balanceBefore - 1800,
+  );
+  assert.equal(
+    peekSimulatedWalletOrder(db, quote.operationId)?.orderId,
+    done.order.id,
+  );
+  const again = await ledger.executeQuote(quote.id, agent);
+  assert.deepEqual(again, done);
+  assert.equal(
+    readSimulatedWalletBalanceMinor(db, CUSTOMER),
+    balanceBefore - 1800,
+  );
+  raw.close();
+});
+
+test("fenced wallet: provider order blocks safe abandon while processing", async () => {
+  const { ledger, host, approval, slice, db, raw } = fencedLedger();
+  const { quote } = await processingQuote(ledger, host, approval);
+  assert.deepEqual(await ledger.reconcileQuote(quote.id, agent), {
+    status: "provider_confirmed_absent",
+  });
+  provisionSimulatedWalletFunds(db, CUSTOMER, 10_000);
+  const placed = await slice.orderProvider.place({
+    quote: structuredClone(quote),
+    idempotencyKey: quote.operationId,
+  });
+  assert.ok(placed?.id);
+  assert.deepEqual(await ledger.abandonQuote(quote.id, agent), {
+    status: "processing",
+  });
+  const cartId = (await ledger.getQuote(quote.id, agent)).cartId;
+  assert.throws(
+    () =>
+      ledger.updateCart(cartId, agent, [
+        { productId: "tea", quantity: 1, priceMinor: 1200, currency: "USD" },
+      ]),
+    /checkout_processing/,
+  );
+  assert.equal(
+    (await ledger.reconcileQuote(quote.id, agent)).status,
+    "completed",
+  );
+  assert.equal(readSimulatedWalletBalanceMinor(db, CUSTOMER), 10_000 - 1800);
+  raw.close();
+});
+
 test("fenced wallet: abandon after provider_confirmed_absent", async () => {
   const { ledger, host, approval, raw } = fencedLedger();
   const { cart, quote } = await processingQuote(ledger, host, approval);

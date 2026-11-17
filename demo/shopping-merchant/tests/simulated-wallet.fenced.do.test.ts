@@ -157,6 +157,68 @@ test("DO fenced: race abandon vs fenced place", async () => {
   await fresh.dispose();
 });
 
+test("DO fenced: ledger fault after wallet place recovers via reconcile without double debit", async () => {
+  const fresh = walletHarnessMiniflare();
+  const setup = await ledgerRpc(fresh, {
+    op: "ledger-setup-checkout",
+    provisionMinor: 10_000,
+  });
+  assert.equal(setup.status, 200);
+  const { quoteId } = (await setup.json()) as { quoteId: string };
+
+  const crashed = await ledgerRpc(fresh, {
+    op: "ledger-execute-with-fault",
+    quoteId,
+    faultBeforeLedgerComplete: true,
+  });
+  assert.equal(crashed.status, 200);
+  const crashBody = (await crashed.json()) as {
+    result: { status: string };
+    balance: number;
+    walletPeek: { orderId: string } | null;
+  };
+  assert.equal(crashBody.result.status, "processing");
+  assert.equal(crashBody.balance, 8200);
+  assert.ok(crashBody.walletPeek?.orderId);
+
+  const abandon = await ledgerRpc(fresh, { op: "ledger-abandon", quoteId });
+  const abandonBody = (await abandon.json()) as {
+    result: { status: string };
+    walletPeek: { orderId: string } | null;
+    balanceAfter: number;
+    balanceBefore: number;
+  };
+  assert.equal(abandonBody.result.status, "processing");
+  assert.ok(abandonBody.walletPeek?.orderId);
+  assert.equal(abandonBody.balanceAfter, abandonBody.balanceBefore);
+  assert.equal(abandonBody.balanceBefore, 8200);
+
+  const recon = await ledgerRpc(fresh, { op: "ledger-reconcile", quoteId });
+  const reconBody = (await recon.json()) as {
+    result: { status: string; order?: { id: string } };
+    balanceBefore: number;
+    balanceAfter: number;
+  };
+  assert.equal(reconBody.result.status, "completed");
+  assert.equal(reconBody.result.order?.id, crashBody.walletPeek!.orderId);
+  assert.equal(reconBody.balanceBefore, 8200);
+  assert.equal(reconBody.balanceAfter, 8200);
+
+  const reconAgain = await ledgerRpc(fresh, {
+    op: "ledger-reconcile",
+    quoteId,
+  });
+  const againBody = (await reconAgain.json()) as {
+    result: { status: string; order?: { id: string } };
+    balanceBefore: number;
+    balanceAfter: number;
+  };
+  assert.equal(againBody.result.status, "completed");
+  assert.equal(againBody.result.order?.id, crashBody.walletPeek!.orderId);
+  assert.equal(againBody.balanceAfter, 8200);
+  await fresh.dispose();
+});
+
 test("DO fenced: unknown reconcile absent alone does not abandon", async () => {
   const fresh = walletHarnessMiniflare();
   const setup = await ledgerRpc(fresh, {
