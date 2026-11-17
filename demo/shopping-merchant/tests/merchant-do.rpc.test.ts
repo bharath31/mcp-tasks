@@ -288,6 +288,40 @@ test("DO happy path: cart, quote, fixture proof + host approval transport, execu
   }
 });
 
+test("DO abandonQuote RPC is secret-gated and surfaces ledger abandon errors", async () => {
+  const mf = merchantMiniflare(scriptPerCustomer);
+  try {
+    const cartRes = await post(mf, { op: "createCart", actor: agent });
+    const cart = (await cartRes.json()) as { id: string };
+    await post(mf, {
+      op: "updateCart",
+      actor: agent,
+      cartId: cart.id,
+      items: [
+        { productId: "mug", quantity: 1, priceMinor: 1800, currency: "USD" },
+      ],
+    });
+    const quoteRes = await post(mf, {
+      op: "createQuote",
+      actor: agent,
+      cartId: cart.id,
+      shippingAddressId: "fixture-home",
+    });
+    assert.equal(quoteRes.status, 200);
+    const quote = (await quoteRes.json()) as { id: string };
+    const abandonRes = await post(mf, {
+      op: "abandonQuote",
+      actor: agent,
+      quoteId: quote.id,
+    });
+    assert.equal(abandonRes.status, 409);
+    const body = (await abandonRes.json()) as { error: string };
+    assert.match(body.error, /checkout_not_started/);
+  } finally {
+    await mf.dispose();
+  }
+});
+
 test("production DO ports stay unconfigured even with legacy fixture env keys", async () => {
   const mf = merchantMiniflare(scriptProductionPorts, {
     productionPorts: true,
