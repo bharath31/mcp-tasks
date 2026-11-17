@@ -217,9 +217,12 @@ export function recordApprovalWithConsumedChallenge(
       operation.revision !== currentQuote.revision ||
       (cartRow.version as number) !== currentQuote.cartVersion ||
       nowMs >= Date.parse(currentQuote.expiresAt) ||
-      Date.parse(currentQuote.expiresAt) !== Date.parse(challenge.quoteExpiresAt) ||
-      JSON.stringify(currentQuote) !== JSON.stringify(challenge.quoteSnapshot) ||
-      JSON.stringify(pricedItems(cartRow)) !== JSON.stringify(currentQuote.items)
+      Date.parse(currentQuote.expiresAt) !==
+        Date.parse(challenge.quoteExpiresAt) ||
+      JSON.stringify(currentQuote) !==
+        JSON.stringify(challenge.quoteSnapshot) ||
+      JSON.stringify(pricedItems(cartRow)) !==
+        JSON.stringify(currentQuote.items)
     ) {
       throw new Error("stale_quote");
     }

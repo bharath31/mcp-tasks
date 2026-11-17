@@ -2,10 +2,7 @@ import { createMerchantDemoAccountPort } from "./customer-account/demo-address.j
 import { createFencedSimulatedWalletLedgerSlice } from "./simulated-wallet/fenced-ledger-adapter.js";
 import type { MerchantLedgerEnv } from "./port-env.js";
 import type { SqlDatabase } from "./sql.js";
-import type {
-  CustomerApprovalVerifier,
-  MerchantLedgerPorts,
-} from "./types.js";
+import type { CustomerApprovalVerifier, MerchantLedgerPorts } from "./types.js";
 
 /** Production customer approval is CIBA-backed; non-CIBA inject stays fail-closed. */
 const failClosedCustomerApproval: CustomerApprovalVerifier = async () => false;

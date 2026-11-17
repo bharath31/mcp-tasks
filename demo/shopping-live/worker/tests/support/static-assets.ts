@@ -11,8 +11,7 @@ const MIME: Record<string, string> = {
 };
 
 function resolveAssetPath(distDir: string, pathname: string): string | null {
-  const safe =
-    pathname === "/" || pathname === "" ? "/index.html" : pathname;
+  const safe = pathname === "/" || pathname === "" ? "/index.html" : pathname;
   const file = join(distDir, safe.replace(/^\//, ""));
   if (!file.startsWith(distDir)) return null;
   if (!existsSync(file) || !statSync(file).isFile()) return null;

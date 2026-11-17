@@ -12,7 +12,10 @@ export default {
   ): Promise<Response> {
     const ownerId = request.headers.get("x-nominee-owner-id");
     if (!ownerId) {
-      return Response.json({ ok: false, error: "owner_required" }, { status: 400 });
+      return Response.json(
+        { ok: false, error: "owner_required" },
+        { status: 400 },
+      );
     }
     const stub = env.AGENT_RUNS.get(env.AGENT_RUNS.idFromName(ownerId));
     return stub.fetch(request);

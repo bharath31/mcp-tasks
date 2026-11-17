@@ -27,7 +27,13 @@ test("production ports: demo address, initial wallet once, fail-closed verifier"
   const ports = createMerchantLedgerPorts(db, customer, {
     SHOPPING_MERCHANT_SHIPPING_ADDRESS_ID: "merchant-default",
   });
-  assert.equal(await ports.verifyCustomerApproval({ actor: { kind: "human", customerId: customer, scopes: [] }, quote: {} as never }), false);
+  assert.equal(
+    await ports.verifyCustomerApproval({
+      actor: { kind: "human", customerId: customer, scopes: [] },
+      quote: {} as never,
+    }),
+    false,
+  );
   const address = await ports.customerAccount.getAddress(
     customer,
     "merchant-default",
@@ -47,10 +53,6 @@ test("production ports: demo address, initial wallet once, fail-closed verifier"
   ledger.updateCart(cart.id, agent, [
     { productId: "mug", quantity: 1, priceMinor: 1800, currency: "USD" },
   ]);
-  const quote = await ledger.createQuote(
-    cart.id,
-    agent,
-    "merchant-default",
-  );
+  const quote = await ledger.createQuote(cart.id, agent, "merchant-default");
   assert.equal(quote.totalMinor, 1800);
 });

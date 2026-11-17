@@ -133,11 +133,7 @@ export async function readAgentBrowserCart(
   if (!cartId) return null;
 
   const browserSession = await browserSessionId(env, customer.customerId);
-  const actor = agentBrowserCartActor(
-    env,
-    customer.customerId,
-    browserSession,
-  );
+  const actor = agentBrowserCartActor(env, customer.customerId, browserSession);
   const read = await merchantLedgerRpc(env, customer.customerId, {
     op: "readCart",
     actor,
@@ -166,11 +162,7 @@ export async function addAgentBrowserCartItem(
 
   const cartId = await ensureCart(env, customer);
   const browserSession = await browserSessionId(env, customer.customerId);
-  const actor = agentBrowserCartActor(
-    env,
-    customer.customerId,
-    browserSession,
-  );
+  const actor = agentBrowserCartActor(env, customer.customerId, browserSession);
 
   const current = await merchantLedgerRpc(env, customer.customerId, {
     op: "readCart",

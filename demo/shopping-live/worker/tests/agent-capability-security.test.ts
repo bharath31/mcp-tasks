@@ -205,12 +205,20 @@ test("agent run poll requires same parent login session", async () => {
   assert.equal(start.status, 200);
   assert.ok(start.body.id);
   const second = await harness.login("auth0|poll-a");
-  const poll = await apiJson(harness.mf, `/api/agent/${encodeURIComponent(start.body.id!)}`, {
-    cookie: second.cookie,
-  });
+  const poll = await apiJson(
+    harness.mf,
+    `/api/agent/${encodeURIComponent(start.body.id!)}`,
+    {
+      cookie: second.cookie,
+    },
+  );
   assert.equal(poll.status, 404);
-  const own = await apiJson(harness.mf, `/api/agent/${encodeURIComponent(start.body.id!)}`, {
-    cookie: first.cookie,
-  });
+  const own = await apiJson(
+    harness.mf,
+    `/api/agent/${encodeURIComponent(start.body.id!)}`,
+    {
+      cookie: first.cookie,
+    },
+  );
   assert.equal(own.status, 200);
 });

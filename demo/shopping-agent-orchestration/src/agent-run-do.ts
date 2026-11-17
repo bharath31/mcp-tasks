@@ -129,20 +129,27 @@ export class ShoppingAgentRunState extends DurableObject {
     if (request.method !== "POST") return new Response(null, { status: 405 });
     const ownerHeader = request.headers.get("x-nominee-owner-id");
     if (!ownerHeader) {
-      return Response.json({ ok: false, error: "owner_required" }, { status: 400 });
+      return Response.json(
+        { ok: false, error: "owner_required" },
+        { status: 400 },
+      );
     }
     let body: AgentRunRpc;
     try {
       body = (await request.json()) as AgentRunRpc;
     } catch {
-      return Response.json({ ok: false, error: "invalid_json" }, { status: 400 });
+      return Response.json(
+        { ok: false, error: "invalid_json" },
+        { status: 400 },
+      );
     }
     await this.loadRuns();
     const nowMs = Date.now();
     try {
       if (body.op === "bindOwner") {
         await this.assertOwner(body.ownerId);
-        if (body.ownerId !== ownerHeader) throw new Error("owner_header_mismatch");
+        if (body.ownerId !== ownerHeader)
+          throw new Error("owner_header_mismatch");
         return Response.json({ ok: true });
       }
       await this.assertOwner(ownerHeader);
@@ -249,7 +256,10 @@ export class ShoppingAgentRunState extends DurableObject {
           return Response.json({ ok: true });
         }
         default:
-          return Response.json({ ok: false, error: "unknown_op" }, { status: 400 });
+          return Response.json(
+            { ok: false, error: "unknown_op" },
+            { status: 400 },
+          );
       }
     } catch (error) {
       const message = error instanceof Error ? error.message : "error";

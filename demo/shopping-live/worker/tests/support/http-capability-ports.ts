@@ -13,11 +13,17 @@ const TRAY_SCRIPT = [
     content: null,
     toolCalls: [
       { id: "1", name: "view_catalog", arguments: "{}" },
-      { id: "2", name: "add_to_cart", arguments: JSON.stringify({ productId: "tray" }) },
+      {
+        id: "2",
+        name: "add_to_cart",
+        arguments: JSON.stringify({ productId: "tray" }),
+      },
       {
         id: "3",
         name: "finish_session",
-        arguments: JSON.stringify({ summary: "Added tray via agent-browser HTTP." }),
+        arguments: JSON.stringify({
+          summary: "Added tray via agent-browser HTTP.",
+        }),
       },
     ],
   },
@@ -31,10 +37,7 @@ function cookieHeaderFromInit(
     .join("; ");
 }
 
-type FetchLike = (
-  input: string,
-  init?: RequestInit,
-) => Promise<Response>;
+type FetchLike = (input: string, init?: RequestInit) => Promise<Response>;
 
 class HttpCapabilityBrowserSession implements BrowserSessionPort {
   readonly sessionId: string;
@@ -61,9 +64,12 @@ class HttpCapabilityBrowserSession implements BrowserSessionPort {
 
   private async loadCsrf(): Promise<string> {
     if (this.csrf) return this.csrf;
-    const res = await this.fetchImpl(`${this.apiOrigin}/api/agent-browser/session`, {
-      headers: { cookie: this.cookie, accept: "application/json" },
-    });
+    const res = await this.fetchImpl(
+      `${this.apiOrigin}/api/agent-browser/session`,
+      {
+        headers: { cookie: this.cookie, accept: "application/json" },
+      },
+    );
     if (!res.ok) throw new Error(`agent_browser_session:${res.status}`);
     const body = (await res.json()) as { csrfToken?: string };
     if (!body.csrfToken) throw new Error("agent_browser_csrf_missing");
@@ -90,19 +96,24 @@ class HttpCapabilityBrowserSession implements BrowserSessionPort {
         };
       case "add_to_cart": {
         const csrf = await this.loadCsrf();
-        const res = await this.fetchImpl(`${this.apiOrigin}/api/agent-browser/cart/items`, {
-          method: "POST",
-          headers: {
-            cookie: this.cookie,
-            accept: "application/json",
-            "content-type": "application/json",
-            origin: this.apiOrigin,
-            "x-nominee-agent-browser-csrf": csrf,
+        const res = await this.fetchImpl(
+          `${this.apiOrigin}/api/agent-browser/cart/items`,
+          {
+            method: "POST",
+            headers: {
+              cookie: this.cookie,
+              accept: "application/json",
+              "content-type": "application/json",
+              origin: this.apiOrigin,
+              "x-nominee-agent-browser-csrf": csrf,
+            },
+            body: JSON.stringify({ productId: action.productId, quantity: 1 }),
           },
-          body: JSON.stringify({ productId: action.productId, quantity: 1 }),
-        });
+        );
         if (!res.ok) {
-          const err = (await res.json().catch(() => ({}))) as { message?: string };
+          const err = (await res.json().catch(() => ({}))) as {
+            message?: string;
+          };
           return {
             ok: false,
             error: err.message ?? `agent_browser_add:${res.status}`,
@@ -111,9 +122,12 @@ class HttpCapabilityBrowserSession implements BrowserSessionPort {
         return { ok: true, kind: "add_to_cart", productId: action.productId };
       }
       case "view_cart": {
-        const res = await this.fetchImpl(`${this.apiOrigin}/api/agent-browser/cart`, {
-          headers: { cookie: this.cookie, accept: "application/json" },
-        });
+        const res = await this.fetchImpl(
+          `${this.apiOrigin}/api/agent-browser/cart`,
+          {
+            headers: { cookie: this.cookie, accept: "application/json" },
+          },
+        );
         if (!res.ok) {
           return { ok: false, error: `agent_browser_cart:${res.status}` };
         }

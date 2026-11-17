@@ -7,10 +7,7 @@ import {
 } from "./agent-capability.js";
 import { customerStateRpc, customerStateStub } from "./customer-state-do.js";
 import type { ShoppingLiveEnv } from "./env.js";
-import {
-  assertAgentBrowserSafeOrigin,
-  assertSameOrigin,
-} from "./csrf.js";
+import { assertAgentBrowserSafeOrigin, assertSameOrigin } from "./csrf.js";
 import type { CustomerAccessTokenDeps } from "../../../shopping-merchant/src/identity/customer-access-token.js";
 import {
   verifiedCustomerAsHumanActor,

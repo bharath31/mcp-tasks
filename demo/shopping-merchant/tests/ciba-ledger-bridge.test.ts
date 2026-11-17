@@ -79,7 +79,8 @@ async function seedApprovedChallenge(
     operationId: quote.operationId,
     quoteExpiresAt: boundQuote.expiresAt,
     quoteSnapshot: structuredClone(boundQuote),
-    canonicalAuthorizationDetailsJson: canonicalAuthorizationDetailsJson(details),
+    canonicalAuthorizationDetailsJson:
+      canonicalAuthorizationDetailsJson(details),
     authReqId: "auth-req-fixture",
     pollIntervalSec: 5,
     nextPollAtMs: nowMs,
@@ -210,11 +211,16 @@ test("expired quote rejects bridge and leaves challenge unconsumed", async () =>
     .run(JSON.stringify(expired), quote.id);
   assert.throws(
     () =>
-      recordApprovalWithConsumedChallenge(db, CUSTOMER, {
-        challengeId,
-        quote,
-        actor: human,
-      }, { nowMs, merchantDisplayName: MERCHANT }),
+      recordApprovalWithConsumedChallenge(
+        db,
+        CUSTOMER,
+        {
+          challengeId,
+          quote,
+          actor: human,
+        },
+        { nowMs, merchantDisplayName: MERCHANT },
+      ),
     /stale_quote/,
   );
   const row = db
@@ -316,17 +322,27 @@ test("concurrent bridge calls yield one approval", async () => {
   const bridgeOpts = { nowMs, merchantDisplayName: MERCHANT };
   const attempts = await Promise.allSettled([
     (async () =>
-      recordApprovalWithConsumedChallenge(db, CUSTOMER, {
-        challengeId,
-        quote,
-        actor: human,
-      }, bridgeOpts))(),
+      recordApprovalWithConsumedChallenge(
+        db,
+        CUSTOMER,
+        {
+          challengeId,
+          quote,
+          actor: human,
+        },
+        bridgeOpts,
+      ))(),
     (async () =>
-      recordApprovalWithConsumedChallenge(db, CUSTOMER, {
-        challengeId,
-        quote,
-        actor: human,
-      }, bridgeOpts))(),
+      recordApprovalWithConsumedChallenge(
+        db,
+        CUSTOMER,
+        {
+          challengeId,
+          quote,
+          actor: human,
+        },
+        bridgeOpts,
+      ))(),
   ]);
   const fulfilled = attempts.filter((r) => r.status === "fulfilled");
   const rejected = attempts.filter((r) => r.status === "rejected");
@@ -349,10 +365,15 @@ test("bridge requires merchantDisplayName", async () => {
   const challengeId = await seedApprovedChallenge(db, quote, nowMs);
   assert.throws(
     () =>
-      ledger.recordCustomerApprovalFromCibaChallenge(challengeId, human, quote, {
-        nowMs,
-        merchantDisplayName: "",
-      }),
+      ledger.recordCustomerApprovalFromCibaChallenge(
+        challengeId,
+        human,
+        quote,
+        {
+          nowMs,
+          merchantDisplayName: "",
+        },
+      ),
     /merchant_display_name_required/,
   );
   assert.throws(
@@ -380,10 +401,15 @@ test("altered merchant display name rejects bridge without consuming", async () 
   const challengeId = await seedApprovedChallenge(db, quote, nowMs);
   assert.throws(
     () =>
-      ledger.recordCustomerApprovalFromCibaChallenge(challengeId, human, quote, {
-        nowMs,
-        merchantDisplayName: "Spoofed Merchant",
-      }),
+      ledger.recordCustomerApprovalFromCibaChallenge(
+        challengeId,
+        human,
+        quote,
+        {
+          nowMs,
+          merchantDisplayName: "Spoofed Merchant",
+        },
+      ),
     /challenge_terms_mismatch/,
   );
   const row = db
@@ -447,10 +473,15 @@ test("expired challenge rejects bridge without consuming", async () => {
   );
   assert.throws(
     () =>
-      ledger.recordCustomerApprovalFromCibaChallenge(challengeId, human, quote, {
-        nowMs,
-        merchantDisplayName: MERCHANT,
-      }),
+      ledger.recordCustomerApprovalFromCibaChallenge(
+        challengeId,
+        human,
+        quote,
+        {
+          nowMs,
+          merchantDisplayName: MERCHANT,
+        },
+      ),
     /challenge_expired/,
   );
   const row = db
@@ -488,12 +519,10 @@ test("bounded agent session still blocked from execute after CIBA approval", asy
     "chal-bounded",
     bounded.sessionId,
   );
-  ledger.recordCustomerApprovalFromCibaChallenge(
-    challengeId,
-    human,
-    quote,
-    { nowMs, merchantDisplayName: MERCHANT },
-  );
+  ledger.recordCustomerApprovalFromCibaChallenge(challengeId, human, quote, {
+    nowMs,
+    merchantDisplayName: MERCHANT,
+  });
   await assert.rejects(
     ledger.executeQuote(quote.id, bounded),
     /not_found_or_forbidden/,

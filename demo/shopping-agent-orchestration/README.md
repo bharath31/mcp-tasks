@@ -14,13 +14,13 @@ Standalone runtime for **owner-bound** shopping agent runs: persist status/event
 
 See `src/host-integration.ts`:
 
-| Binding / var | Purpose |
-| --- | --- |
-| `AGENT_RUNS` | `ShoppingAgentRunState` DO class |
-| `AI` | Workers AI |
-| `BROWSER` | Browser Run |
+| Binding / var     | Purpose                                            |
+| ----------------- | -------------------------------------------------- |
+| `AGENT_RUNS`      | `ShoppingAgentRunState` DO class                   |
+| `AI`              | Workers AI                                         |
+| `BROWSER`         | Browser Run                                        |
 | `MERCHANT_ORIGIN` | Trusted HTTPS storefront (must match agent config) |
-| `AGENT_MODEL` | Optional model id override |
+| `AGENT_MODEL`     | Optional model id override                         |
 
 HTTP contract mirrors `demo/shopping-live/web` types: `POST /api/agent/start`, `GET /api/agent/:id`.
 

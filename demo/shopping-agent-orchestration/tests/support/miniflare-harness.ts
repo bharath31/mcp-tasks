@@ -56,9 +56,9 @@ function harnessNamespace(
         id,
         fetch(input: RequestInfo | URL, init?: RequestInit): Promise<Response> {
           const req = new Request(input, init);
-          return req.json().then((body) =>
-            dispatchRpc(ownerId, body as AgentRunRpc),
-          );
+          return req
+            .json()
+            .then((body) => dispatchRpc(ownerId, body as AgentRunRpc));
         },
       } as DurableObjectStub;
     },

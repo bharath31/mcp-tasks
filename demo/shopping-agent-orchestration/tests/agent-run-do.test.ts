@@ -11,7 +11,13 @@ async function readRpc(res: Response) {
   return readRpcJson<{
     ok: boolean;
     error?: string;
-    run?: { id: string; ownerId: string; events: unknown[]; status: string; reply?: string | null };
+    run?: {
+      id: string;
+      ownerId: string;
+      events: unknown[];
+      status: string;
+      reply?: string | null;
+    };
   }>(res);
 }
 
@@ -33,8 +39,7 @@ test("owner-bound DO rejects cross-owner polling", async () => {
       runId: cred.runId,
       goal: "add tray",
       parentInnerSid: "parent-sid",
-      parentInnerSid: "parent-sid",
-    credential: cred,
+      credential: cred,
     }),
   );
   assert.equal(create.ok, true);
@@ -94,9 +99,7 @@ test("verifyAndStart requires matching scoped credential", async () => {
     await harness.dispatchRpc("owner-c", {
       op: "verifyAndStart",
       runId: cred.runId,
-      parentInnerSid: "parent-sid",
-      parentInnerSid: "parent-sid",
-    credential: cred,
+      credential: cred,
     }),
   );
   assert.equal(good.ok, true);
@@ -115,7 +118,6 @@ test("mutating RPCs without credential are rejected", async () => {
   await harness.dispatchRpc("owner-auth", {
     op: "verifyAndStart",
     runId: cred.runId,
-    parentInnerSid: "parent-sid",
     credential: cred,
   });
 
@@ -161,8 +163,7 @@ test("createRun rejects oversized goal", async () => {
       runId: cred.runId,
       goal: "x".repeat(2500),
       parentInnerSid: "parent-sid",
-      parentInnerSid: "parent-sid",
-    credential: cred,
+      credential: cred,
     }),
   );
   assert.equal(res.ok, false);
@@ -181,7 +182,6 @@ test("cleanupStale marks stuck running as failed and blocks late writes", async 
   await harness.dispatchRpc("owner-stale", {
     op: "verifyAndStart",
     runId: cred.runId,
-    parentInnerSid: "parent-sid",
     credential: cred,
   });
 
@@ -205,9 +205,7 @@ test("cleanupStale marks stuck running as failed and blocks late writes", async 
     await harness.dispatchRpc("owner-stale", {
       op: "appendEvents",
       runId: cred.runId,
-      parentInnerSid: "parent-sid",
-      parentInnerSid: "parent-sid",
-    credential: cred,
+      credential: cred,
       events: [{ atMs: Date.now(), kind: "progress", message: "late" }],
     }),
   );

@@ -15,14 +15,15 @@ export type ShoppingAgentOrchestrationBindings = {
   AGENT_RUNS: DurableObjectNamespace;
 };
 
-export type ShoppingAgentOrchestrationEnv = ShoppingAgentOrchestrationBindings & {
-  /** HTTPS storefront origin; must match shopping-agent config. */
-  MERCHANT_ORIGIN: string;
-  /** Workers AI model id (optional; shopping-agent config default otherwise). */
-  AGENT_MODEL?: string;
-  /** Test harness only — in-worker loopback to agent-browser HTTP. */
-  SELF_SUBFETCH?: Fetcher;
-};
+export type ShoppingAgentOrchestrationEnv =
+  ShoppingAgentOrchestrationBindings & {
+    /** HTTPS storefront origin; must match shopping-agent config. */
+    MERCHANT_ORIGIN: string;
+    /** Workers AI model id (optional; shopping-agent config default otherwise). */
+    AGENT_MODEL?: string;
+    /** Test harness only — in-worker loopback to agent-browser HTTP. */
+    SELF_SUBFETCH?: Fetcher;
+  };
 
 export const RUN_STATUSES = [
   "pending",

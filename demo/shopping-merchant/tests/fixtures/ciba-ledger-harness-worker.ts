@@ -110,7 +110,9 @@ export class CibaLedgerHarness extends DurableObject {
     if (op === "bridge-once") {
       const challengeId = url.searchParams.get("challengeId") ?? "chal-do-1";
       const quoteId = url.searchParams.get("quoteId");
-      const record = db.exec("SELECT * FROM quotes WHERE id = ?", quoteId).one();
+      const record = db
+        .exec("SELECT * FROM quotes WHERE id = ?", quoteId)
+        .one();
       if (!record) return Response.json({ ok: false, error: "no_quote" });
       const quote = JSON.parse(String(record.data));
       try {

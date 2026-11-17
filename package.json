@@ -37,7 +37,7 @@
     "interop:claude-code": "npm run local --",
     "task-authority": "node --import tsx auth0/tools/task-authority.ts",
     "verify": "node demo/policy-desk/tools/setup.mjs --verify",
-    "test:shopping": "npm --prefix packages/commerce test && npm --prefix integrations/poppy test && node --import tsx --test examples/storefront/tests/*.test.ts && node --test examples/storefront/tests/fixture-http.test.cjs && npm --prefix demo/shopping-live/web run build && npm --prefix demo/shopping-live/web test && npm --prefix demo/shopping-live/worker run build && npm --prefix demo/shopping-live/worker run typecheck:tests && npm --prefix demo/shopping-live/worker test"
+    "test:shopping": "npm --prefix packages/commerce test && npm --prefix integrations/poppy test && node --import tsx --test examples/storefront/tests/*.test.ts && node --test examples/storefront/tests/fixture-http.test.cjs && npm --prefix demo/shopping-live/web run build && npm --prefix demo/shopping-live/web test && npm --prefix demo/shopping-live/worker run build && npm --prefix demo/shopping-live/worker run typecheck:tests && npm --prefix demo/shopping-live/worker test && npm --prefix demo/shopping-agent-orchestration run typecheck"
   },
   "engines": {
     "node": ">=22"
