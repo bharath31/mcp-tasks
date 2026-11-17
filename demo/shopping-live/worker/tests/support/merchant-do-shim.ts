@@ -1,0 +1,1 @@
+export { RpcTestCustomerMerchantLedger as CustomerMerchantLedger } from "../../../../shopping-merchant/tests/support/rpc-test-merchant-do.js";

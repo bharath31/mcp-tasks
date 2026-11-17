@@ -22,6 +22,22 @@ const addresses = [
     trustedForAgentCheckout: false,
     destination: { country: "US", postalCode: "94105" },
   },
+  {
+    id: "merchant-default",
+    customerId: "auth0|customer-abc",
+    label: "Merchant default (fixture)",
+    version: "1",
+    trustedForAgentCheckout: true,
+    destination: { country: "US", postalCode: "10001" },
+  },
+  {
+    id: "merchant-default",
+    customerId: "auth0|quote-customer",
+    label: "Merchant default (fixture)",
+    version: "1",
+    trustedForAgentCheckout: true,
+    destination: { country: "US", postalCode: "10001" },
+  },
 ] as const;
 
 export function createFixtureCustomerAccount(): CustomerAccountPort {

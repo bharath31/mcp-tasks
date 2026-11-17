@@ -1,4 +1,4 @@
-import { shoppingApi } from "./api.js";
+import { setSessionCsrfToken, shoppingApi } from "./api.js";
 import { formatMoney, STORE_PRODUCTS } from "./catalog.js";
 import { safeNavHref } from "./nav.js";
 import {
@@ -551,10 +551,12 @@ async function loadSession(): Promise<void> {
   const result = await shoppingApi.session();
   if (result.ok) {
     ui.session = result.data;
+    setSessionCsrfToken(result.data.csrfToken);
     ui.sessionError = null;
     ui.apiAvailable = true;
   } else {
     ui.session = null;
+    setSessionCsrfToken(null);
     ui.sessionError = result.error.message;
     ui.apiAvailable = result.error.status !== 404;
   }

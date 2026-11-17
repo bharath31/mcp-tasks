@@ -1,0 +1,9 @@
+{
+  "name": "@nominee/shopping-live-worker",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "tsc -p tsconfig.json --noEmit",
+    "test": "node --import tsx --test tests/*.test.ts"
+  }
+}

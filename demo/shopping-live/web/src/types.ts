@@ -11,6 +11,8 @@ export type SessionResponse = {
   merchant?: MerchantWallet;
   agentConnected?: boolean;
   capabilities?: Record<string, boolean>;
+  /** Same-origin mutation token from the Worker when signed in. */
+  csrfToken?: string;
 };
 
 export type AgentEvent = {

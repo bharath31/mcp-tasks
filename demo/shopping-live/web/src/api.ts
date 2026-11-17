@@ -19,20 +19,35 @@ export class ShoppingApiError extends Error {
   }
 }
 
+let sessionCsrf: string | null = null;
+
+export function setSessionCsrfToken(token: string | null | undefined): void {
+  sessionCsrf =
+    typeof token === "string" && token.length > 0 ? token : null;
+}
+
 async function request<T>(
   path: string,
   init?: RequestInit,
 ): Promise<{ ok: true; data: T } | { ok: false; error: ShoppingApiError }> {
   let response: Response;
   try {
+    const method = init?.method?.toUpperCase() ?? "GET";
+    const headers: Record<string, string> = {
+      "Content-Type": "application/json",
+      Accept: "application/json",
+      ...(init?.headers as Record<string, string> | undefined),
+    };
+    if (
+      sessionCsrf &&
+      ["POST", "PUT", "PATCH", "DELETE"].includes(method)
+    ) {
+      headers["x-nominee-csrf"] = sessionCsrf;
+    }
     response = await fetch(`/api${path}`, {
       ...init,
       cache: "no-store",
-      headers: {
-        "Content-Type": "application/json",
-        Accept: "application/json",
-        ...init?.headers,
-      },
+      headers,
     });
   } catch {
     return {
