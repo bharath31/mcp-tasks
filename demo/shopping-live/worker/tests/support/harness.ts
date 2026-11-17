@@ -140,6 +140,7 @@ export async function startHarness(options?: {
       SHOPPING_MERCHANT_WALLET_LABEL: "Stillroom wallet",
       SHOPPING_MERCHANT_DISPLAY_NAME: "Stillroom",
       MERCHANT_ORIGIN,
+      SHOPPING_LEDGER_TEST_HOOKS: "1",
       AI: {},
       BROWSER: {},
       ...options?.bindings,

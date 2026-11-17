@@ -37,6 +37,15 @@ test("main documents Guardian push approval honestly", () => {
   assert.match(mainSrc, /quoteDetailsPanel/);
 });
 
+test("quote lines fail closed when unit price is missing", () => {
+  assert.match(mainSrc, /unit price unavailable/);
+  assert.doesNotMatch(
+    mainSrc,
+    /formatMoney\(item\.priceMinor \?\? 0/,
+    "missing line unit price must not render as zero",
+  );
+});
+
 test("auth links validate URLs before href", () => {
   assert.match(mainSrc, /safeNavHref\(ui\.session\?\.loginUrl/);
   assert.match(mainSrc, /shoppingApi\.signOut/);

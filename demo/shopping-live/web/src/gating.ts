@@ -30,8 +30,8 @@ export function canRequestQuote(
   session: SessionResponse | null,
   cart: Cart | null,
 ): GateReason {
-  const gate = canStartAgent(session);
-  if (gate !== "ok") return gate;
+  if (!session) return "no_session";
+  if (!sessionVerified(session)) return "unauthenticated";
   if (!cart) return "no_cart";
   if (!cart.items.length) return "empty_cart";
   return "ok";
@@ -41,9 +41,8 @@ export function canStartApproval(
   session: SessionResponse | null,
   quote: Quote | null,
 ): GateReason {
-  const gate = canStartAgent(session);
-  if (gate !== "ok") return gate;
   if (!session) return "no_session";
+  if (!sessionVerified(session)) return "unauthenticated";
   if (!quote) return "no_quote";
   if (!quote.verified) return "quote_unverified";
   if (session.capabilities?.guardianApproval !== true) {

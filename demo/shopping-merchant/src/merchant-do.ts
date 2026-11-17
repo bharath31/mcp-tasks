@@ -48,6 +48,13 @@ type PublicRpcBody =
       shippingAddressId: string;
     }
   | { op: "getQuote"; actor: TrustedActor; quoteId: string }
+  | { op: "validateQuote"; actor: TrustedActor; quoteId: string }
+  | {
+      op: "setQuoteExpiresAtForTest";
+      actor: TrustedActor;
+      quoteId: string;
+      expiresAt: string;
+    }
   | { op: "executeQuote"; actor: TrustedActor; quoteId: string }
   | { op: "reconcileQuote"; actor: TrustedActor; quoteId: string }
   | { op: "abandonQuote"; actor: TrustedActor; quoteId: string }
@@ -271,6 +278,7 @@ export class CustomerMerchantLedger extends DurableObject<MerchantLedgerEnv> {
           agentId: row.agentId,
           sessionId: row.sessionId,
           status: row.status,
+          ...(row.failureCode ? { failureCode: row.failureCode } : {}),
         });
       }
 
@@ -327,6 +335,19 @@ export class CustomerMerchantLedger extends DurableObject<MerchantLedgerEnv> {
         return Response.json(polled);
       }
 
+      if (body.op === "setQuoteExpiresAtForTest") {
+        if (this.env.SHOPPING_LEDGER_TEST_HOOKS !== "1") {
+          return Response.json({ error: "forbidden" }, { status: 403 });
+        }
+        const ledger = this.ledgerFor(customerId);
+        const quote = ledger.setQuoteExpiresAtForTest(
+          body.quoteId,
+          body.actor,
+          body.expiresAt,
+        );
+        return Response.json(quote);
+      }
+
       const ledger = this.ledgerFor(customerId);
       let result: unknown;
       switch (body.op) {
@@ -348,6 +369,9 @@ export class CustomerMerchantLedger extends DurableObject<MerchantLedgerEnv> {
           break;
         case "getQuote":
           result = ledger.getQuote(body.quoteId, body.actor);
+          break;
+        case "validateQuote":
+          result = await ledger.validateQuote(body.quoteId, body.actor);
           break;
         case "executeQuote":
           result = await ledger.executeQuote(body.quoteId, body.actor);

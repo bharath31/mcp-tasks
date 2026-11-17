@@ -1,5 +1,5 @@
 import { agentIntegrationConfigured } from "./agent-host.js";
-import { pollCustomerApproval, type ApprovalRecord } from "./approval.js";
+import { readCustomerApproval, type ApprovalRecord } from "./approval.js";
 import { readCustomerQuote, type ClientQuote } from "./cart.js";
 import {
   readCheckoutPointers,
@@ -56,7 +56,7 @@ export async function resumeCustomerCheckout(
 
   if (pointers.challengeId && quote) {
     try {
-      approval = await pollCustomerApproval(
+      approval = await readCustomerApproval(
         env,
         customer,
         pointers.challengeId,

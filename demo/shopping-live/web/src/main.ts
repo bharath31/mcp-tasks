@@ -169,12 +169,20 @@ function approvalStatusMessage(approval: ApprovalRecord): string {
   }
 }
 
+function formatQuoteLineUnitPrice(
+  item: Quote["items"][number],
+  quote: Quote,
+): string {
+  if (item.priceMinor == null) return "unit price unavailable";
+  return `${formatMoney(item.priceMinor, item.currency ?? quote.currency)} each`;
+}
+
 function quoteDetailsPanel(quote: Quote): HTMLElement {
   const list = el("ul", { className: "quote-lines" });
   for (const item of quote.items) {
     list.append(
       el("li", {}, [
-        `${item.name ?? item.productId} · qty ${item.quantity} · ${formatMoney(item.priceMinor ?? 0, item.currency ?? quote.currency)} each`,
+        `${item.name ?? item.productId} · qty ${item.quantity} · ${formatQuoteLineUnitPrice(item, quote)}`,
       ]),
     );
   }

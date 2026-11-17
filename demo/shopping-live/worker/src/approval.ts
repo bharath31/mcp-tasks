@@ -19,6 +19,36 @@ export type ApprovalRecord = {
   delivery: "guardian_push";
 };
 
+type StoredChallengeMeta = {
+  quoteId: string;
+  quoteRevision: number;
+  operationId: string;
+  status: string;
+  failureCode?: string;
+};
+
+function mapStoredChallengeStatus(
+  challengeId: string,
+  meta: StoredChallengeMeta,
+): ApprovalRecord {
+  const pending = meta.status === "starting" || meta.status === "polling";
+  let status: ApprovalRecord["status"];
+  if (pending) status = "pending";
+  else if (meta.status === "approved") status = "approved";
+  else if (meta.status === "denied") status = "denied";
+  else if (meta.status === "expired") status = "expired";
+  else status = "failed";
+  return {
+    id: challengeId,
+    quoteId: meta.quoteId,
+    status,
+    operationId: meta.operationId,
+    quoteRevision: meta.quoteRevision,
+    delivery: "guardian_push",
+    ...(meta.failureCode ? { failureCode: meta.failureCode } : {}),
+  };
+}
+
 function mapChallengeStatus(raw: SanitizedChallengeStatus): ApprovalRecord {
   const status =
     raw.status === "unavailable"
@@ -103,6 +133,29 @@ export async function startCustomerApproval(
   const record = mapChallengeStatus(raw);
   await persistChallengePointer(env, customer.customerId, record);
   return record;
+}
+
+export async function readCustomerApproval(
+  env: ShoppingLiveEnv,
+  customer: AuthenticatedCustomer,
+  challengeId: string,
+): Promise<ApprovalRecord> {
+  if (!shoppingCibaConfigured(env)) {
+    throw new Error("ciba_unconfigured");
+  }
+  const trimmed = challengeId.trim();
+  if (!trimmed) throw new Error("challenge_id_required");
+  const metaRes = await merchantLedgerRpc(env, customer.customerId, {
+    op: "getCibaChallenge",
+    actor: customer.human,
+    challengeId: trimmed,
+  });
+  if (!metaRes.ok) {
+    const err = (await metaRes.json().catch(() => ({}))) as { error?: string };
+    throw new Error(err.error ?? "challenge_not_found");
+  }
+  const meta = (await metaRes.json()) as StoredChallengeMeta;
+  return mapStoredChallengeStatus(trimmed, meta);
 }
 
 export async function pollCustomerApproval(

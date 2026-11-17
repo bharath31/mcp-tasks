@@ -10,11 +10,13 @@ export function merchantQuoteToClient(
 ): ClientQuote {
   const detailsJson = stableDestinationJson(quote.destination.destination);
   const verified = nowMs < Date.parse(quote.expiresAt);
-  buildGuardianPurchaseAuthorizationDetails({
-    quote,
-    merchantDisplayName,
-    nowMs,
-  });
+  if (verified) {
+    buildGuardianPurchaseAuthorizationDetails({
+      quote,
+      merchantDisplayName,
+      nowMs,
+    });
+  }
   return {
     id: quote.id,
     cartId: quote.cartId,

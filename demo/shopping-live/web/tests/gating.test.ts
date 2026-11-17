@@ -111,6 +111,8 @@ test("capability flags gate agent, approval, and execute", () => {
     },
   };
   assert.equal(canStartAgent(noAgent), "agent_unavailable");
+  assert.equal(canRequestQuote(noAgent, cart), "ok");
+  assert.equal(canStartApproval(noAgent, quote), "ok");
   assert.equal(canStartApproval(noGuardian, quote), "guardian_unavailable");
   assert.equal(
     canExecuteOrder(noGuardian, quote, approved),

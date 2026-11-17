@@ -299,13 +299,16 @@ export async function readCustomerQuote(
   if (!trimmed) return null;
   const browserSession = await browserSessionId(env, customer.customerId);
   const actor = browserShoppingActor(env, customer.customerId, browserSession);
-  const quoteRes = await merchantLedgerRpc(env, customer.customerId, {
-    op: "getQuote",
+  const validated = await merchantLedgerRpc(env, customer.customerId, {
+    op: "validateQuote",
     actor,
     quoteId: trimmed,
   });
-  if (!quoteRes.ok) return null;
-  const quote = (await quoteRes.json()) as MerchantQuote;
+  if (!validated.ok) {
+    await setActiveQuoteId(env, customer.customerId, null);
+    return null;
+  }
+  const quote = (await validated.json()) as MerchantQuote;
   const client = merchantQuoteToClient(
     quote,
     env.SHOPPING_MERCHANT_DISPLAY_NAME?.trim() || "Stillroom",

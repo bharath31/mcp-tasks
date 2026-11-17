@@ -37,6 +37,13 @@ type PublicRpcBody =
       shippingAddressId: string;
     }
   | { op: "getQuote"; actor: TrustedActor; quoteId: string }
+  | { op: "validateQuote"; actor: TrustedActor; quoteId: string }
+  | {
+      op: "setQuoteExpiresAtForTest";
+      actor: TrustedActor;
+      quoteId: string;
+      expiresAt: string;
+    }
   | { op: "executeQuote"; actor: TrustedActor; quoteId: string }
   | { op: "reconcileQuote"; actor: TrustedActor; quoteId: string }
   | { op: "abandonQuote"; actor: TrustedActor; quoteId: string }
@@ -199,6 +206,16 @@ export class RpcTestCustomerMerchantLedger extends DurableObject<MerchantLedgerE
           break;
         case "getQuote":
           result = ledger.getQuote(body.quoteId, body.actor);
+          break;
+        case "validateQuote":
+          result = await ledger.validateQuote(body.quoteId, body.actor);
+          break;
+        case "setQuoteExpiresAtForTest":
+          result = ledger.setQuoteExpiresAtForTest(
+            body.quoteId,
+            body.actor,
+            body.expiresAt,
+          );
           break;
         case "executeQuote":
           result = await ledger.executeQuote(body.quoteId, body.actor);
