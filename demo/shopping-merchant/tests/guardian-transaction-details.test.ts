@@ -6,6 +6,7 @@ import {
   GuardianTransactionDetailsError,
   stableDestinationJson,
 } from "../src/approval/index.js";
+import { DESTINATION_JSON_MAX_NODES } from "../src/approval/serialize.js";
 import type { Quote } from "../src/types.js";
 
 const MERCHANT = "Nominee Fixture Shop";
@@ -403,6 +404,130 @@ test("stableDestinationJson rejects sparse arrays", () => {
       assert.ok(err instanceof GuardianTransactionDetailsError);
       assert.equal(err.code, "invalid_destination");
       assert.match(String(err.message), /sparse/);
+      return true;
+    },
+  );
+});
+
+test("stableDestinationJson enforces shared node cap across branching subtrees", () => {
+  const destination: Record<string, unknown> = { country: "US" };
+  for (let i = 0; i < 100; i += 1) {
+    destination[`branch_${i}`] = {
+      a: Array.from({ length: 50 }, (_, j) => j),
+    };
+  }
+  assert.throws(
+    () => stableDestinationJson(destination),
+    (err: unknown) => {
+      assert.ok(err instanceof GuardianTransactionDetailsError);
+      assert.equal(err.code, "invalid_destination");
+      assert.match(
+        String(err.message),
+        new RegExp(String(DESTINATION_JSON_MAX_NODES)),
+      );
+      return true;
+    },
+  );
+});
+
+test("stableDestinationJson rejects array index getters without invoking them", () => {
+  const arr: unknown[] = [1];
+  let invoked = false;
+  Object.defineProperty(arr, "0", {
+    enumerable: true,
+    configurable: true,
+    get() {
+      invoked = true;
+      return 99;
+    },
+  });
+  assert.throws(
+    () => stableDestinationJson({ lines: arr }),
+    (err: unknown) => {
+      assert.ok(err instanceof GuardianTransactionDetailsError);
+      assert.equal(err.code, "invalid_destination");
+      assert.match(String(err.message), /accessor/);
+      return true;
+    },
+  );
+  assert.equal(invoked, false);
+});
+
+test("stableDestinationJson rejects prototype-chain array indices", () => {
+  const child = ["x"];
+  Object.setPrototypeOf(child, ["a", "b"]);
+  child.length = 2;
+  assert.equal(Object.hasOwn(child, "1"), false);
+  assert.equal(1 in child, true);
+  assert.throws(
+    () => stableDestinationJson({ lines: child }),
+    (err: unknown) => {
+      assert.ok(err instanceof GuardianTransactionDetailsError);
+      assert.equal(err.code, "invalid_destination");
+      assert.match(String(err.message), /sparse|inherited|Array prototype/);
+      return true;
+    },
+  );
+});
+
+test("stableDestinationJson rejects array non-index own properties", () => {
+  const arr = [1] as unknown[] & { meta?: string };
+  arr.meta = "bar";
+  assert.throws(
+    () => stableDestinationJson({ lines: arr }),
+    (err: unknown) => {
+      assert.ok(err instanceof GuardianTransactionDetailsError);
+      assert.equal(err.code, "invalid_destination");
+      assert.match(String(err.message), /non-index/);
+      return true;
+    },
+  );
+});
+
+test("stableDestinationJson rejects symbol keys on arrays", () => {
+  const arr = [1] as unknown[] & Record<symbol, number>;
+  arr[Symbol.for("x")] = 2;
+  assert.throws(
+    () => stableDestinationJson({ lines: arr }),
+    (err: unknown) => {
+      assert.ok(err instanceof GuardianTransactionDetailsError);
+      assert.equal(err.code, "invalid_destination");
+      assert.match(String(err.message), /symbol/);
+      return true;
+    },
+  );
+});
+
+test("stableDestinationJson rejects inherited sparse slots", () => {
+  const parentArray: unknown[] = [];
+  parentArray[1] = "inherited";
+  const child = ["x"];
+  Object.setPrototypeOf(child, parentArray);
+  child.length = 2;
+  assert.throws(
+    () => stableDestinationJson({ lines: child }),
+    (err: unknown) => {
+      assert.ok(err instanceof GuardianTransactionDetailsError);
+      assert.equal(err.code, "invalid_destination");
+      assert.match(String(err.message), /sparse|inherited|Array prototype/);
+      return true;
+    },
+  );
+});
+
+test("stableDestinationJson rejects plain objects with prototype toJSON", () => {
+  const bad = Object.create({
+    toJSON() {
+      return { hacked: true };
+    },
+  });
+  bad.country = "US";
+  assert.throws(
+    () => stableDestinationJson(bad),
+    (err: unknown) => {
+      assert.ok(err instanceof GuardianTransactionDetailsError);
+      assert.equal(err.code, "invalid_destination");
+      assert.match(String(err.message), /toJSON/);
       return true;
     },
   );

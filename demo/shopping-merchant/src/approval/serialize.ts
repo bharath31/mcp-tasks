@@ -5,12 +5,20 @@ export const DESTINATION_JSON_MAX_DEPTH = 32;
 export const DESTINATION_JSON_MAX_NODES = 2_000;
 export const DESTINATION_JSON_MAX_OUTPUT_CHARS = 64_000;
 
-type SerializeContext = {
-  depth: number;
+type SerializeBudget = {
   nodeCount: number;
-  seen: WeakSet<object>;
   outputChars: number;
 };
+
+type SerializeContext = {
+  depth: number;
+  budget: SerializeBudget;
+  seen: WeakSet<object>;
+};
+
+function childContext(ctx: SerializeContext): SerializeContext {
+  return { depth: ctx.depth + 1, budget: ctx.budget, seen: ctx.seen };
+}
 
 function isPlainObject(value: unknown): value is Record<string, unknown> {
   return (
@@ -21,9 +29,51 @@ function isPlainObject(value: unknown): value is Record<string, unknown> {
   );
 }
 
+function hasSerializableToJsonSurprise(value: object): boolean {
+  let current: object | null = value;
+  while (current !== null) {
+    const desc = Object.getOwnPropertyDescriptor(current, "toJSON");
+    if (desc) {
+      if (desc.get !== undefined || desc.set !== undefined) {
+        return true;
+      }
+      if (typeof desc.value === "function") {
+        return true;
+      }
+    }
+    current = Object.getPrototypeOf(current);
+  }
+  return false;
+}
+
+function isCanonicalArrayIndexKey(key: string, length: number): boolean {
+  if (key === "length") return true;
+  if (!/^(?:0|[1-9]\d*)$/.test(key)) return false;
+  return Number(key) < length;
+}
+
+function assertDataProperty(
+  desc: PropertyDescriptor | undefined,
+  kind: "object" | "array",
+  label: string,
+): asserts desc is PropertyDescriptor & { value: unknown } {
+  if (!desc) {
+    throw new GuardianTransactionDetailsError(
+      "invalid_destination",
+      `destination ${kind} property "${label}" is missing`,
+    );
+  }
+  if (desc.get !== undefined || desc.set !== undefined) {
+    throw new GuardianTransactionDetailsError(
+      "invalid_destination",
+      `destination ${kind} property "${label}" must not use accessors`,
+    );
+  }
+}
+
 function bumpNodeCount(ctx: SerializeContext): void {
-  ctx.nodeCount += 1;
-  if (ctx.nodeCount > DESTINATION_JSON_MAX_NODES) {
+  ctx.budget.nodeCount += 1;
+  if (ctx.budget.nodeCount > DESTINATION_JSON_MAX_NODES) {
     throw new GuardianTransactionDetailsError(
       "invalid_destination",
       `destination exceeds local node limit (${DESTINATION_JSON_MAX_NODES})`,
@@ -32,8 +82,8 @@ function bumpNodeCount(ctx: SerializeContext): void {
 }
 
 function recordOutputChars(ctx: SerializeContext, added: number): void {
-  ctx.outputChars += added;
-  if (ctx.outputChars > DESTINATION_JSON_MAX_OUTPUT_CHARS) {
+  ctx.budget.outputChars += added;
+  if (ctx.budget.outputChars > DESTINATION_JSON_MAX_OUTPUT_CHARS) {
     throw new GuardianTransactionDetailsError(
       "invalid_destination",
       `destination exceeds local serialized size limit (${DESTINATION_JSON_MAX_OUTPUT_CHARS})`,
@@ -72,6 +122,12 @@ function stableJsonInner(value: unknown, ctx: SerializeContext): unknown {
   }
 
   if (Array.isArray(value)) {
+    if (Object.getPrototypeOf(value) !== Array.prototype) {
+      throw new GuardianTransactionDetailsError(
+        "invalid_destination",
+        "destination array must use the standard Array prototype",
+      );
+    }
     if (ctx.seen.has(value)) {
       throw new GuardianTransactionDetailsError(
         "invalid_destination",
@@ -85,16 +141,32 @@ function stableJsonInner(value: unknown, ctx: SerializeContext): unknown {
       );
     }
     ctx.seen.add(value);
-    const nextCtx = { ...ctx, depth: ctx.depth + 1 };
+    const nextCtx = childContext(ctx);
     const out: unknown[] = [];
     for (let i = 0; i < value.length; i += 1) {
-      if (!(i in value)) {
+      const key = String(i);
+      if (!Object.hasOwn(value, key)) {
         throw new GuardianTransactionDetailsError(
           "invalid_destination",
-          "destination array must not contain sparse slots",
+          "destination array must not contain sparse slots or inherited indices",
         );
       }
-      out.push(stableJsonInner(value[i], nextCtx));
+      const desc = Object.getOwnPropertyDescriptor(value, key);
+      assertDataProperty(desc, "array", key);
+      out.push(stableJsonInner(desc.value, nextCtx));
+    }
+    for (const key of Object.getOwnPropertyNames(value)) {
+      if (isCanonicalArrayIndexKey(key, value.length)) continue;
+      throw new GuardianTransactionDetailsError(
+        "invalid_destination",
+        `destination array must not contain non-index property "${key}"`,
+      );
+    }
+    for (const sym of Object.getOwnPropertySymbols(value)) {
+      throw new GuardianTransactionDetailsError(
+        "invalid_destination",
+        "destination array must not contain symbol keys",
+      );
     }
     ctx.seen.delete(value);
     recordOutputChars(ctx, out.length * 2);
@@ -102,6 +174,12 @@ function stableJsonInner(value: unknown, ctx: SerializeContext): unknown {
   }
 
   if (isPlainObject(value)) {
+    if (hasSerializableToJsonSurprise(value)) {
+      throw new GuardianTransactionDetailsError(
+        "invalid_destination",
+        "destination must not define toJSON",
+      );
+    }
     if (ctx.seen.has(value)) {
       throw new GuardianTransactionDetailsError(
         "invalid_destination",
@@ -115,7 +193,7 @@ function stableJsonInner(value: unknown, ctx: SerializeContext): unknown {
       );
     }
     ctx.seen.add(value);
-    const nextCtx = { ...ctx, depth: ctx.depth + 1 };
+    const nextCtx = childContext(ctx);
     const keys = Object.getOwnPropertyNames(value).sort();
     for (const key of Object.getOwnPropertySymbols(value)) {
       throw new GuardianTransactionDetailsError(
@@ -132,13 +210,7 @@ function stableJsonInner(value: unknown, ctx: SerializeContext): unknown {
         );
       }
       const desc = Object.getOwnPropertyDescriptor(value, key);
-      if (!desc) continue;
-      if (desc.get !== undefined || desc.set !== undefined) {
-        throw new GuardianTransactionDetailsError(
-          "invalid_destination",
-          `destination key "${key}" must not use accessors`,
-        );
-      }
+      assertDataProperty(desc, "object", key);
       out[key] = stableJsonInner(desc.value, nextCtx);
     }
     ctx.seen.delete(value);
@@ -156,11 +228,14 @@ function stableJsonInner(value: unknown, ctx: SerializeContext): unknown {
 export function stableDestinationJson(
   destination: Record<string, unknown>,
 ): string {
+  const budget: SerializeBudget = {
+    nodeCount: 0,
+    outputChars: 0,
+  };
   const ctx: SerializeContext = {
     depth: 0,
-    nodeCount: 0,
+    budget,
     seen: new WeakSet(),
-    outputChars: 0,
   };
   const normalized = stableJsonInner(destination, ctx);
   const json = JSON.stringify(normalized);
