@@ -1,7 +1,8 @@
 const { chromium } = require("playwright-core");
 const assert = require("node:assert/strict");
 const { createServer } = require("node:http");
-const { readFileSync, existsSync } = require("node:fs");
+const { readFileSync, existsSync, mkdtempSync } = require("node:fs");
+const { tmpdir } = require("node:os");
 const { join } = require("node:path");
 
 const dist = join(__dirname, "..", "dist");
@@ -65,6 +66,7 @@ async function main() {
     launchOpts.executablePath = executablePath;
 
   const browser = await chromium.launch(launchOpts);
+  const screenshots = mkdtempSync(join(tmpdir(), "nominee-web-smoke-"));
 
   for (const width of [390, 768, 1200]) {
     const page = await browser.newPage({ viewport: { width, height: 900 } });
@@ -79,7 +81,7 @@ async function main() {
     const checkout = page.getByRole("button", { name: "Complete checkout" });
     assert.equal(await checkout.isDisabled(), true);
     await page.screenshot({
-      path: join(dist, `screenshot-${width}.png`),
+      path: join(screenshots, `screenshot-${width}.png`),
       fullPage: true,
     });
     await page.close();
