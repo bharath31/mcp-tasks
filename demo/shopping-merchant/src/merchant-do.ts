@@ -18,6 +18,7 @@ import {
 import {
   MERCHANT_HOST_INTERNAL_SECRET_HEADER,
   readHostInternalSecret,
+  resolveSubrequestFetch,
   type MerchantLedgerEnv,
 } from "./port-env.js";
 import { createDoSqlDatabase, initMerchantSchema } from "./sql.js";
@@ -212,7 +213,11 @@ export class CustomerMerchantLedger extends DurableObject<MerchantLedgerEnv> {
       const message =
         error instanceof Error ? error.message : "customer_binding_mismatch";
       const status =
-        message === "shipping_unconfigured" ? 503 : message.includes("mismatch") ? 403 : 409;
+        message === "shipping_unconfigured"
+          ? 503
+          : message.includes("mismatch")
+            ? 403
+            : 409;
       return Response.json({ error: message }, { status });
     }
 
@@ -226,10 +231,7 @@ export class CustomerMerchantLedger extends DurableObject<MerchantLedgerEnv> {
         return Response.json(result);
       }
 
-      const subrequestFetch =
-        typeof this.env.SUBREQUEST_FETCH === "function"
-          ? this.env.SUBREQUEST_FETCH
-          : fetch;
+      const subrequestFetch = resolveSubrequestFetch(this.env);
 
       if (body.op === "startPurchaseCiba") {
         this.assertHumanActor(body.actor, customerId);
@@ -257,7 +259,10 @@ export class CustomerMerchantLedger extends DurableObject<MerchantLedgerEnv> {
         this.assertHumanActor(body.actor, customerId);
         const row = await this.cibaStore().get(body.challengeId);
         if (!row || row.customerId !== customerId) {
-          return Response.json({ error: "challenge_not_found" }, { status: 404 });
+          return Response.json(
+            { error: "challenge_not_found" },
+            { status: 404 },
+          );
         }
         return Response.json({
           quoteId: row.quoteId,
@@ -291,13 +296,33 @@ export class CustomerMerchantLedger extends DurableObject<MerchantLedgerEnv> {
         );
         if (polled.status === "approved") {
           const quote = ledger.getQuote(body.quoteId, body.actor);
-          const bridged = ledger.recordCustomerApprovalFromCibaChallenge(
-            body.challengeId,
-            body.actor,
-            quote,
-            { merchantDisplayName: merchantDisplayNameFromEnv(this.env) },
-          );
-          return Response.json({ ...polled, ledger: bridged });
+          const stored = await this.cibaStore().get(body.challengeId);
+          const approvalRecorded = ledger.hasCustomerApprovalForQuote(quote);
+          if (stored?.consumedAtMs != null || approvalRecorded) {
+            if (!approvalRecorded) {
+              throw new Error("challenge_already_consumed");
+            }
+            return Response.json(polled);
+          }
+          try {
+            const bridged = ledger.recordCustomerApprovalFromCibaChallenge(
+              body.challengeId,
+              body.actor,
+              quote,
+              { merchantDisplayName: merchantDisplayNameFromEnv(this.env) },
+            );
+            return Response.json({ ...polled, ledger: bridged });
+          } catch (error) {
+            const message =
+              error instanceof Error ? error.message : "bridge_failed";
+            if (
+              message === "challenge_already_consumed" &&
+              ledger.hasCustomerApprovalForQuote(quote)
+            ) {
+              return Response.json(polled);
+            }
+            throw error;
+          }
         }
         return Response.json(polled);
       }

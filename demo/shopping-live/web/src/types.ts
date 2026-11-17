@@ -59,7 +59,7 @@ export type Quote = {
 export type ApprovalRecord = {
   id: string;
   quoteId: string;
-  status: "pending" | "approved" | "denied" | "expired";
+  status: "pending" | "approved" | "denied" | "expired" | "failed";
   reviewUrl?: string;
 };
 

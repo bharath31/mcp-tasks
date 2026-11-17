@@ -19,7 +19,10 @@ import {
 const DEFERRED_AGENT_PREFIX = "/api/agent";
 
 function isDeferredAgent(path: string): boolean {
-  return path === DEFERRED_AGENT_PREFIX || path.startsWith(`${DEFERRED_AGENT_PREFIX}/`);
+  return (
+    path === DEFERRED_AGENT_PREFIX ||
+    path.startsWith(`${DEFERRED_AGENT_PREFIX}/`)
+  );
 }
 
 export function createShoppingApp(deps: CustomerAccessTokenDeps = {}) {
@@ -172,7 +175,8 @@ export function createShoppingApp(deps: CustomerAccessTokenDeps = {}) {
             if (!quoteId) {
               return problem(400, "invalid_quote", "quoteId is required.");
             }
-            await executeCustomerOrder(env, customer, quoteId);
+            const order = await executeCustomerOrder(env, customer, quoteId);
+            return json(order);
           }
         } catch (error) {
           const message = error instanceof Error ? error.message : "error";
@@ -207,6 +211,13 @@ export function createShoppingApp(deps: CustomerAccessTokenDeps = {}) {
             return serviceUnavailable(
               "order_execute_unavailable",
               "Order execution stays disabled until Guardian live rendering is operator-confirmed.",
+            );
+          }
+          if (message === "order_approval_required") {
+            return problem(
+              409,
+              "order_approval_required",
+              "Guardian approval must be recorded on the merchant ledger before checkout.",
             );
           }
           return problem(409, message, "Request could not be completed.");

@@ -1,4 +1,9 @@
-import { createRemoteJWKSet, jwtVerify, type JWTVerifyGetKey } from "jose";
+import {
+  createLocalJWKSet,
+  createRemoteJWKSet,
+  jwtVerify,
+  type JWTVerifyGetKey,
+} from "jose";
 import { validateQuoteForGuardianDetails } from "../approval/validate.js";
 import type { Quote } from "../types.js";
 import { authorizationDetailsExactlyMatch } from "./canonical.js";
@@ -8,6 +13,8 @@ export type CibaProofVerifierDeps = {
   config: ShoppingCibaConfig;
   /** Test hook — production uses JWKS from `jwksDomain`. */
   testVerifyKey?: JWTVerifyGetKey;
+  /** When set (e.g. DO `SUBREQUEST_FETCH`), JWKS is loaded via this fetch. */
+  fetch?: typeof fetch;
 };
 
 export class CibaProofRejected extends Error {
@@ -26,23 +33,40 @@ export class CibaProofRejected extends Error {
   }
 }
 
-const jwksCache = new Map<string, ReturnType<typeof createRemoteJWKSet>>();
+const jwksCache = new Map<string, JWTVerifyGetKey>();
 
-function resolveJwks(deps: CibaProofVerifierDeps): JWTVerifyGetKey | null {
+async function resolveJwks(
+  deps: CibaProofVerifierDeps,
+): Promise<JWTVerifyGetKey | null> {
   if (deps.testVerifyKey) return deps.testVerifyKey;
   const issuer = deps.config.issuer;
-  let cached = jwksCache.get(issuer);
-  if (!cached) {
+  const cached = jwksCache.get(issuer);
+  if (cached) return cached;
+  if (deps.fetch) {
     try {
-      cached = createRemoteJWKSet(
-        new URL(`https://${deps.config.jwksDomain}/.well-known/jwks.json`),
+      const res = await deps.fetch(
+        `https://${deps.config.jwksDomain}/.well-known/jwks.json`,
       );
+      if (!res.ok) return null;
+      const body = (await res.json()) as {
+        keys: Parameters<typeof createLocalJWKSet>[0]["keys"];
+      };
+      const key = createLocalJWKSet(body);
+      jwksCache.set(issuer, key);
+      return key;
     } catch {
       return null;
     }
-    jwksCache.set(issuer, cached);
   }
-  return cached;
+  try {
+    const remote = createRemoteJWKSet(
+      new URL(`https://${deps.config.jwksDomain}/.well-known/jwks.json`),
+    );
+    jwksCache.set(issuer, remote);
+    return remote;
+  } catch {
+    return null;
+  }
 }
 
 export type VerifiedCibaApproval = {
@@ -65,7 +89,7 @@ export async function verifyCibaApprovalProof(
     nowMs: number;
   },
 ): Promise<VerifiedCibaApproval> {
-  const key = resolveJwks(deps);
+  const key = await resolveJwks(deps);
   if (!key) {
     throw new CibaProofRejected(
       "invalid_token",

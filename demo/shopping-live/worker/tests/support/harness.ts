@@ -15,7 +15,26 @@ export const HOST_SECRET = "test-host-internal-secret";
 export const SESSION_SECRET = "test-session-secret-32bytes-min";
 export const ORIGIN = "http://localhost:8787";
 
-export async function buildShoppingWorker(): Promise<string> {
+export async function buildShoppingWorker(options?: {
+  merchantDo?: "fixture" | "production";
+}): Promise<string> {
+  const merchantShim =
+    options?.merchantDo === "production"
+      ? join(here, "merchant-do-production-shim.ts")
+      : join(here, "merchant-do-shim.ts");
+  const plugins =
+    options?.merchantDo === "production"
+      ? [
+          {
+            name: "merchant-do-shim",
+            setup(build: import("esbuild").PluginBuild) {
+              build.onResolve({ filter: /merchant-do-shim\.js$/ }, () => ({
+                path: merchantShim,
+              }));
+            },
+          },
+        ]
+      : [];
   const bundle = await build({
     entryPoints: [join(here, "test-worker-entry.ts")],
     bundle: true,
@@ -25,16 +44,7 @@ export async function buildShoppingWorker(): Promise<string> {
     conditions: ["workerd", "worker", "browser"],
     external: ["cloudflare:workers"],
     target: "es2023",
-    plugins: [
-      {
-        name: "fixture-merchant-do",
-        setup(build) {
-          build.onResolve({ filter: /merchant-do-binding\.js$/ }, () => ({
-            path: join(here, "merchant-do-shim.ts"),
-          }));
-        },
-      },
-    ],
+    plugins,
   });
   return bundle.outputFiles[0]!.text;
 }
@@ -76,8 +86,12 @@ export type Harness = {
 
 export async function startHarness(options?: {
   outbound?: OutboundHandler;
+  merchantDo?: "fixture" | "production";
+  bindings?: Record<string, string>;
 }): Promise<Harness> {
-  const script = await buildShoppingWorker();
+  const script = await buildShoppingWorker({
+    merchantDo: options?.merchantDo,
+  });
   const jwks = await shoppingTestJwks();
   const worker: Record<string, unknown> = {
     name: "shopping-live",
@@ -96,6 +110,8 @@ export async function startHarness(options?: {
       SHOPPING_BROWSER_AGENT_ID: "browser-shopping",
       SHOPPING_MERCHANT_WALLET_MODE: "simulated",
       SHOPPING_MERCHANT_WALLET_LABEL: "Stillroom wallet",
+      SHOPPING_MERCHANT_DISPLAY_NAME: "Stillroom",
+      ...options?.bindings,
     },
     durableObjects: {
       CUSTOMER_STATE: { className: "CustomerHostState", useSQLite: true },
@@ -105,6 +121,13 @@ export async function startHarness(options?: {
       },
     },
   };
+  const runtime: { mf: Miniflare | null } = { mf: null };
+  if (options?.outbound && options.merchantDo === "production") {
+    worker.serviceBindings = {
+      SUBREQUEST_FETCH: (request: Request) =>
+        options.outbound!(request, runtime.mf!),
+    };
+  }
   const mfOptions = convertV4MiniflareOptions({
     workers: [worker],
   } as Parameters<typeof convertV4MiniflareOptions>[0]);
@@ -119,6 +142,7 @@ export async function startHarness(options?: {
     };
   }
   const mf = new Miniflare(mfOptions);
+  runtime.mf = mf;
 
   async function login(
     customerId = TEST_CUSTOMER,

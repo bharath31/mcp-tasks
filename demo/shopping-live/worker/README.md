@@ -32,20 +32,22 @@ Optional vars (see `wrangler.jsonc`):
 
 ## API
 
-| Route                    | Auth           | Notes                                               |
-| ------------------------ | -------------- | --------------------------------------------------- |
-| `GET /api/session`       | optional       | Login/logout URLs, wallet metadata                  |
-| `GET /api/cart`          | session        | Merchant cart snapshot                              |
-| `POST /api/cart/items`   | session + CSRF | Prices from server catalog only                     |
-| `POST /api/quote`        | session + CSRF | Merchant-owned shipping address id                  |
-| Agent / approval / order | —              | **503** until CIBA and live approval are integrated |
+| Route                      | Auth           | Notes                                                                                                                                |
+| -------------------------- | -------------- | ------------------------------------------------------------------------------------------------------------------------------------ |
+| `GET /api/session`         | optional       | Login/logout URLs, wallet metadata                                                                                                   |
+| `GET /api/cart`            | session        | Merchant cart snapshot                                                                                                               |
+| `POST /api/cart/items`     | session + CSRF | Prices from server catalog only                                                                                                      |
+| `POST /api/quote`          | session + CSRF | Merchant-owned shipping address id                                                                                                   |
+| `POST /api/approval/start` | session + CSRF | Requires pinned CIBA env; **503** when unconfigured                                                                                  |
+| `GET /api/approval/:id`    | session        | Poll + ledger bridge via production merchant DO                                                                                      |
+| `POST /api/order/execute`  | session + CSRF | **503** unless `SHOPPING_GUARDIAN_EXECUTE_ENABLED` is explicitly set after operator confirms live Guardian rendering and Auth0 proof |
 
 ## Limitations (honest)
 
-- Merchant ledger **production ports** (`customerAccount`, payments, approval) remain unconfigured in `demo/shopping-merchant`; DO RPC returns 503 until the parent wires real ports. Tests use the Miniflare fixture DO bundle.
-- No agent runs, Guardian approval, or order execution in this slice.
-- No simulated wallet funding or external payment.
-- Preview Auth0 tenant setup is owned by the parent orchestrator, not this package.
+- **No live validation yet:** Miniflare tests mock Auth0/CIBA outbound; they do not call a live tenant or exercise real Guardian push/display.
+- Enable `SHOPPING_GUARDIAN_EXECUTE_ENABLED` only after live Guardian transaction display and Auth0 CIBA response proof are verified in the target deployment.
+- Integration tests may bind production `CustomerMerchantLedger`; routine unit tests still use the fixture DO bundle under `tests/support/`.
+- Simulated wallet funding runs on first DO bind only through trusted host init (not public funding hooks).
 
 ## Develop and test
 

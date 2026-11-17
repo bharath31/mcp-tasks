@@ -283,7 +283,7 @@ export async function pollPurchaseCibaChallenge(
   }
   try {
     await verifyCibaApprovalProof(
-      { config, testVerifyKey: deps.testVerifyKey },
+      { config, testVerifyKey: deps.testVerifyKey, fetch: deps.fetch },
       {
         accessToken: poll.accessToken,
         topLevelAuthorizationDetails: poll.authorizationDetails,

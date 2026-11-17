@@ -33,10 +33,13 @@ export type MockShoppingCibaProvider = {
   verifyKey: JWTVerifyGetKey;
 };
 
-export async function createMockShoppingCibaProvider(): Promise<MockShoppingCibaProvider> {
-  const issuer = "https://ciba-mock.example/";
-  const bcAuthorizeUrl = `${issuer}bc-authorize`;
-  const tokenUrl = `${issuer}oauth/token`;
+export async function createMockShoppingCibaProvider(options?: {
+  auth0Domain?: string;
+}): Promise<MockShoppingCibaProvider> {
+  const domain = options?.auth0Domain?.trim() || "ciba-mock.example";
+  const issuer = `https://${domain}/`;
+  const bcAuthorizeUrl = `https://${domain}/bc-authorize`;
+  const tokenUrl = `https://${domain}/oauth/token`;
   const audience = "https://shopping-api.example";
   const { publicKey, privateKey } = await generateKeyPair("RS256");
   const jwk = await exportJWK(publicKey);

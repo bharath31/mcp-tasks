@@ -421,6 +421,21 @@ export function createMerchantLedger(
       return quoteView(record.data as string);
     },
 
+    hasCustomerApprovalForQuote(quote: Quote): boolean {
+      if (quote.customerId !== customerId) fail();
+      const row = db
+        .exec(
+          `SELECT 1 AS ok FROM quote_customer_approvals
+           WHERE quote_id = ? AND operation_id = ? AND revision = ? AND customer_id = ?`,
+          quote.id,
+          quote.operationId,
+          quote.revision,
+          quote.customerId,
+        )
+        .one();
+      return Boolean(row);
+    },
+
     async validateQuote(quoteId: string, actor: TrustedActor): Promise<Quote> {
       const record = requireRow(
         db.exec("SELECT * FROM quotes WHERE id = ?", quoteId).one(),

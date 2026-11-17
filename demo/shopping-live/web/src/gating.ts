@@ -53,7 +53,11 @@ export function canExecuteOrder(
   if (gate !== "ok") return gate;
   if (!approval) return "no_approval";
   if (approval.status === "pending") return "approval_pending";
-  if (approval.status === "denied" || approval.status === "expired")
+  if (
+    approval.status === "denied" ||
+    approval.status === "expired" ||
+    approval.status === "failed"
+  )
     return "approval_denied";
   return "ok";
 }

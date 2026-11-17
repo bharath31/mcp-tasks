@@ -20,32 +20,40 @@ after(async () => {
 
 test("order execute stays fail-closed by default", async () => {
   const { cookie, csrf } = await harness.login();
-  const res = await apiJson<{ code?: string }>(harness.mf, "/api/order/execute", {
-    method: "POST",
-    headers: {
-      "content-type": "application/json",
-      origin: ORIGIN,
-      "x-nominee-csrf": csrf,
+  const res = await apiJson<{ code?: string }>(
+    harness.mf,
+    "/api/order/execute",
+    {
+      method: "POST",
+      headers: {
+        "content-type": "application/json",
+        origin: ORIGIN,
+        "x-nominee-csrf": csrf,
+      },
+      cookie,
+      body: JSON.stringify({ quoteId: "quote-any" }),
     },
-    cookie,
-    body: JSON.stringify({ quoteId: "quote-any" }),
-  });
+  );
   assert.equal(res.status, 503);
   assert.equal(res.body.code, "order_execute_unavailable");
 });
 
 test("approval start returns unavailable without CIBA env", async () => {
   const { cookie, csrf } = await harness.login();
-  const res = await apiJson<{ code?: string }>(harness.mf, "/api/approval/start", {
-    method: "POST",
-    headers: {
-      "content-type": "application/json",
-      origin: ORIGIN,
-      "x-nominee-csrf": csrf,
+  const res = await apiJson<{ code?: string }>(
+    harness.mf,
+    "/api/approval/start",
+    {
+      method: "POST",
+      headers: {
+        "content-type": "application/json",
+        origin: ORIGIN,
+        "x-nominee-csrf": csrf,
+      },
+      cookie,
+      body: JSON.stringify({ quoteId: "missing" }),
     },
-    cookie,
-    body: JSON.stringify({ quoteId: "missing" }),
-  });
+  );
   assert.equal(res.status, 503);
   assert.equal(res.body.code, "approval_unavailable");
 });

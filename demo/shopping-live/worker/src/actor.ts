@@ -1,3 +1,4 @@
+import { ORDER_EXECUTE_SCOPE } from "../../../shopping-merchant/src/ledger.js";
 import type { AgentActor } from "../../../shopping-merchant/src/types.js";
 import type { ShoppingLiveEnv } from "./env.js";
 
@@ -20,4 +21,19 @@ export function browserShoppingActor(
     sessionId: browserSessionId,
     scopes: ["cart:write", "checkout:write", "addresses:read"],
   };
+}
+
+/**
+ * Host-only checkout actor: same browser session as {@link browserShoppingActor} plus
+ * {@link ORDER_EXECUTE_SCOPE}. Built only on the verified Worker path after session + quote checks;
+ * never accepted from client JSON.
+ */
+export function orderExecuteActor(
+  env: ShoppingLiveEnv,
+  customerId: string,
+  browserSessionId: string,
+): AgentActor {
+  const base = browserShoppingActor(env, customerId, browserSessionId);
+  if (base.scopes.includes(ORDER_EXECUTE_SCOPE)) return base;
+  return { ...base, scopes: [...base.scopes, ORDER_EXECUTE_SCOPE] };
 }

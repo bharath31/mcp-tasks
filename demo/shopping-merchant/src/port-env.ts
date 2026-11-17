@@ -11,8 +11,8 @@ export type MerchantLedgerEnv = Partial<ShoppingCibaEnv> & {
   SHOPPING_MERCHANT_SHIPPING_ADDRESS_ID?: string;
   SHOPPING_MERCHANT_SHIPPING_LABEL?: string;
   SHOPPING_MERCHANT_DISPLAY_NAME?: string;
-  /** Optional Worker/Miniflare subrequest binding for CIBA HTTPS calls (defaults to global fetch). */
-  SUBREQUEST_FETCH?: typeof fetch;
+  /** Optional subrequest binding for CIBA HTTPS calls (Fetcher service or fetch function). */
+  SUBREQUEST_FETCH?: typeof fetch | { fetch: typeof fetch };
   LEDGER?: DurableObjectNamespace;
   [key: string]: unknown;
 };
@@ -28,6 +28,16 @@ export function merchantLedgerPortsFromEnv(
   _env: MerchantLedgerEnv,
 ): MerchantLedgerPorts {
   throw new Error("merchant_ports_unconfigured");
+}
+
+/** Resolve pinned outbound fetch for CIBA client/deps inside a DO isolate. */
+export function resolveSubrequestFetch(env: MerchantLedgerEnv): typeof fetch {
+  const bound = env.SUBREQUEST_FETCH;
+  if (typeof bound === "function") return bound;
+  if (bound && typeof bound === "object" && typeof bound.fetch === "function") {
+    return (input, init) => bound.fetch(input, init);
+  }
+  return fetch;
 }
 
 export function readHostInternalSecret(

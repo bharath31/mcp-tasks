@@ -9,7 +9,7 @@ import type { AuthenticatedCustomer } from "./session.js";
 export type ApprovalRecord = {
   id: string;
   quoteId: string;
-  status: "pending" | "approved" | "denied" | "expired";
+  status: "pending" | "approved" | "denied" | "expired" | "failed";
   operationId: string;
   quoteRevision: number;
   reviewUrl?: string;
@@ -18,7 +18,7 @@ export type ApprovalRecord = {
 function mapChallengeStatus(raw: SanitizedChallengeStatus): ApprovalRecord {
   const status =
     raw.status === "unavailable"
-      ? ("pending" as const)
+      ? ("failed" as const)
       : raw.status === "pending"
         ? ("pending" as const)
         : raw.status;
@@ -31,7 +31,7 @@ function mapChallengeStatus(raw: SanitizedChallengeStatus): ApprovalRecord {
   };
 }
 
-async function browserSessionId(
+export async function browserSessionId(
   env: ShoppingLiveEnv,
   customerId: string,
 ): Promise<string> {
@@ -55,11 +55,7 @@ export async function startCustomerApproval(
   const trimmed = quoteId.trim();
   if (!trimmed) throw new Error("quote_id_required");
   const browserSession = await browserSessionId(env, customer.customerId);
-  const actor = browserShoppingActor(
-    env,
-    customer.customerId,
-    browserSession,
-  );
+  const actor = browserShoppingActor(env, customer.customerId, browserSession);
   const quoteRes = await merchantLedgerRpc(env, customer.customerId, {
     op: "getQuote",
     actor,
@@ -69,7 +65,10 @@ export async function startCustomerApproval(
     const err = (await quoteRes.json().catch(() => ({}))) as { error?: string };
     throw new Error(err.error ?? "quote_unavailable");
   }
-  const quote = (await quoteRes.json()) as { id: string; agentId: string | null };
+  const quote = (await quoteRes.json()) as {
+    id: string;
+    agentId: string | null;
+  };
   const started = await merchantLedgerRpc(env, customer.customerId, {
     op: "startPurchaseCiba",
     actor: customer.human,
