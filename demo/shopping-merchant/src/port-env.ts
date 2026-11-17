@@ -1,12 +1,18 @@
+import type { ShoppingCibaEnv } from "./ciba/config.js";
 import type { MerchantLedgerPorts } from "./types.js";
 
 /** Wrangler-bindable env keys for port wiring inside each DO isolate (not Worker fetch). */
-export type MerchantLedgerEnv = {
+export type MerchantLedgerEnv = Partial<ShoppingCibaEnv> & {
   /**
    * Shared secret for Worker→DO internal RPC (transport gate only; not customer approval proof).
    * Must be set via Wrangler secret / env binding before any DO ledger operation is enabled.
    */
   MERCHANT_HOST_INTERNAL_SECRET?: string;
+  SHOPPING_MERCHANT_SHIPPING_ADDRESS_ID?: string;
+  SHOPPING_MERCHANT_SHIPPING_LABEL?: string;
+  SHOPPING_MERCHANT_DISPLAY_NAME?: string;
+  /** Optional Worker/Miniflare subrequest binding for CIBA HTTPS calls (defaults to global fetch). */
+  SUBREQUEST_FETCH?: typeof fetch;
   LEDGER?: DurableObjectNamespace;
   [key: string]: unknown;
 };

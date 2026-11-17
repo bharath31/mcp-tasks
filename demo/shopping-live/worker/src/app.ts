@@ -10,29 +10,16 @@ import {
 import { assertSameOrigin, sessionCsrfToken } from "./csrf.js";
 import { resolveCustomerSession } from "./session.js";
 import { addCartItem, createCustomerQuote, readCustomerCart } from "./cart.js";
+import { pollCustomerApproval, startCustomerApproval } from "./approval.js";
+import {
+  executeCustomerOrder,
+  guardianOrderExecutionEnabled,
+} from "./order.js";
 
-const DEFERRED_PREFIXES = [
-  "/api/agent",
-  "/api/approval",
-  "/api/order",
-] as const;
+const DEFERRED_AGENT_PREFIX = "/api/agent";
 
-function isDeferredApi(path: string): boolean {
-  return DEFERRED_PREFIXES.some(
-    (prefix) => path === prefix || path.startsWith(`${prefix}/`),
-  );
-}
-
-function deferredResponse(path: string): Response {
-  const feature = path.startsWith("/api/agent")
-    ? "agent"
-    : path.startsWith("/api/approval")
-      ? "approval"
-      : "order";
-  return serviceUnavailable(
-    `${feature}_unavailable`,
-    `${feature === "agent" ? "Agent runs" : feature === "approval" ? "Guardian approval" : "Order execution"} are not connected until CIBA and live approval are integrated.`,
-  );
+function isDeferredAgent(path: string): boolean {
+  return path === DEFERRED_AGENT_PREFIX || path.startsWith(`${DEFERRED_AGENT_PREFIX}/`);
 }
 
 export function createShoppingApp(deps: CustomerAccessTokenDeps = {}) {
@@ -76,8 +63,11 @@ export function createShoppingApp(deps: CustomerAccessTokenDeps = {}) {
       }
 
       if (path.startsWith("/api/")) {
-        if (isDeferredApi(path) && req.method !== "OPTIONS") {
-          return deferredResponse(path);
+        if (isDeferredAgent(path) && req.method !== "OPTIONS") {
+          return serviceUnavailable(
+            "agent_unavailable",
+            "Agent runs are not connected in this slice.",
+          );
         }
 
         if (path === "/api/session" && req.method === "GET") {
@@ -138,6 +128,52 @@ export function createShoppingApp(deps: CustomerAccessTokenDeps = {}) {
             const quote = await createCustomerQuote(env, customer);
             return json({ quote });
           }
+
+          if (path === "/api/approval/start" && req.method === "POST") {
+            const body = (await req.json().catch(() => null)) as {
+              quoteId?: unknown;
+            } | null;
+            const quoteId =
+              typeof body?.quoteId === "string" ? body.quoteId.trim() : "";
+            if (!quoteId) {
+              return problem(400, "invalid_quote", "quoteId is required.");
+            }
+            const approval = await startCustomerApproval(
+              env,
+              customer,
+              quoteId,
+            );
+            return json(approval);
+          }
+
+          const approvalPoll = path.match(/^\/api\/approval\/([^/]+)$/);
+          if (approvalPoll && req.method === "GET") {
+            const challengeId = decodeURIComponent(approvalPoll[1]!);
+            const approval = await pollCustomerApproval(
+              env,
+              customer,
+              challengeId,
+            );
+            return json(approval);
+          }
+
+          if (path === "/api/order/execute" && req.method === "POST") {
+            if (!guardianOrderExecutionEnabled(env)) {
+              return serviceUnavailable(
+                "order_execute_unavailable",
+                "Order execution stays disabled until Guardian live rendering is operator-confirmed.",
+              );
+            }
+            const body = (await req.json().catch(() => null)) as {
+              quoteId?: unknown;
+            } | null;
+            const quoteId =
+              typeof body?.quoteId === "string" ? body.quoteId.trim() : "";
+            if (!quoteId) {
+              return problem(400, "invalid_quote", "quoteId is required.");
+            }
+            await executeCustomerOrder(env, customer, quoteId);
+          }
         } catch (error) {
           const message = error instanceof Error ? error.message : "error";
           if (
@@ -156,6 +192,21 @@ export function createShoppingApp(deps: CustomerAccessTokenDeps = {}) {
             return serviceUnavailable(
               "shipping_unconfigured",
               "Merchant shipping destination is not configured.",
+            );
+          }
+          if (
+            message === "ciba_unconfigured" ||
+            message === "approval_start_failed"
+          ) {
+            return serviceUnavailable(
+              "approval_unavailable",
+              "Guardian approval is not configured for this deployment.",
+            );
+          }
+          if (message === "order_execute_unavailable") {
+            return serviceUnavailable(
+              "order_execute_unavailable",
+              "Order execution stays disabled until Guardian live rendering is operator-confirmed.",
             );
           }
           return problem(409, message, "Request could not be completed.");

@@ -24,6 +24,6 @@ Debiting this wallet is **payment simulation**, not customer approval. The trust
 
 Merge the slice with `customerAccount` and `verifyCustomerApproval` at the DO host; do not wire from `port-env` until production ports exist.
 
-## Integration (future slice)
+## Integration
 
-Wire `createFencedSimulatedWalletLedgerSlice` (or unfenced `createSimulatedWalletOrderProvider` only when abandonment is unavailable) inside the Durable Object when port-env is implemented. Do not import test fixtures from production bundles.
+`CustomerMerchantLedger` wires `createFencedSimulatedWalletLedgerSlice` via `createMerchantLedgerPorts`. Trusted first bind calls `initializeTrustedSimulatedWalletOnce` with `SIMULATED_WALLET_INITIAL_BALANCE_MINOR` from `constants.ts` (never public top-up).

@@ -1,18 +1,28 @@
 /**
- * One Durable Object per customer holds the SQLite-backed merchant ledger.
- * SqlStorage transactions provide atomic claim/approval/execution state.
+ * One Durable Object per customer holds the SQLite-backed merchant ledger,
+ * CIBA challenge store, and fenced simulated wallet.
  */
 import { DurableObject } from "cloudflare:workers";
+import { ensureMerchantDemoShippingAddress } from "./customer-account/demo-address.js";
+import {
+  pollPurchaseCibaChallenge,
+  startPurchaseCibaChallenge,
+} from "./ciba/coordinator.js";
+import { initCibaChallengeSchema } from "./ciba/schema.js";
+import { createSqlCibaChallengeStore } from "./ciba/sql-ciba-challenge-store.js";
 import { createMerchantLedger } from "./ledger.js";
 import {
+  createMerchantLedgerPorts,
+  merchantDisplayNameFromEnv,
+} from "./merchant-ports.js";
+import {
   MERCHANT_HOST_INTERNAL_SECRET_HEADER,
-  merchantLedgerPortsFromEnv,
   readHostInternalSecret,
   type MerchantLedgerEnv,
 } from "./port-env.js";
 import { createDoSqlDatabase, initMerchantSchema } from "./sql.js";
-import type { TrustedActor } from "./types.js";
-import type { HumanActor } from "./types.js";
+import { initializeTrustedSimulatedWalletOnce } from "./simulated-wallet/trusted-init.js";
+import type { HumanActor, TrustedActor } from "./types.js";
 
 const BOUND_CUSTOMER_KEY = "nominee:bound_customer_id";
 
@@ -39,7 +49,25 @@ type PublicRpcBody =
   | { op: "getQuote"; actor: TrustedActor; quoteId: string }
   | { op: "executeQuote"; actor: TrustedActor; quoteId: string }
   | { op: "reconcileQuote"; actor: TrustedActor; quoteId: string }
-  | { op: "abandonQuote"; actor: TrustedActor; quoteId: string };
+  | { op: "abandonQuote"; actor: TrustedActor; quoteId: string }
+  | {
+      op: "startPurchaseCiba";
+      actor: HumanActor;
+      quoteId: string;
+      browserSessionId: string | null;
+      agentId: string | null;
+    }
+  | {
+      op: "pollPurchaseCiba";
+      actor: HumanActor;
+      challengeId: string;
+      quoteId: string;
+      quoteRevision: number;
+      operationId: string;
+      browserSessionId: string | null;
+      agentId: string | null;
+    }
+  | { op: "getCibaChallenge"; actor: HumanActor; challengeId: string };
 
 type RpcBody =
   | PublicRpcBody
@@ -51,26 +79,24 @@ export type { MerchantLedgerEnv };
 export class CustomerMerchantLedger extends DurableObject<MerchantLedgerEnv> {
   private customerId: string | undefined;
   private ledger: ReturnType<typeof createMerchantLedger> | undefined;
-  private portsCache: ReturnType<typeof merchantLedgerPortsFromEnv> | undefined;
 
   constructor(ctx: DurableObjectState, env: MerchantLedgerEnv) {
     super(ctx, env);
   }
 
-  private ports() {
-    if (!this.portsCache) {
-      this.portsCache = merchantLedgerPortsFromEnv(this.env);
-    }
-    return this.portsCache;
+  private database() {
+    const db = createDoSqlDatabase(this.ctx.storage);
+    initMerchantSchema(db);
+    initCibaChallengeSchema(db);
+    return db;
   }
 
   /**
    * Permanently bind this DO instance to the first authenticated customer id.
-   * Rejects a later request that presents a different header value (including after isolate restart).
+   * Seeds merchant demo address and simulated wallet once on first bind.
    */
   private assertCustomerBinding(customerId: string): void {
-    const db = createDoSqlDatabase(this.ctx.storage);
-    initMerchantSchema(db);
+    const db = this.database();
     db.transaction(() => {
       const row = db
         .exec(
@@ -84,6 +110,8 @@ export class CustomerMerchantLedger extends DurableObject<MerchantLedgerEnv> {
           BOUND_CUSTOMER_KEY,
           customerId,
         );
+        ensureMerchantDemoShippingAddress(db, customerId, this.env);
+        initializeTrustedSimulatedWalletOnce(db, customerId);
         return;
       }
       if ((row.value as string) !== customerId) {
@@ -95,12 +123,25 @@ export class CustomerMerchantLedger extends DurableObject<MerchantLedgerEnv> {
   private ledgerFor(customerId: string) {
     if (this.ledger && this.customerId === customerId) return this.ledger;
     this.customerId = customerId;
-    this.ledger = createMerchantLedger(
-      createDoSqlDatabase(this.ctx.storage),
-      this.ports(),
-      customerId,
-    );
+    const db = this.database();
+    const ports = createMerchantLedgerPorts(db, customerId, this.env);
+    this.ledger = createMerchantLedger(db, ports, customerId);
     return this.ledger;
+  }
+
+  private cibaStore() {
+    return createSqlCibaChallengeStore(this.database());
+  }
+
+  private assertHumanActor(actor: HumanActor, customerId: string): void {
+    if (
+      !actor ||
+      actor.kind !== "human" ||
+      actor.customerId !== customerId ||
+      !Array.isArray(actor.scopes)
+    ) {
+      throw new Error("not_found_or_forbidden");
+    }
   }
 
   private hostSecretMatches(request: Request): boolean {
@@ -137,7 +178,6 @@ export class CustomerMerchantLedger extends DurableObject<MerchantLedgerEnv> {
       });
     }
 
-    // Raw JSON actors are not authenticated on this surface; Worker must verify identity before forward.
     if ((body as { op?: string }).op === "injectCustomerApproval") {
       return new Response(
         JSON.stringify({
@@ -171,7 +211,9 @@ export class CustomerMerchantLedger extends DurableObject<MerchantLedgerEnv> {
     } catch (error) {
       const message =
         error instanceof Error ? error.message : "customer_binding_mismatch";
-      return Response.json({ error: message }, { status: 403 });
+      const status =
+        message === "shipping_unconfigured" ? 503 : message.includes("mismatch") ? 403 : 409;
+      return Response.json({ error: message }, { status });
     }
 
     try {
@@ -182,6 +224,82 @@ export class CustomerMerchantLedger extends DurableObject<MerchantLedgerEnv> {
           body.actor,
         );
         return Response.json(result);
+      }
+
+      const subrequestFetch =
+        typeof this.env.SUBREQUEST_FETCH === "function"
+          ? this.env.SUBREQUEST_FETCH
+          : fetch;
+
+      if (body.op === "startPurchaseCiba") {
+        this.assertHumanActor(body.actor, customerId);
+        const ledger = this.ledgerFor(customerId);
+        const quote = await ledger.validateQuote(body.quoteId, body.actor);
+        const started = await startPurchaseCibaChallenge(
+          {
+            env: this.env,
+            store: this.cibaStore(),
+            fetch: subrequestFetch,
+          },
+          {
+            customerId,
+            agentId: body.agentId,
+            sessionId: body.browserSessionId,
+            quote,
+            merchantDisplayName: merchantDisplayNameFromEnv(this.env),
+            nowMs: Date.now(),
+          },
+        );
+        return Response.json(started);
+      }
+
+      if (body.op === "getCibaChallenge") {
+        this.assertHumanActor(body.actor, customerId);
+        const row = await this.cibaStore().get(body.challengeId);
+        if (!row || row.customerId !== customerId) {
+          return Response.json({ error: "challenge_not_found" }, { status: 404 });
+        }
+        return Response.json({
+          quoteId: row.quoteId,
+          quoteRevision: row.quoteRevision,
+          operationId: row.operationId,
+          agentId: row.agentId,
+          sessionId: row.sessionId,
+          status: row.status,
+        });
+      }
+
+      if (body.op === "pollPurchaseCiba") {
+        this.assertHumanActor(body.actor, customerId);
+        const ledger = this.ledgerFor(customerId);
+        await ledger.validateQuote(body.quoteId, body.actor);
+        const polled = await pollPurchaseCibaChallenge(
+          {
+            env: this.env,
+            store: this.cibaStore(),
+            fetch: subrequestFetch,
+          },
+          {
+            challengeId: body.challengeId,
+            quoteId: body.quoteId,
+            quoteRevision: body.quoteRevision,
+            operationId: body.operationId,
+            customerId,
+            agentId: body.agentId,
+            sessionId: body.browserSessionId,
+          },
+        );
+        if (polled.status === "approved") {
+          const quote = ledger.getQuote(body.quoteId, body.actor);
+          const bridged = ledger.recordCustomerApprovalFromCibaChallenge(
+            body.challengeId,
+            body.actor,
+            quote,
+            { merchantDisplayName: merchantDisplayNameFromEnv(this.env) },
+          );
+          return Response.json({ ...polled, ledger: bridged });
+        }
+        return Response.json(polled);
       }
 
       const ledger = this.ledgerFor(customerId);
@@ -227,7 +345,8 @@ export class CustomerMerchantLedger extends DurableObject<MerchantLedgerEnv> {
       const status =
         message === "not_found_or_forbidden"
           ? 403
-          : message === "merchant_ports_unconfigured"
+          : message === "merchant_ports_unconfigured" ||
+              message === "shipping_unconfigured"
             ? 503
             : 409;
       return Response.json({ error: message }, { status });

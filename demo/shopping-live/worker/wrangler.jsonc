@@ -24,6 +24,7 @@
   "vars": {
     "SHOPPING_BROWSER_AGENT_ID": "browser-shopping",
     "SHOPPING_MERCHANT_SHIPPING_ADDRESS_ID": "merchant-default",
+    "SHOPPING_MERCHANT_DISPLAY_NAME": "Stillroom",
     "SHOPPING_MERCHANT_WALLET_MODE": "simulated",
     "SHOPPING_MERCHANT_WALLET_LABEL": "Stillroom wallet",
   },
