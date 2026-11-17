@@ -51,7 +51,9 @@ Host-only approval into DO state uses `hostInjectCustomerApproval` after the sam
 
 **Host obligations:** On every merchant call, resolve the actor from `verifyCustomerAccessToken` (human) or `verifyBearer` (agent session), never from request JSON. Re-check revocation and expiry per request; instant global revocation across isolates is not claimed. Purchase approval remains a separate `verifyCustomerApproval` injection.
 
-**Env (Worker):** `SHOPPING_AUTH0_DOMAIN`, `SHOPPING_API_AUDIENCE`, plus a configured `merchantAgentId` when constructing the session service.
+**Env (Worker):** `SHOPPING_AUTH0_DOMAIN` (bare DNS hostname only — tenant or custom domain, no URL/path/port/localhost/IP), `SHOPPING_API_AUDIENCE`, plus a non-empty `merchantAgentId` and session TTL ≤ 8h when constructing the session service.
+
+**Configured issuer trust:** Verification fetches JWKS from whatever domain and audience the operator binds. Syntax validation catches whitespace skew and URL-shaped mistakes; it does **not** stop a deploy from trusting an attacker's legitimate Auth0 tenant if env values are wrong.
 
 ## Remaining integration work
 

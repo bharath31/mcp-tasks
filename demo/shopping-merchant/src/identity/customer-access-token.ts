@@ -6,8 +6,8 @@ import {
 } from "jose";
 import type { HumanActor } from "../types.js";
 import {
+  normalizeShoppingIdentity,
   SHOPPING_CUSTOMER_SCOPE,
-  shoppingIdentityConfigured,
   shoppingIssuer,
   type ShoppingIdentityEnv,
 } from "./config.js";
@@ -41,11 +41,17 @@ function isMachineSubject(sub: string, payload: JWTPayload): boolean {
   return false;
 }
 
-function remoteJwks(domain: string) {
+function remoteJwks(
+  domain: string,
+): ReturnType<typeof createRemoteJWKSet> | null {
   const issuer = shoppingIssuer(domain);
   let cached = jwksCache.get(issuer);
   if (!cached) {
-    cached = createRemoteJWKSet(new URL(`${issuer}.well-known/jwks.json`));
+    try {
+      cached = createRemoteJWKSet(new URL(`${issuer}.well-known/jwks.json`));
+    } catch {
+      return null;
+    }
     jwksCache.set(issuer, cached);
   }
   return cached;
@@ -54,11 +60,7 @@ function remoteJwks(domain: string) {
 /** Extract a Bearer access token; does not validate. */
 export const customerBearerToken = (req: Request) => {
   const token = req.headers.get("authorization")?.match(/^Bearer (\S+)$/)?.[1];
-  if (
-    !token ||
-    token.length === 0 ||
-    token.length > MAX_ACCESS_TOKEN_LEN
-  ) {
+  if (!token || token.length === 0 || token.length > MAX_ACCESS_TOKEN_LEN) {
     return null;
   }
   return token;
@@ -75,18 +77,20 @@ export async function verifyCustomerAccessToken(
   token: string,
   deps: CustomerAccessTokenDeps = {},
 ): Promise<VerifiedCustomer | null> {
+  const identity = normalizeShoppingIdentity(env);
   if (
-    !shoppingIdentityConfigured(env) ||
+    !identity ||
     typeof token !== "string" ||
     token.length === 0 ||
     token.length > MAX_ACCESS_TOKEN_LEN
   ) {
     return null;
   }
-  const issuer = shoppingIssuer(env.SHOPPING_AUTH0_DOMAIN);
-  const audience = env.SHOPPING_API_AUDIENCE;
-  const key: JWTVerifyGetKey =
-    deps.testVerifyKey ?? remoteJwks(env.SHOPPING_AUTH0_DOMAIN);
+  const issuer = shoppingIssuer(identity.SHOPPING_AUTH0_DOMAIN);
+  const audience = identity.SHOPPING_API_AUDIENCE;
+  const remote = remoteJwks(identity.SHOPPING_AUTH0_DOMAIN);
+  const key: JWTVerifyGetKey | null = deps.testVerifyKey ?? remote;
+  if (!key) return null;
   try {
     const { payload } = await jwtVerify(token, key, {
       issuer,
@@ -95,7 +99,11 @@ export async function verifyCustomerAccessToken(
       requiredClaims: ["sub", "exp", "iat"],
     });
     const sub = payload.sub;
-    if (typeof sub !== "string" || sub.length === 0 || isMachineSubject(sub, payload)) {
+    if (
+      typeof sub !== "string" ||
+      sub.length === 0 ||
+      isMachineSubject(sub, payload)
+    ) {
       return null;
     }
     const scopes = parseScopes(payload.scope);

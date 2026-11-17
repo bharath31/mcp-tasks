@@ -2,7 +2,9 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import {
   AGENT_SESSION_SCOPES,
+  AgentSessionConfigError,
   createAgentSessionService,
+  MAX_AGENT_SESSION_TTL_MS,
   verifyCustomerAccessToken,
   verifiedCustomerAsHumanActor,
   type AgentSessionGrant,
@@ -135,4 +137,65 @@ test("grantSession requires verified human actor shape", async () => {
   assert.equal(bad.ok, false);
   if (bad.ok) return;
   assert.equal(bad.reason, "invalid_customer");
+});
+
+test("createAgentSessionService rejects invalid merchantAgentId and TTL before persisting", async () => {
+  const store = createMemoryAgentSessionStore();
+  assert.throws(
+    () =>
+      createAgentSessionService({
+        store,
+        merchantAgentId: "   ",
+        ttlMs: 60_000,
+      }),
+    AgentSessionConfigError,
+  );
+  for (const ttlMs of [0, -1, Infinity, NaN, MAX_AGENT_SESSION_TTL_MS + 1]) {
+    assert.throws(
+      () =>
+        createAgentSessionService({
+          store,
+          merchantAgentId: MERCHANT_AGENT,
+          ttlMs,
+        }),
+      AgentSessionConfigError,
+    );
+  }
+});
+
+test("revokeBearer applies the same bearer length bounds as verifyBearer", async () => {
+  const sessions = service();
+  assert.equal(await sessions.revokeBearer("nsh_short"), false);
+  const huge = `${"nsh_"}${"a".repeat(600)}`;
+  assert.equal(await sessions.revokeBearer(huge), false);
+});
+
+test("verifyBearer rejects stored grants with duplicate scope entries", async () => {
+  let stored: AgentSessionGrant | undefined;
+  const store: AgentSessionStore = {
+    async put(_hash: string, grant: AgentSessionGrant) {
+      stored = { ...grant };
+      return true;
+    },
+    async get() {
+      return stored ?? null;
+    },
+    async revoke() {
+      return false;
+    },
+  };
+  const sessions = createAgentSessionService({
+    store,
+    merchantAgentId: MERCHANT_AGENT,
+    ttlMs: 60_000,
+  });
+  const granted = await sessions.grantSession(await verifiedHuman());
+  assert.equal(granted.ok, true);
+  if (!granted.ok) return;
+  assert.ok(await sessions.verifyBearer(granted.bearer));
+  stored = {
+    ...stored!,
+    scopes: ["cart:write", "cart:write", "addresses:read"],
+  };
+  assert.equal(await sessions.verifyBearer(granted.bearer), null);
 });

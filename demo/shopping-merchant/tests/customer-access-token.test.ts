@@ -7,6 +7,7 @@ import {
   SHOPPING_CUSTOMER_SCOPE,
   shoppingIdentityConfigured,
 } from "../src/identity/index.js";
+import { TEST_DOMAIN } from "./support/identity-jwt.js";
 import {
   mintCustomerAccessToken,
   shoppingTestJwks,
@@ -68,6 +69,34 @@ test("rejects invalid signature, issuer, audience, scope, and expiry", async () 
   const expired = await mintCustomerAccessToken({ exp: "-1h" });
   assert.equal(
     await verifyCustomerAccessToken(testShoppingEnv, expired, deps),
+    null,
+  );
+});
+
+test("verifyCustomerAccessToken treats whitespace-padded env as configured", async () => {
+  const jwks = await shoppingTestJwks();
+  const token = await mintCustomerAccessToken();
+  const padded = {
+    SHOPPING_AUTH0_DOMAIN: `  ${TEST_DOMAIN}  `,
+    SHOPPING_API_AUDIENCE: ` ${TEST_AUDIENCE} `,
+  };
+  assert.equal(shoppingIdentityConfigured(padded), true);
+  const verified = await verifyCustomerAccessToken(padded, token, {
+    testVerifyKey: jwks,
+  });
+  assert.ok(verified);
+});
+
+test("verifyCustomerAccessToken fails closed on syntactically invalid domain env", async () => {
+  const jwks = await shoppingTestJwks();
+  const token = await mintCustomerAccessToken();
+  const badEnv = {
+    SHOPPING_AUTH0_DOMAIN: "https://tenant.example.com",
+    SHOPPING_API_AUDIENCE: TEST_AUDIENCE,
+  };
+  assert.equal(shoppingIdentityConfigured(badEnv), false);
+  assert.equal(
+    await verifyCustomerAccessToken(badEnv, token, { testVerifyKey: jwks }),
     null,
   );
 });

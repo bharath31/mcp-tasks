@@ -59,6 +59,7 @@ export type AgentSessionOptions = {
 };
 
 const DEFAULT_TTL_MS = 8 * 60 * 60 * 1000;
+export const MAX_AGENT_SESSION_TTL_MS = DEFAULT_TTL_MS;
 const BEARER_PREFIX = "nsh_";
 const MIN_BEARER_LEN = BEARER_PREFIX.length + 16;
 const MAX_BEARER_LEN = 512;
@@ -99,10 +100,40 @@ function grantScopesAllowed(scopes: unknown): scopes is string[] {
   if (!Array.isArray(scopes) || scopes.length !== AGENT_SESSION_SCOPES.length) {
     return false;
   }
+  if (new Set(scopes).size !== scopes.length) return false;
   const allowed = new Set<string>(AGENT_SESSION_SCOPES);
   return scopes.every(
     (s) => typeof s === "string" && s.length > 0 && allowed.has(s),
   );
+}
+
+export class AgentSessionConfigError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "AgentSessionConfigError";
+  }
+}
+
+function assertAgentSessionConfig(options: AgentSessionOptions): {
+  merchantAgentId: string;
+  ttlMs: number;
+} {
+  const merchantAgentId =
+    typeof options.merchantAgentId === "string"
+      ? options.merchantAgentId.trim()
+      : "";
+  if (!merchantAgentId) {
+    throw new AgentSessionConfigError("invalid_merchant_agent_id");
+  }
+  const ttlMs = options.ttlMs ?? DEFAULT_TTL_MS;
+  if (
+    !Number.isFinite(ttlMs) ||
+    ttlMs <= 0 ||
+    ttlMs > MAX_AGENT_SESSION_TTL_MS
+  ) {
+    throw new AgentSessionConfigError("invalid_session_ttl");
+  }
+  return { merchantAgentId, ttlMs };
 }
 
 function storedGrantValid(
@@ -139,9 +170,9 @@ function grantToAgentActor(grant: AgentSessionGrant): AgentActor {
 export function createAgentSessionService(
   options: AgentSessionOptions,
 ): AgentSessionService {
-  const ttlMs = options.ttlMs ?? DEFAULT_TTL_MS;
+  const { merchantAgentId, ttlMs } = assertAgentSessionConfig(options);
   const now = options.now ?? (() => Date.now());
-  const { store, merchantAgentId } = options;
+  const { store } = options;
 
   return {
     async grantSession(customer) {
@@ -187,7 +218,14 @@ export function createAgentSessionService(
     },
 
     async revokeBearer(bearer) {
-      if (!bearer?.startsWith(BEARER_PREFIX)) return false;
+      if (
+        typeof bearer !== "string" ||
+        !bearer.startsWith(BEARER_PREFIX) ||
+        bearer.length < MIN_BEARER_LEN ||
+        bearer.length > MAX_BEARER_LEN
+      ) {
+        return false;
+      }
       const hash = await hashBearer(bearer);
       return store.revoke(hash);
     },
