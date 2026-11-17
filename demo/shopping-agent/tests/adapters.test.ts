@@ -1,6 +1,9 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { createWorkersAiModel, parseWorkersAiOutput } from "../src/model/workers-ai-adapter.js";
+import {
+  createWorkersAiModel,
+  parseWorkersAiOutput,
+} from "../src/model/workers-ai-adapter.js";
 import { createPuppeteerLauncher } from "../src/browser/puppeteer-adapter.js";
 import { shoppingAgentConfig } from "../src/config.js";
 

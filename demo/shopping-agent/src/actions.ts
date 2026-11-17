@@ -44,23 +44,23 @@ const toolCall = z.object({
 export const modelToolCall = toolCall;
 
 /** Map model-facing tool names to validated host actions. */
-export function actionFromToolCall(
-  name: string,
-  argsJson: string,
-): HostAction {
+export function actionFromToolCall(name: string, argsJson: string): HostAction {
   const parsed: unknown = JSON.parse(argsJson);
   switch (name) {
     case "navigate_shop":
-      return hostAction.parse({ kind: "navigate", ...z
-        .object({
-          path: z.string().regex(/^\//).default("/"),
-          hash: z
-            .string()
-            .regex(/^#[a-z]+$/)
-            .optional(),
-        })
-        .strict()
-        .parse(parsed) });
+      return hostAction.parse({
+        kind: "navigate",
+        ...z
+          .object({
+            path: z.string().regex(/^\//).default("/"),
+            hash: z
+              .string()
+              .regex(/^#[a-z]+$/)
+              .optional(),
+          })
+          .strict()
+          .parse(parsed),
+      });
     case "view_catalog":
       return hostAction.parse({ kind: "view_catalog" });
     case "add_to_cart": {
@@ -105,8 +105,13 @@ export const AGENT_TOOLS = [
     type: "function" as const,
     function: {
       name: "view_catalog",
-      description: "Read the sanitized product catalog visible on the shop page.",
-      parameters: { type: "object", properties: {}, additionalProperties: false },
+      description:
+        "Read the sanitized product catalog visible on the shop page.",
+      parameters: {
+        type: "object",
+        properties: {},
+        additionalProperties: false,
+      },
     },
   },
   {
@@ -128,8 +133,13 @@ export const AGENT_TOOLS = [
     type: "function" as const,
     function: {
       name: "view_cart",
-      description: "Read a sanitized summary of cart line items (no checkout actions).",
-      parameters: { type: "object", properties: {}, additionalProperties: false },
+      description:
+        "Read a sanitized summary of cart line items (no checkout actions).",
+      parameters: {
+        type: "object",
+        properties: {},
+        additionalProperties: false,
+      },
     },
   },
   {

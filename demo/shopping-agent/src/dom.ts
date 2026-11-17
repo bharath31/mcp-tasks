@@ -1,7 +1,4 @@
-import {
-  STILLROOM_CATALOG,
-  type StillroomProductId,
-} from "./catalog.js";
+import { STILLROOM_CATALOG, type StillroomProductId } from "./catalog.js";
 
 /** Host-owned exact display names for allowlisted product ids. */
 export const ALLOWED_PRODUCT_NAME: Record<StillroomProductId, string> =
@@ -62,14 +59,14 @@ export function assertUniqueGridProductName(
     return { error: `product not on shop grid: ${displayName.trim()}` };
   }
   if (matchCount > 1) {
-    return { error: `duplicate product name on shop grid: ${displayName.trim()}` };
+    return {
+      error: `duplicate product name on shop grid: ${displayName.trim()}`,
+    };
   }
   return { ok: true };
 }
 
-export function productNameForId(
-  productId: StillroomProductId,
-): string {
+export function productNameForId(productId: StillroomProductId): string {
   return ALLOWED_PRODUCT_NAME[productId];
 }
 
@@ -157,7 +154,10 @@ export function cartLineDisplayName(nameLine: string): string {
 export function buildCartFromDom(
   lines: CartLineSnapshot[],
   enabledIds: readonly StillroomProductId[],
-): { items: { productId: StillroomProductId; quantity: number }[]; errors: string[] } {
+): {
+  items: { productId: StillroomProductId; quantity: number }[];
+  errors: string[];
+} {
   const items: { productId: StillroomProductId; quantity: number }[] = [];
   const errors: string[] = [];
 

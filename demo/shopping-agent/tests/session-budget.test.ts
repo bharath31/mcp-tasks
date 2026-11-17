@@ -10,7 +10,11 @@ import {
 } from "../src/session-budget.js";
 import type { HostActionResult } from "../src/ports.js";
 import type { HostAction } from "../src/actions.js";
-import { fakeBrowserLauncher, FakeBrowserSession, scriptedModel } from "./fakes.js";
+import {
+  fakeBrowserLauncher,
+  FakeBrowserSession,
+  scriptedModel,
+} from "./fakes.js";
 
 test("capWaitMs respects remaining session budget", () => {
   let now = 1000;
@@ -56,9 +60,7 @@ test("slow host step aborts with budget_exhausted (no dangling waits)", async ()
   const model = scriptedModel([
     {
       content: null,
-      toolCalls: [
-        { id: "1", name: "view_catalog", arguments: "{}" },
-      ],
+      toolCalls: [{ id: "1", name: "view_catalog", arguments: "{}" }],
     },
   ]);
   class SlowBrowserSession extends FakeBrowserSession {
@@ -92,7 +94,9 @@ test("agent budget_exhausted when model.run never settles", async () => {
     },
     parseOutput: () => ({
       content: null,
-      toolCalls: [{ id: "1", name: "add_to_cart", arguments: '{"productId":"tray"}' }],
+      toolCalls: [
+        { id: "1", name: "add_to_cart", arguments: '{"productId":"tray"}' },
+      ],
     }),
   };
   const t0 = Date.now();
@@ -150,7 +154,9 @@ test("raceWithSessionBudget rejects when work exceeds remaining budget", async (
     () =>
       raceWithSessionBudget(
         budget,
-        new Promise<string>((resolve) => setTimeout(() => resolve("late"), 500)),
+        new Promise<string>((resolve) =>
+          setTimeout(() => resolve("late"), 500),
+        ),
       ),
     SessionBudgetExceededError,
   );

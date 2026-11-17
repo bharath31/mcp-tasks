@@ -21,16 +21,19 @@ export type TrustedMerchantHost = {
    * Record verified customer approval after the host independently verified proof
    * (passkey, CIBA, Task Authority, etc.). No public /approve HTTP route exists.
    */
-  injectCustomerApproval(quoteId: string, actor: HumanActor): ReturnType<
-    MerchantLedger["injectCustomerApproval"]
-  >;
+  injectCustomerApproval(
+    quoteId: string,
+    actor: HumanActor,
+  ): ReturnType<MerchantLedger["injectCustomerApproval"]>;
   executeQuote(
     quoteId: string,
     actor: TrustedActor,
   ): ReturnType<MerchantLedger["executeQuote"]>;
 };
 
-export function createTrustedMerchantHost(ledger: MerchantLedger): TrustedMerchantHost {
+export function createTrustedMerchantHost(
+  ledger: MerchantLedger,
+): TrustedMerchantHost {
   return {
     ledger,
     injectCustomerApproval(quoteId, actor) {

@@ -23,9 +23,19 @@ type PublicRpcBody =
       op: "updateCart";
       actor: TrustedActor;
       cartId: string;
-      items: { productId: string; quantity: number; priceMinor: number; currency: "USD" }[];
+      items: {
+        productId: string;
+        quantity: number;
+        priceMinor: number;
+        currency: "USD";
+      }[];
     }
-  | { op: "createQuote"; actor: TrustedActor; cartId: string; shippingAddressId: string }
+  | {
+      op: "createQuote";
+      actor: TrustedActor;
+      cartId: string;
+      shippingAddressId: string;
+    }
   | { op: "getQuote"; actor: TrustedActor; quoteId: string }
   | { op: "executeQuote"; actor: TrustedActor; quoteId: string }
   | { op: "reconcileQuote"; actor: TrustedActor; quoteId: string };
@@ -62,7 +72,10 @@ export class CustomerMerchantLedger extends DurableObject<MerchantLedgerEnv> {
     initMerchantSchema(db);
     db.transaction(() => {
       const row = db
-        .exec("SELECT value FROM merchant_do_meta WHERE key = ?", BOUND_CUSTOMER_KEY)
+        .exec(
+          "SELECT value FROM merchant_do_meta WHERE key = ?",
+          BOUND_CUSTOMER_KEY,
+        )
         .one();
       if (!row) {
         db.exec(
@@ -93,7 +106,9 @@ export class CustomerMerchantLedger extends DurableObject<MerchantLedgerEnv> {
     const configured = readHostInternalSecret(this.env);
     if (!configured) return false;
     const presented = request.headers.get(MERCHANT_HOST_INTERNAL_SECRET_HEADER);
-    return presented !== null && presented.length > 0 && presented === configured;
+    return (
+      presented !== null && presented.length > 0 && presented === configured
+    );
   }
 
   async fetch(request: Request): Promise<Response> {
@@ -102,10 +117,13 @@ export class CustomerMerchantLedger extends DurableObject<MerchantLedgerEnv> {
     }
     const customerId = request.headers.get("x-nominee-customer-id");
     if (!customerId) {
-      return new Response(JSON.stringify({ error: "customer_binding_required" }), {
-        status: 400,
-        headers: { "content-type": "application/json" },
-      });
+      return new Response(
+        JSON.stringify({ error: "customer_binding_required" }),
+        {
+          status: 400,
+          headers: { "content-type": "application/json" },
+        },
+      );
     }
 
     let body: RpcBody;
@@ -141,20 +159,27 @@ export class CustomerMerchantLedger extends DurableObject<MerchantLedgerEnv> {
       );
     }
     if (!this.hostSecretMatches(request)) {
-      return Response.json({ error: "host_internal_forbidden" }, { status: 403 });
+      return Response.json(
+        { error: "host_internal_forbidden" },
+        { status: 403 },
+      );
     }
 
     try {
       this.assertCustomerBinding(customerId);
     } catch (error) {
-      const message = error instanceof Error ? error.message : "customer_binding_mismatch";
+      const message =
+        error instanceof Error ? error.message : "customer_binding_mismatch";
       return Response.json({ error: message }, { status: 403 });
     }
 
     try {
       if (body.op === "hostInjectCustomerApproval") {
         const ledger = this.ledgerFor(customerId);
-        const result = await ledger.injectCustomerApproval(body.quoteId, body.actor);
+        const result = await ledger.injectCustomerApproval(
+          body.quoteId,
+          body.actor,
+        );
         return Response.json(result);
       }
 

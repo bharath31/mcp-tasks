@@ -19,7 +19,7 @@ export function scrapeGridArticlesFromDocument(
       buttonLabel: (button?.textContent ?? "").trim(),
       buttonDisabled: Boolean(
         button?.hasAttribute("disabled") ||
-          (button as HTMLButtonElement | null)?.disabled,
+        (button as HTMLButtonElement | null)?.disabled,
       ),
     };
   });

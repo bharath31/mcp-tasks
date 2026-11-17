@@ -33,7 +33,12 @@ export class FakeBrowserSession implements BrowserSessionPort {
           kind: "view_catalog",
           catalog: {
             products: [
-              { id: "tray", name: "Catchall tray", priceMinor: 2400, currency: "USD" },
+              {
+                id: "tray",
+                name: "Catchall tray",
+                priceMinor: 2400,
+                currency: "USD",
+              },
             ],
           },
         };
@@ -42,7 +47,9 @@ export class FakeBrowserSession implements BrowserSessionPort {
           return { ok: false, error: "checkout", code: "checkout_boundary" };
         }
         this.clicks.push(action.productId);
-        const existing = this.cartItems.find((i) => i.productId === action.productId);
+        const existing = this.cartItems.find(
+          (i) => i.productId === action.productId,
+        );
         if (existing) existing.quantity += 1;
         else this.cartItems.push({ productId: action.productId, quantity: 1 });
         return { ok: true, kind: "add_to_cart", productId: action.productId };
@@ -72,7 +79,8 @@ export function fakeBrowserLauncher(
 
 export function scriptedModel(
   script: ParsedModelOutput[],
-  parse: (raw: unknown) => ParsedModelOutput = (raw) => raw as ParsedModelOutput,
+  parse: (raw: unknown) => ParsedModelOutput = (raw) =>
+    raw as ParsedModelOutput,
 ): ModelPort {
   let i = 0;
   return {

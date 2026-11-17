@@ -34,10 +34,7 @@ export type {
   HostActionResult,
 } from "./ports.js";
 export { executeHostAction } from "./executor.js";
-export {
-  expectedProductDisplayName,
-  SHOP_GRID_SELECTOR,
-} from "./selectors.js";
+export { expectedProductDisplayName, SHOP_GRID_SELECTOR } from "./selectors.js";
 export {
   buildCatalogFromGrid,
   buildCartFromDom,
@@ -54,6 +51,4 @@ export {
   parseWorkersAiOutput,
   type WorkersAiBinding,
 } from "./model/workers-ai-adapter.js";
-export {
-  createPuppeteerLauncher,
-} from "./browser/puppeteer-adapter.js";
+export { createPuppeteerLauncher } from "./browser/puppeteer-adapter.js";

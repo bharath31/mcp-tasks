@@ -1,8 +1,5 @@
 import { ActionRefusedError } from "../guard.js";
-import {
-  SHOP_GRID_SELECTOR,
-  SHOP_READY_SELECTOR,
-} from "../selectors.js";
+import { SHOP_GRID_SELECTOR, SHOP_READY_SELECTOR } from "../selectors.js";
 import {
   assertWithinBudget,
   capWaitMs,

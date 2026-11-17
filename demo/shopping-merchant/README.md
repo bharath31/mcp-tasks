@@ -6,13 +6,13 @@ Prototype **Cloudflare Durable Object** merchant ledger for Nominee shopping. It
 
 ## Trust boundaries
 
-| Data | Source |
-|------|--------|
-| Actor (`customerId`, `agentId`, scopes, …) | Trusted host verifier on **every** call — never accept from raw client JSON |
-| Catalog, unit prices | `SERVER_CATALOG` inside the ledger |
-| Ship-to destination | `customerAccount.getAddress(customerId, addressId)` |
-| Quote fields | Immutable snapshot at issuance (items, totals, destination, operation, revision, expiry) |
-| Customer approval | Authenticated Worker calls `createTrustedMerchantHost(ledger).injectCustomerApproval` after `verifyCustomerApproval` — **not** exposed on the DO `fetch` RPC |
+| Data                                       | Source                                                                                                                                                       |
+| ------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| Actor (`customerId`, `agentId`, scopes, …) | Trusted host verifier on **every** call — never accept from raw client JSON                                                                                  |
+| Catalog, unit prices                       | `SERVER_CATALOG` inside the ledger                                                                                                                           |
+| Ship-to destination                        | `customerAccount.getAddress(customerId, addressId)`                                                                                                          |
+| Quote fields                               | Immutable snapshot at issuance (items, totals, destination, operation, revision, expiry)                                                                     |
+| Customer approval                          | Authenticated Worker calls `createTrustedMerchantHost(ledger).injectCustomerApproval` after `verifyCustomerApproval` — **not** exposed on the DO `fetch` RPC |
 
 Every purchase requires **direct customer approval** (`requirement` is always `customer_verification`). Agents may build carts and quotes; execution stays blocked until the host injects verified approval.
 

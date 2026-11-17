@@ -25,7 +25,11 @@ import { ActionRefusedError } from "../src/guard.js";
 import { createSessionBudget } from "../src/session-budget.js";
 
 const fixtureHtml = readFileSync(
-  join(dirname(fileURLToPath(import.meta.url)), "fixtures", "stillroom-shop.html"),
+  join(
+    dirname(fileURLToPath(import.meta.url)),
+    "fixtures",
+    "stillroom-shop.html",
+  ),
   "utf8",
 );
 
@@ -43,10 +47,7 @@ test("fixture scrape matches Stillroom selectors (reversed grid order)", () => {
     products.map((p) => p.id),
     ["weight", "book", "cup", "tray"],
   );
-  assert.equal(
-    doc.querySelectorAll(SHOP_READY_SELECTOR).length,
-    3,
-  );
+  assert.equal(doc.querySelectorAll(SHOP_READY_SELECTOR).length, 3);
 });
 
 test("fixture cart lines parse host-owned ids", () => {

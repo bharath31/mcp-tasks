@@ -2,7 +2,11 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { runShoppingAgent } from "../src/agent.js";
 import { shoppingAgentConfig } from "../src/config.js";
-import { fakeBrowserLauncher, FakeBrowserSession, scriptedModel } from "./fakes.js";
+import {
+  fakeBrowserLauncher,
+  FakeBrowserSession,
+  scriptedModel,
+} from "./fakes.js";
 
 const config = shoppingAgentConfig.parse({
   merchantOrigin: "https://shop.example.test",
@@ -14,36 +18,40 @@ const config = shoppingAgentConfig.parse({
 test("agent runs model tools through host validation without checkout", async () => {
   const browserRef: { current?: FakeBrowserSession } = {};
   const events: string[] = [];
-  const model = scriptedModel(
-    [
-      {
-        content: null,
-        toolCalls: [
-          {
-            id: "1",
-            name: "navigate_shop",
-            arguments: JSON.stringify({ path: "/", hash: "#shop" }),
-          },
-        ],
-      },
-      {
-        content: null,
-        toolCalls: [
-          { id: "2", name: "add_to_cart", arguments: JSON.stringify({ productId: "tray" }) },
-        ],
-      },
-      {
-        content: null,
-        toolCalls: [
-          {
-            id: "3",
-            name: "finish_session",
-            arguments: JSON.stringify({ summary: "Added tray to cart; stopped before checkout." }),
-          },
-        ],
-      },
-    ],
-  );
+  const model = scriptedModel([
+    {
+      content: null,
+      toolCalls: [
+        {
+          id: "1",
+          name: "navigate_shop",
+          arguments: JSON.stringify({ path: "/", hash: "#shop" }),
+        },
+      ],
+    },
+    {
+      content: null,
+      toolCalls: [
+        {
+          id: "2",
+          name: "add_to_cart",
+          arguments: JSON.stringify({ productId: "tray" }),
+        },
+      ],
+    },
+    {
+      content: null,
+      toolCalls: [
+        {
+          id: "3",
+          name: "finish_session",
+          arguments: JSON.stringify({
+            summary: "Added tray to cart; stopped before checkout.",
+          }),
+        },
+      ],
+    },
+  ]);
 
   const result = await runShoppingAgent({
     config,
@@ -108,7 +116,11 @@ test("checkout boundary surfaces when host refuses add", async () => {
     {
       content: null,
       toolCalls: [
-        { id: "1", name: "add_to_cart", arguments: JSON.stringify({ productId: "cup" }) },
+        {
+          id: "1",
+          name: "add_to_cart",
+          arguments: JSON.stringify({ productId: "cup" }),
+        },
         {
           id: "2",
           name: "finish_session",

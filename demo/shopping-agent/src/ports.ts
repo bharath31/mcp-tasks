@@ -1,7 +1,12 @@
 import type { HostAction } from "./actions.js";
 
 export type CatalogSnapshot = {
-  products: { id: string; name: string; priceMinor: number; currency: string }[];
+  products: {
+    id: string;
+    name: string;
+    priceMinor: number;
+    currency: string;
+  }[];
 };
 
 export type CartSnapshot = {

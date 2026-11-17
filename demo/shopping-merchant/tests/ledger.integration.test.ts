@@ -33,14 +33,20 @@ function memoryLedger() {
   const provider = createFixtureOrderProvider();
   const ledger = createMerchantLedger(
     createNodeSqlDatabase(db),
-  {
-    customerAccount: createFixtureCustomerAccount(),
-    verifyCustomerApproval: approval,
-    orderProvider: provider,
-  },
+    {
+      customerAccount: createFixtureCustomerAccount(),
+      verifyCustomerApproval: approval,
+      orderProvider: provider,
+    },
     CUSTOMER,
   );
-  return { ledger, host: createTrustedMerchantHost(ledger), approval, provider, db };
+  return {
+    ledger,
+    host: createTrustedMerchantHost(ledger),
+    approval,
+    provider,
+    db,
+  };
 }
 
 test("ownership: cross-customer carts and quotes are forbidden", async () => {
@@ -73,7 +79,9 @@ test("every purchase requires injected customer approval; no verifier means fail
     CUSTOMER,
   );
   const cart = ledger.createCart(agent);
-  ledger.updateCart(cart.id, agent, [{ productId: "mug", quantity: 1, priceMinor: 1800, currency: "USD" }]);
+  ledger.updateCart(cart.id, agent, [
+    { productId: "mug", quantity: 1, priceMinor: 1800, currency: "USD" },
+  ]);
   const quote = await ledger.createQuote(cart.id, agent, "fixture-home");
   assert.deepEqual(await ledger.executeQuote(quote.id, agent), {
     status: "customer_verification_required",
@@ -88,10 +96,14 @@ test("every purchase requires injected customer approval; no verifier means fail
 test("quote drift, tampered totals and destinations are rejected", async () => {
   const { ledger, approval, provider, db } = memoryLedger();
   const cart = ledger.createCart(agent);
-  ledger.updateCart(cart.id, agent, [{ productId: "mug", quantity: 2, priceMinor: 1800, currency: "USD" }]);
+  ledger.updateCart(cart.id, agent, [
+    { productId: "mug", quantity: 2, priceMinor: 1800, currency: "USD" },
+  ]);
   const quote = await ledger.createQuote(cart.id, agent, "fixture-home");
   approval.approveForTest(quote);
-  ledger.updateCart(cart.id, agent, [{ productId: "mug", quantity: 1, priceMinor: 1800, currency: "USD" }]);
+  ledger.updateCart(cart.id, agent, [
+    { productId: "mug", quantity: 1, priceMinor: 1800, currency: "USD" },
+  ]);
   await assert.rejects(ledger.executeQuote(quote.id, agent), /stale_quote/);
   const requote = await ledger.createQuote(cart.id, agent, "fixture-alternate");
   assert.notEqual(requote.destination.id, quote.destination.id);
@@ -102,10 +114,15 @@ test("quote drift, tampered totals and destinations are rejected", async () => {
 test("stale expiry blocks execution", async () => {
   const { ledger, approval, db } = memoryLedger();
   const cart = ledger.createCart(agent);
-  ledger.updateCart(cart.id, agent, [{ productId: "tea", quantity: 1, priceMinor: 1200, currency: "USD" }]);
+  ledger.updateCart(cart.id, agent, [
+    { productId: "tea", quantity: 1, priceMinor: 1200, currency: "USD" },
+  ]);
   const quote = await ledger.createQuote(cart.id, agent, "fixture-home");
   approval.approveForTest(quote);
-  const expired = { ...quote, expiresAt: new Date(Date.now() - 60_000).toISOString() };
+  const expired = {
+    ...quote,
+    expiresAt: new Date(Date.now() - 60_000).toISOString(),
+  };
   db.prepare("UPDATE quotes SET data = ? WHERE id = ?").run(
     JSON.stringify(expired),
     quote.id,
@@ -117,7 +134,9 @@ test("stale expiry blocks execution", async () => {
 test("wrong principal cannot inject approval or execute", async () => {
   const { ledger, approval, db } = memoryLedger();
   const cart = ledger.createCart(agent);
-  ledger.updateCart(cart.id, agent, [{ productId: "mug", quantity: 1, priceMinor: 1800, currency: "USD" }]);
+  ledger.updateCart(cart.id, agent, [
+    { productId: "mug", quantity: 1, priceMinor: 1800, currency: "USD" },
+  ]);
   const quote = await ledger.createQuote(cart.id, agent, "fixture-home");
   approval.approveForTest(quote);
   await assert.rejects(
@@ -134,7 +153,9 @@ test("wrong principal cannot inject approval or execute", async () => {
 test("duplicate and racing execution claims provider once", async () => {
   const { ledger, host, approval, provider, db } = memoryLedger();
   const cart = ledger.createCart(agent);
-  ledger.updateCart(cart.id, agent, [{ productId: "mug", quantity: 1, priceMinor: 1800, currency: "USD" }]);
+  ledger.updateCart(cart.id, agent, [
+    { productId: "mug", quantity: 1, priceMinor: 1800, currency: "USD" },
+  ]);
   const quote = await ledger.createQuote(cart.id, agent, "fixture-home");
   approval.approveForTest(quote);
   await host.injectCustomerApproval(quote.id, human);
@@ -153,11 +174,15 @@ test("provider uncertainty stays processing; reconcile recovers", async () => {
   const { ledger, approval, provider, db } = memoryLedger();
   provider.configurePlace("null");
   const cart = ledger.createCart(agent);
-  ledger.updateCart(cart.id, agent, [{ productId: "mug", quantity: 1, priceMinor: 1800, currency: "USD" }]);
+  ledger.updateCart(cart.id, agent, [
+    { productId: "mug", quantity: 1, priceMinor: 1800, currency: "USD" },
+  ]);
   const quote = await ledger.createQuote(cart.id, agent, "fixture-home");
   approval.approveForTest(quote);
   await ledger.injectCustomerApproval(quote.id, human);
-  assert.deepEqual(await ledger.executeQuote(quote.id, agent), { status: "processing" });
+  assert.deepEqual(await ledger.executeQuote(quote.id, agent), {
+    status: "processing",
+  });
   assert.equal(provider.getPlaceCalls(), 1);
   provider.seedOrder(quote.operationId);
   const recovered = await ledger.reconcileQuote(quote.id, agent);
@@ -174,7 +199,10 @@ test("agent-bound carts: human cannot executeQuote (commerce executionActor pari
   const quote = await ledger.createQuote(cart.id, agent, "fixture-home");
   approval.approveForTest(quote);
   await host.injectCustomerApproval(quote.id, human);
-  await assert.rejects(ledger.executeQuote(quote.id, human), /not_found_or_forbidden/);
+  await assert.rejects(
+    ledger.executeQuote(quote.id, human),
+    /not_found_or_forbidden/,
+  );
   db.close();
 });
 
@@ -183,11 +211,9 @@ test("agent session continuity: same agent and user with a different session is 
   const cart = ledger.createCart(agent);
   assert.throws(
     () =>
-      ledger.updateCart(
-        cart.id,
-        { ...agent, sessionId: "session-other" },
-        [{ productId: "mug", quantity: 1, priceMinor: 1800, currency: "USD" }],
-      ),
+      ledger.updateCart(cart.id, { ...agent, sessionId: "session-other" }, [
+        { productId: "mug", quantity: 1, priceMinor: 1800, currency: "USD" },
+      ]),
     /not_found_or_forbidden/,
   );
   db.close();
@@ -203,7 +229,10 @@ test("malformed agent principal is rejected on every surface", async () => {
     sessionId: "",
     scopes: ["cart:write", "checkout:write", "addresses:read"],
   };
-  assert.throws(() => ledger.readCart(cart.id, badAgent), /not_found_or_forbidden/);
+  assert.throws(
+    () => ledger.readCart(cart.id, badAgent),
+    /not_found_or_forbidden/,
+  );
   await assert.rejects(
     ledger.createQuote(cart.id, badAgent, "fixture-home"),
     /not_found_or_forbidden/,

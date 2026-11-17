@@ -68,7 +68,9 @@ function merchantMiniflare(
 ): Miniflare {
   const bindings: Record<string, string> = {};
   if (!opts?.productionPorts) {
-    bindings.MERCHANT_HOST_INTERNAL_SECRET = opts?.omitHostSecret ? "" : HOST_SECRET;
+    bindings.MERCHANT_HOST_INTERNAL_SECRET = opts?.omitHostSecret
+      ? ""
+      : HOST_SECRET;
   } else if (!opts?.omitHostSecret) {
     bindings.MERCHANT_HOST_INTERNAL_SECRET = HOST_SECRET;
   }
@@ -199,7 +201,9 @@ test("hostInjectCustomerApproval fails without fixture test proof (parity with l
       op: "updateCart",
       actor: agent,
       cartId: cart.id,
-      items: [{ productId: "mug", quantity: 1, priceMinor: 1800, currency: "USD" }],
+      items: [
+        { productId: "mug", quantity: 1, priceMinor: 1800, currency: "USD" },
+      ],
     });
     const quoteRes = await post(mf, {
       op: "createQuote",
@@ -232,7 +236,9 @@ test("DO happy path: cart, quote, fixture proof + host approval transport, execu
       op: "updateCart",
       actor: agent,
       cartId: cart.id,
-      items: [{ productId: "mug", quantity: 1, priceMinor: 1800, currency: "USD" }],
+      items: [
+        { productId: "mug", quantity: 1, priceMinor: 1800, currency: "USD" },
+      ],
     });
     assert.equal(updateRes.status, 200);
 
@@ -251,7 +257,9 @@ test("DO happy path: cart, quote, fixture proof + host approval transport, execu
       quoteId: quote.id,
     });
     assert.equal(beforeExecute.status, 200);
-    assert.deepEqual(await beforeExecute.json(), { status: "customer_verification_required" });
+    assert.deepEqual(await beforeExecute.json(), {
+      status: "customer_verification_required",
+    });
 
     const testProof = await post(mf, {
       op: "testFixtureApproveQuote",
@@ -281,7 +289,9 @@ test("DO happy path: cart, quote, fixture proof + host approval transport, execu
 });
 
 test("production DO ports stay unconfigured even with legacy fixture env keys", async () => {
-  const mf = merchantMiniflare(scriptProductionPorts, { productionPorts: true });
+  const mf = merchantMiniflare(scriptProductionPorts, {
+    productionPorts: true,
+  });
   try {
     const response = await mf.dispatchFetch("http://ledger/", {
       method: "POST",

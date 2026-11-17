@@ -1,10 +1,5 @@
 /** Host-owned Stillroom Supply catalog mirror (examples/storefront samples). */
-export const STILLROOM_PRODUCT_IDS = [
-  "tray",
-  "cup",
-  "book",
-  "weight",
-] as const;
+export const STILLROOM_PRODUCT_IDS = ["tray", "cup", "book", "weight"] as const;
 
 export type StillroomProductId = (typeof STILLROOM_PRODUCT_IDS)[number];
 

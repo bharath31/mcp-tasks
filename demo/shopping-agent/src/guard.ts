@@ -6,7 +6,10 @@ export function assertAllowedNavigation(
   path: string,
 ): void {
   if (!config.allowedPaths.includes(path)) {
-    throw new ActionRefusedError("navigation_path_denied", `Path denied: ${path}`);
+    throw new ActionRefusedError(
+      "navigation_path_denied",
+      `Path denied: ${path}`,
+    );
   }
 }
 
@@ -21,7 +24,10 @@ export function assertTrustedAbsoluteUrl(
     throw new ActionRefusedError("invalid_url", "Malformed URL");
   }
   if (parsed.protocol !== "https:") {
-    throw new ActionRefusedError("non_https", "Only HTTPS merchant URLs are allowed");
+    throw new ActionRefusedError(
+      "non_https",
+      "Only HTTPS merchant URLs are allowed",
+    );
   }
   const host = merchantHostname(config);
   if (parsed.hostname !== host) {

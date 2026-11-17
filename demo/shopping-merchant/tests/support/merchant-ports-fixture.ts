@@ -15,11 +15,15 @@ export type MerchantLedgerEnv = {
   [key: string]: unknown;
 };
 
-export const MERCHANT_HOST_INTERNAL_SECRET_HEADER = "x-nominee-host-internal-secret";
+export const MERCHANT_HOST_INTERNAL_SECRET_HEADER =
+  "x-nominee-host-internal-secret";
 
-let fixtureVerifier: ReturnType<typeof createFixtureApprovalVerifier> | undefined;
+let fixtureVerifier:
+  ReturnType<typeof createFixtureApprovalVerifier> | undefined;
 
-export function merchantLedgerPortsFromEnv(_env: MerchantLedgerEnv): MerchantLedgerPorts {
+export function merchantLedgerPortsFromEnv(
+  _env: MerchantLedgerEnv,
+): MerchantLedgerPorts {
   fixtureVerifier = createFixtureApprovalVerifier();
   return {
     customerAccount: createFixtureCustomerAccount(),
@@ -36,7 +40,9 @@ export function fixtureApproveQuoteForTest(quote: Quote): void {
   fixtureVerifier.approveForTest(quote);
 }
 
-export function readHostInternalSecret(env: MerchantLedgerEnv): string | undefined {
+export function readHostInternalSecret(
+  env: MerchantLedgerEnv,
+): string | undefined {
   const value = env.MERCHANT_HOST_INTERNAL_SECRET;
   return typeof value === "string" && value.length > 0 ? value : undefined;
 }

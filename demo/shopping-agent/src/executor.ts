@@ -2,10 +2,7 @@ import type { ShoppingAgentConfig } from "./config.js";
 import type { HostAction } from "./actions.js";
 import type { StillroomProductId } from "./catalog.js";
 import { CATALOG_PRICE_DISCLAIMER } from "./dom.js";
-import {
-  ActionRefusedError,
-  buildNavigationUrl,
-} from "./guard.js";
+import { ActionRefusedError, buildNavigationUrl } from "./guard.js";
 import type { BrowserSessionPort, HostActionResult } from "./ports.js";
 import { SessionBudgetExceededError } from "./session-budget.js";
 
@@ -25,7 +22,10 @@ export async function executeHostAction(
         const result = await browser.runHostAction(action);
         if (!result.ok) return result;
         if (result.kind !== "view_catalog") {
-          return { ok: false, error: "unexpected host response for view_catalog" };
+          return {
+            ok: false,
+            error: "unexpected host response for view_catalog",
+          };
         }
         return {
           ok: true,

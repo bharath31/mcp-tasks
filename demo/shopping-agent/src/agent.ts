@@ -5,10 +5,7 @@ import {
   actionFromToolCall,
   type HostAction,
 } from "./actions.js";
-import {
-  shoppingAgentConfig,
-  type ShoppingAgentConfig,
-} from "./config.js";
+import { shoppingAgentConfig, type ShoppingAgentConfig } from "./config.js";
 import { merchantHostname } from "./config.js";
 import { executeHostAction } from "./executor.js";
 import { REQUEST_INTERCEPTION_LIMITS } from "./guard.js";
@@ -99,9 +96,7 @@ export async function runShoppingAgent(opts: {
       throw e;
     }
 
-    const messages: ModelMessage[] = [
-      { role: "user", content: request.goal },
-    ];
+    const messages: ModelMessage[] = [{ role: "user", content: request.goal }];
 
     for (let i = 0; i < config.maxModelCalls; i++) {
       if (now() > deadline) {
@@ -223,10 +218,7 @@ export async function runShoppingAgent(opts: {
           error: result.ok ? undefined : result.error,
         });
 
-        if (
-          !result.ok &&
-          result.code === "checkout_boundary"
-        ) {
+        if (!result.ok && result.code === "checkout_boundary") {
           emit({
             type: "checkout_boundary",
             detail: result.error ?? "checkout refused",

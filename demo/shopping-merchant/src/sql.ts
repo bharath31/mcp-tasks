@@ -71,7 +71,9 @@ export function isSqlStorageNoRowError(error: unknown): boolean {
   );
 }
 
-export function createDoSqlDatabase(storage: DurableObjectStorage): SqlDatabase {
+export function createDoSqlDatabase(
+  storage: DurableObjectStorage,
+): SqlDatabase {
   const sql = storage.sql;
   return {
     exec(query: string, ...bindings: unknown[]): SqlCursor {

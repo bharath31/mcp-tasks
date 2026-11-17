@@ -16,8 +16,9 @@ export function createWorkersAiModel(ai: WorkersAiBinding): ModelPort {
 /** Normalizes Workers AI output (OpenAI-style `choices` and legacy top-level fields). */
 export function parseModelOutput(out: unknown): ParsedModelOutput {
   const root = out as Record<string, unknown>;
-  const msg = (root?.choices as { message?: Record<string, unknown> }[] | undefined)?.[0]
-    ?.message;
+  const msg = (
+    root?.choices as { message?: Record<string, unknown> }[] | undefined
+  )?.[0]?.message;
   const rawCalls: unknown[] =
     (msg?.tool_calls as unknown[] | undefined) ??
     (root?.tool_calls as unknown[] | undefined) ??
@@ -30,10 +31,11 @@ export function parseModelOutput(out: unknown): ParsedModelOutput {
       const args = fn?.arguments ?? call.arguments ?? {};
       return typeof name === "string"
         ? {
-            id: String(call.id ?? `call_${i}_${crypto.randomUUID().slice(0, 8)}`),
+            id: String(
+              call.id ?? `call_${i}_${crypto.randomUUID().slice(0, 8)}`,
+            ),
             name,
-            arguments:
-              typeof args === "string" ? args : JSON.stringify(args),
+            arguments: typeof args === "string" ? args : JSON.stringify(args),
           }
         : null;
     })

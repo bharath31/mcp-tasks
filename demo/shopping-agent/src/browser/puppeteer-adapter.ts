@@ -1,6 +1,9 @@
 import puppeteer from "@cloudflare/puppeteer";
 import type { HostAction } from "../actions.js";
-import { CHECKOUT_CONTROL_LABELS, type StillroomProductId } from "../catalog.js";
+import {
+  CHECKOUT_CONTROL_LABELS,
+  type StillroomProductId,
+} from "../catalog.js";
 import type { ShoppingAgentConfig } from "../config.js";
 import {
   assertUniqueGridProductName,
@@ -67,15 +70,18 @@ async function attachRequestPolicy(
 }
 
 async function refuseCheckoutClicks(page: Page): Promise<void> {
-  await page.evaluate((labels: string[]) => {
-    for (const btn of Array.from(document.querySelectorAll("button"))) {
-      const text = (btn.textContent ?? "").trim();
-      if (labels.includes(text)) {
-        btn.setAttribute("disabled", "true");
-        btn.setAttribute("data-nominee-checkout-boundary", "true");
+  await page.evaluate(
+    (labels: string[]) => {
+      for (const btn of Array.from(document.querySelectorAll("button"))) {
+        const text = (btn.textContent ?? "").trim();
+        if (labels.includes(text)) {
+          btn.setAttribute("disabled", "true");
+          btn.setAttribute("data-nominee-checkout-boundary", "true");
+        }
       }
-    }
-  }, [...CHECKOUT_CONTROL_LABELS]);
+    },
+    [...CHECKOUT_CONTROL_LABELS],
+  );
 }
 
 async function maybeWaitForShopGrid(
@@ -97,44 +103,37 @@ async function maybeWaitForShopGrid(
 }
 
 async function scrapeGridArticles(page: Page): Promise<GridArticleSnapshot[]> {
-  return page.evaluate(
-    (gridSel) => {
-      const grid = document.querySelector(gridSel);
-      if (!grid) return [];
-      return Array.from(grid.querySelectorAll("article")).map((article) => {
-        const name =
-          article.querySelector(".product-heading h3")?.textContent?.trim() ?? "";
-        const priceText =
-          article.querySelector(".product-heading b")?.textContent?.trim() ?? "";
-        const button = article.querySelector("button");
-        return {
-          name,
-          priceText,
-          buttonLabel: (button?.textContent ?? "").trim(),
-          buttonDisabled: Boolean(
-            button?.hasAttribute("disabled") ||
-              (button as HTMLButtonElement | null)?.disabled,
-          ),
-        };
-      });
-    },
-    SHOP_GRID_SELECTOR,
-  );
+  return page.evaluate((gridSel) => {
+    const grid = document.querySelector(gridSel);
+    if (!grid) return [];
+    return Array.from(grid.querySelectorAll("article")).map((article) => {
+      const name =
+        article.querySelector(".product-heading h3")?.textContent?.trim() ?? "";
+      const priceText =
+        article.querySelector(".product-heading b")?.textContent?.trim() ?? "";
+      const button = article.querySelector("button");
+      return {
+        name,
+        priceText,
+        buttonLabel: (button?.textContent ?? "").trim(),
+        buttonDisabled: Boolean(
+          button?.hasAttribute("disabled") ||
+          (button as HTMLButtonElement | null)?.disabled,
+        ),
+      };
+    });
+  }, SHOP_GRID_SELECTOR);
 }
 
 async function scrapeCartLines(page: Page): Promise<CartLineSnapshot[]> {
-  return page.evaluate(
-    (listSel) => {
-      const root = document.querySelector(listSel);
-      if (!root) return [];
-      return Array.from(root.querySelectorAll("li")).map((li) => ({
-        nameLine: li.querySelector(":scope > span")?.textContent?.trim() ?? "",
-        quantityText:
-          li.querySelector("div > span")?.textContent?.trim() ?? "0",
-      }));
-    },
-    CART_LIST_SELECTOR,
-  );
+  return page.evaluate((listSel) => {
+    const root = document.querySelector(listSel);
+    if (!root) return [];
+    return Array.from(root.querySelectorAll("li")).map((li) => ({
+      nameLine: li.querySelector(":scope > span")?.textContent?.trim() ?? "",
+      quantityText: li.querySelector("div > span")?.textContent?.trim() ?? "0",
+    }));
+  }, CART_LIST_SELECTOR);
 }
 
 async function readCartSnapshot(
@@ -162,11 +161,16 @@ async function clickAddToCartForProduct(
       const grid = document.querySelector(gridSel);
       if (!grid) return { ok: false as const, reason: "grid_missing" };
       for (const article of Array.from(grid.querySelectorAll("article"))) {
-        const h3 = article.querySelector(".product-heading h3")?.textContent?.trim();
+        const h3 = article
+          .querySelector(".product-heading h3")
+          ?.textContent?.trim();
         if (h3 !== name) continue;
         const button = article.querySelector("button");
         if (!button) return { ok: false as const, reason: "button_missing" };
-        if (button.hasAttribute("disabled") || (button as HTMLButtonElement).disabled) {
+        if (
+          button.hasAttribute("disabled") ||
+          (button as HTMLButtonElement).disabled
+        ) {
           return { ok: false as const, reason: "button_disabled" };
         }
         const text = (button.textContent ?? "").trim();
@@ -318,7 +322,8 @@ class PuppeteerBrowserSession implements BrowserSessionPort {
         }
         const cartBefore = await readCartSnapshot(this.page, this.config);
         const beforeQty =
-          cartBefore.items.find((i) => i.productId === action.productId)?.quantity ?? 0;
+          cartBefore.items.find((i) => i.productId === action.productId)
+            ?.quantity ?? 0;
 
         await clickAddToCartForProduct(
           this.page,
@@ -414,7 +419,4 @@ export function createPuppeteerLauncher(
 export type { PuppeteerBrowserSession };
 
 /** @internal Used by fixture tests to mirror live DOM scrape paths. */
-export {
-  scrapeCartLinesFromDocument,
-  scrapeGridArticlesFromDocument,
-};
+export { scrapeCartLinesFromDocument, scrapeGridArticlesFromDocument };

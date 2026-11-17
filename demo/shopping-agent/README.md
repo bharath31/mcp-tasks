@@ -23,6 +23,10 @@ Catalog and cart snapshots are scraped from the live storefront DOM and reconcil
 
 `@cloudflare/puppeteer@2.0.1` is pinned to avoid seven high-severity transitive advisories pulled in by `1.4.0` (`basic-ftp`, `extract-zip`, `proxy-agent`). Run `npm audit` in this package after upgrades.
 
+## Testing
+
+`npm test` runs **Node-only** suites: fake model/browser ports (`tests/fakes.ts`), static HTML fixtures (`tests/fixtures/`), and adapter unit tests. These do **not** call live Cloudflare Workers AI or Browser Run. Integration against real bindings needs a Worker entrypoint and credentials outside this package.
+
 ## Commands
 
 ```sh

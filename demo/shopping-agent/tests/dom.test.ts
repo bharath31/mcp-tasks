@@ -53,14 +53,22 @@ test("parseDisplayedPriceMinor reads storefront currency format", () => {
 });
 
 test("reconcileExactProductName rejects unknown and ambiguous names", () => {
-  assert.deepEqual(reconcileExactProductName("Catchall tray", STILLROOM_PRODUCT_IDS), {
-    id: "tray",
-  });
-  assert.ok("error" in reconcileExactProductName("Mystery mug", STILLROOM_PRODUCT_IDS));
+  assert.deepEqual(
+    reconcileExactProductName("Catchall tray", STILLROOM_PRODUCT_IDS),
+    {
+      id: "tray",
+    },
+  );
+  assert.ok(
+    "error" in reconcileExactProductName("Mystery mug", STILLROOM_PRODUCT_IDS),
+  );
 });
 
 test("buildCatalogFromGrid uses live order and displayed prices", () => {
-  const { products } = buildCatalogFromGrid(reversedGrid, STILLROOM_PRODUCT_IDS);
+  const { products } = buildCatalogFromGrid(
+    reversedGrid,
+    STILLROOM_PRODUCT_IDS,
+  );
   assert.deepEqual(
     products.map((p) => p.id),
     ["weight", "book", "cup", "tray"],

@@ -20,9 +20,11 @@ function mockStorage(handlers: {
   exec?: () => Iterable<unknown>;
 }): DurableObjectStorage {
   const cursor = {
-    one: handlers.one ?? (() => {
-      throw new Error("Expected exactly one row");
-    }),
+    one:
+      handlers.one ??
+      (() => {
+        throw new Error("Expected exactly one row");
+      }),
     [Symbol.iterator]() {
       return (handlers.exec?.() ?? [])[Symbol.iterator]();
     },
@@ -50,10 +52,7 @@ test("createDoSqlDatabase cursor.one returns null only for no-row errors", () =>
       },
     }),
   );
-  assert.throws(
-    () => broken.exec("SELECT 1").one(),
-    /SQLITE_BUSY/,
-  );
+  assert.throws(() => broken.exec("SELECT 1").one(), /SQLITE_BUSY/);
 });
 
 test("createDoSqlDatabase uses transactionSync", () => {

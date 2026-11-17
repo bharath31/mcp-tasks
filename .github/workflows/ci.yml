@@ -66,12 +66,17 @@ jobs:
       - uses: actions/setup-node@v4
         with: { node-version: 22, cache: npm }
       - run: npm ci
+      - run: npm ci --prefix demo/shopping-agent
       - run: npm ci --prefix integrations/poppy
       - run: npm ci --prefix examples/storefront
       - run: npm run test:shopping
       - run: npm --prefix packages/commerce run build
       - run: npm --prefix integrations/poppy run build
       - run: npm --prefix examples/storefront run build
+      - run: npm --prefix demo/shopping-merchant run build
+      - run: npm --prefix demo/shopping-merchant test
+      - run: npm --prefix demo/shopping-agent run typecheck
+      - run: npm --prefix demo/shopping-agent test
       - run: npm --prefix examples/storefront exec -- playwright-core install --with-deps chromium
       - name: Fixture browser smoke (actual local backend)
         run: |

@@ -66,7 +66,9 @@ test("product display names are host-owned and not derived from model input", ()
 });
 
 test("redacts bearer tokens and live view hints", () => {
-  const out = redactText("see cf-brapi-live-view-token abc and Bearer secret123");
+  const out = redactText(
+    "see cf-brapi-live-view-token abc and Bearer secret123",
+  );
   assert.match(out, /\[redacted\]/);
   assert.doesNotMatch(out, /secret123/);
 });

@@ -1,9 +1,5 @@
 import { catalogProduct } from "./catalog.js";
-import {
-  initMerchantSchema,
-  type SqlDatabase,
-  type SqlRow,
-} from "./sql.js";
+import { initMerchantSchema, type SqlDatabase, type SqlRow } from "./sql.js";
 
 import { SERVER_CATALOG } from "./catalog.js";
 import type {
@@ -72,7 +68,11 @@ export function createMerchantLedger(
 
   function getCartRow(id: string) {
     return db
-      .exec("SELECT * FROM carts WHERE id = ? AND customer_id = ?", id, customerId)
+      .exec(
+        "SELECT * FROM carts WHERE id = ? AND customer_id = ?",
+        id,
+        customerId,
+      )
       .one();
   }
 
@@ -171,8 +171,13 @@ export function createMerchantLedger(
     return JSON.parse(data) as Quote;
   }
 
-  async function resolveAddress(addressId: string): Promise<TrustedDestination> {
-    const address = await ports.customerAccount.getAddress(customerId, addressId);
+  async function resolveAddress(
+    addressId: string,
+  ): Promise<TrustedDestination> {
+    const address = await ports.customerAccount.getAddress(
+      customerId,
+      addressId,
+    );
     if (
       !address ||
       address.id !== addressId ||
@@ -235,7 +240,8 @@ export function createMerchantLedger(
     },
 
     updateCart(cartId: string, actor: TrustedActor, items: CartItem[]) {
-      if (!Array.isArray(items) || items.length > 50) throw new Error("invalid_items");
+      if (!Array.isArray(items) || items.length > 50)
+        throw new Error("invalid_items");
       const seen = new Set<string>();
       const priced: CartItem[] = items.map((item) => {
         if (
@@ -294,7 +300,8 @@ export function createMerchantLedger(
           (sum, item) => sum + item.priceMinor * item.quantity,
           0,
         );
-        if (!Number.isSafeInteger(subtotalMinor)) throw new Error("invalid_total");
+        if (!Number.isSafeInteger(subtotalMinor))
+          throw new Error("invalid_total");
         const taxMinor = 0;
         const shippingMinor = 0;
         const totalMinor = subtotalMinor;
@@ -303,8 +310,12 @@ export function createMerchantLedger(
           .exec("SELECT * FROM checkout_operations WHERE cart_id = ?", cartId)
           .one();
         const execution = activeExecution(cartId);
-        if (execution?.status === "processing") throw new Error("checkout_processing");
-        if (execution?.status === "completed" || execution?.status === "abandoned") {
+        if (execution?.status === "processing")
+          throw new Error("checkout_processing");
+        if (
+          execution?.status === "completed" ||
+          execution?.status === "abandoned"
+        ) {
           db.exec("DELETE FROM checkout_operations WHERE cart_id = ?", cartId);
           op = null;
         }
@@ -378,7 +389,10 @@ export function createMerchantLedger(
       const current = getCartRow(record.cart_id as string);
       authorizeCart(current, actor, false);
       const operation = db
-        .exec("SELECT * FROM checkout_operations WHERE cart_id = ?", record.cart_id)
+        .exec(
+          "SELECT * FROM checkout_operations WHERE cart_id = ?",
+          record.cart_id,
+        )
         .one();
       if (
         !operation ||
@@ -458,7 +472,10 @@ export function createMerchantLedger(
       });
     },
 
-    async executeQuote(quoteId: string, actor: TrustedActor): Promise<CompletionResult> {
+    async executeQuote(
+      quoteId: string,
+      actor: TrustedActor,
+    ): Promise<CompletionResult> {
       validateActor(actor);
       const record = requireRow(
         db.exec("SELECT * FROM quotes WHERE id = ?", quoteId).one(),
@@ -536,7 +553,8 @@ export function createMerchantLedger(
           )
           .one();
         if (prior) {
-          if (prior.quote_id !== quoteId || prior.customer_id !== customerId) fail();
+          if (prior.quote_id !== quoteId || prior.customer_id !== customerId)
+            fail();
           return { owner: false as const, row: prior };
         }
         if (
@@ -611,7 +629,10 @@ export function createMerchantLedger(
       }
     },
 
-    async reconcileQuote(quoteId: string, actor: TrustedActor): Promise<CompletionResult> {
+    async reconcileQuote(
+      quoteId: string,
+      actor: TrustedActor,
+    ): Promise<CompletionResult> {
       const record = requireRow(
         db.exec("SELECT * FROM quotes WHERE id = ?", quoteId).one(),
       );
@@ -643,7 +664,8 @@ export function createMerchantLedger(
       } catch {
         return { status: "processing" };
       }
-      if (order?.status === "absent") return { status: "provider_confirmed_absent" };
+      if (order?.status === "absent")
+        return { status: "provider_confirmed_absent" };
       if (!order || !nonempty(order.id)) return { status: "processing" };
       const snapshot: OrderSnapshot = {
         id: order.id,

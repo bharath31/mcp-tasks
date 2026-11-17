@@ -11,17 +11,22 @@ export type MerchantLedgerEnv = {
   [key: string]: unknown;
 };
 
-export const MERCHANT_HOST_INTERNAL_SECRET_HEADER = "x-nominee-host-internal-secret";
+export const MERCHANT_HOST_INTERNAL_SECRET_HEADER =
+  "x-nominee-host-internal-secret";
 
 /**
  * Build ledger ports from Worker env inside the Durable Object isolate.
  * Production wiring (Task Authority, account service, payment provider) is not implemented in this slice.
  */
-export function merchantLedgerPortsFromEnv(_env: MerchantLedgerEnv): MerchantLedgerPorts {
+export function merchantLedgerPortsFromEnv(
+  _env: MerchantLedgerEnv,
+): MerchantLedgerPorts {
   throw new Error("merchant_ports_unconfigured");
 }
 
-export function readHostInternalSecret(env: MerchantLedgerEnv): string | undefined {
+export function readHostInternalSecret(
+  env: MerchantLedgerEnv,
+): string | undefined {
   const value = env.MERCHANT_HOST_INTERNAL_SECRET;
   return typeof value === "string" && value.length > 0 ? value : undefined;
 }
