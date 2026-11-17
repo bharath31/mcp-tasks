@@ -1,4 +1,4 @@
-# Deploys the hosted Policy Desk demo (mcp-tasks.dev) after CI passes on main.
+# Deploys the hosted Policy Desk demo (mcp-tasks.dev and nominee.dev) after CI passes on main.
 # Needs repository secrets CLOUDFLARE_API_TOKEN (Workers edit) and CLOUDFLARE_ACCOUNT_ID.
 # If OWNER_DATABASE_URL is set, migrations run first as the database owner (the live Worker has
 # MIGRATE_ON_REQUEST=false). Worker secrets and Auth0 Actions are not touched here.
@@ -50,15 +50,29 @@ jobs:
           --message "main ${SHA::7} via GitHub Actions"
       - name: Health check
         run: |
-          for i in 1 2 3 4 5 6; do
-            code=$(curl -s -o /tmp/healthz -w "%{http_code}" https://mcp-tasks.dev/healthz || true)
-            echo "attempt $i: HTTP $code $(head -c 200 /tmp/healthz)"
-            [ "$code" = 200 ] && exit 0
-            # Cloudflare's bot challenge blocks GitHub runner IPs; the deploy step already succeeded.
-            if [ "$code" = 403 ] && grep -q "Just a moment" /tmp/healthz; then
-              echo "::warning::healthz is behind Cloudflare's bot challenge for runner IPs; not checked"
-              exit 0
-            fi
-            sleep 10
+          verified=0
+          for host in mcp-tasks.dev nominee.dev; do
+            ok=false
+            for i in 1 2 3 4 5 6; do
+              rm -f /tmp/healthz
+              code=$(curl -s -o /tmp/healthz -w "%{http_code}" "https://$host/healthz" || true)
+              echo "$host attempt $i: HTTP $code $(head -c 200 /tmp/healthz 2>/dev/null || true)"
+              if [ "$code" = 200 ] && jq -e '.status == "ok"' /tmp/healthz >/dev/null 2>&1; then
+                ok=true
+                verified=$((verified + 1))
+                break
+              fi
+              # Cloudflare's bot challenge can block GitHub runner IPs.
+              if [ "$code" = 403 ] && grep -q "Just a moment" /tmp/healthz; then
+                echo "::warning::$host healthz is behind Cloudflare's bot challenge; not checked"
+                ok=true
+                break
+              fi
+              sleep 10
+            done
+            [ "$ok" = true ] || exit 1
           done
-          exit 1
+          if [ "$verified" -eq 0 ]; then
+            echo "::error::Neither hostname returned a verified health response"
+            exit 1
+          fi
