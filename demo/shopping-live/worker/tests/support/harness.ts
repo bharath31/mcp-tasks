@@ -30,6 +30,7 @@ export const MERCHANT_ORIGIN = "https://localhost:8787";
 
 export async function buildShoppingWorker(options?: {
   merchantDo?: "fixture" | "production";
+  entry?: string;
 }): Promise<string> {
   const merchantShim =
     options?.merchantDo === "production"
@@ -47,7 +48,7 @@ export async function buildShoppingWorker(options?: {
     });
   }
   const bundle = await build({
-    entryPoints: [join(here, "test-worker-entry.ts")],
+    entryPoints: [join(here, options?.entry ?? "test-worker-entry.ts")],
     bundle: true,
     write: false,
     format: "esm",
@@ -104,9 +105,12 @@ export async function startHarness(options?: {
   outbound?: OutboundHandler;
   merchantDo?: "fixture" | "production";
   bindings?: Record<string, string>;
+  workerEntry?: string;
+  selfSubfetch?: boolean;
 }): Promise<Harness> {
   const script = await buildShoppingWorker({
     merchantDo: options?.merchantDo,
+    entry: options?.workerEntry,
   });
   const jwks = await shoppingTestJwks();
   const worker: Record<string, unknown> = {
@@ -143,11 +147,21 @@ export async function startHarness(options?: {
     },
   };
   const runtime: { mf: Miniflare | null } = { mf: null };
+  const serviceBindings: Record<
+    string,
+    (request: Request) => Promise<Response>
+  > = {};
   if (options?.outbound && options.merchantDo === "production") {
-    worker.serviceBindings = {
-      SUBREQUEST_FETCH: (request: Request) =>
-        options.outbound!(request, runtime.mf!),
-    };
+    serviceBindings.SUBREQUEST_FETCH = (request: Request) =>
+      options.outbound!(request, runtime.mf!);
+  }
+  if (options?.selfSubfetch) {
+    (worker.bindings as Record<string, unknown>).SELF_SUBFETCH = {};
+    serviceBindings.SELF_SUBFETCH = (request: Request) =>
+      runtime.mf!.dispatchFetch(request.url, request);
+  }
+  if (Object.keys(serviceBindings).length > 0) {
+    worker.serviceBindings = serviceBindings;
   }
   const mfOptions = convertV4MiniflareOptions({
     workers: [worker],

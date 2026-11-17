@@ -16,6 +16,8 @@ export {
   resolveOrchestrationConfig,
   DEFAULT_PRODUCTION_PORTS,
   createAgentCapabilityPorts,
+  injectAgentCapabilityPorts,
+  getShoppingAgentRunForPoll,
   ORCHESTRATION_BLOCKERS,
   type OrchestrationBlockers,
 } from "./orchestrator.js";

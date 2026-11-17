@@ -7,7 +7,10 @@ import {
 } from "./agent-capability.js";
 import { customerStateRpc, customerStateStub } from "./customer-state-do.js";
 import type { ShoppingLiveEnv } from "./env.js";
-import { assertSameOrigin } from "./csrf.js";
+import {
+  assertAgentBrowserSafeOrigin,
+  assertSameOrigin,
+} from "./csrf.js";
 import type { CustomerAccessTokenDeps } from "../../../shopping-merchant/src/identity/customer-access-token.js";
 import {
   verifiedCustomerAsHumanActor,
@@ -27,7 +30,10 @@ export async function resolveAgentBrowserContext(
   req: Request,
   env: ShoppingLiveEnv,
 ): Promise<VerifiedAgentBrowserContext | null> {
-  const blocked = assertSameOrigin(req, env);
+  const blocked =
+    req.method === "GET" || req.method === "HEAD"
+      ? assertAgentBrowserSafeOrigin(req, env)
+      : assertSameOrigin(req, env);
   if (blocked) return null;
   const token = parseAgentCapabilityCookie(req);
   if (!token) return null;
@@ -62,19 +68,20 @@ export async function resolveAgentBrowserContext(
     customerId: payload.customerId,
     runId: payload.runId,
     innerSid: body.innerSid,
-    csrfToken: agentBrowserCsrfToken(payload.runId, payload.secret),
+    csrfToken: await agentBrowserCsrfToken(env, payload.runId, payload.secret),
     capSecret: payload.secret,
   };
 }
 
-export function agentBrowserPostCsrfOk(
+export async function agentBrowserPostCsrfOk(
+  env: ShoppingLiveEnv,
   ctx: VerifiedAgentBrowserContext,
   req: Request,
-): boolean {
+): Promise<boolean> {
   const header =
     req.headers.get("x-nominee-agent-browser-csrf") ??
     req.headers.get("X-Nominee-Agent-Browser-Csrf");
-  return agentBrowserCsrfMatches(ctx.runId, ctx.capSecret, header);
+  return agentBrowserCsrfMatches(env, ctx.runId, ctx.capSecret, header);
 }
 
 export async function agentBrowserAsCustomer(

@@ -30,6 +30,8 @@ export type ShoppingLiveEnv = MerchantLedgerEnv &
     SHOPPING_GUARDIAN_EXECUTE_ENABLED?: string;
     /** Test harness: await agent execution in-request instead of waitUntil. */
     SHOPPING_AGENT_AWAIT_RUN?: string;
+    /** Test harness only — loopback fetcher for in-worker agent-browser HTTP. */
+    SELF_SUBFETCH?: Fetcher;
   };
 
 export const MAX_CUSTOMER_SESSIONS = 8;

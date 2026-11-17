@@ -34,6 +34,7 @@ type RunRecord = {
   updatedAtMs: number;
   sessionId: string | null;
   reply: string | null;
+  parentInnerSid: string;
   credentialDigest: string;
   credentialExpiresAtMs: number;
   events: PublicRunEvent[];
@@ -161,6 +162,8 @@ export class ShoppingAgentRunState extends DurableObject {
           assertCredentialNotExpired(cred, nowMs);
           const goal = validateGoal(body.goal);
           const digest = await hashAgentRunCredential(cred);
+          const parentInnerSid = body.parentInnerSid?.trim();
+          if (!parentInnerSid) throw new Error("parent_session_required");
           const record: RunRecord = {
             id: body.runId,
             ownerId: ownerHeader,
@@ -170,6 +173,7 @@ export class ShoppingAgentRunState extends DurableObject {
             updatedAtMs: nowMs,
             sessionId: null,
             reply: null,
+            parentInnerSid,
             credentialDigest: digest,
             credentialExpiresAtMs: cred.expiresAtMs,
             events: [],
@@ -221,7 +225,11 @@ export class ShoppingAgentRunState extends DurableObject {
         }
         case "getRun": {
           const run = this.getRunOrThrow(body.runId);
-          return Response.json({ ok: true, run: toPublic(run) });
+          return Response.json({
+            ok: true,
+            run: toPublic(run),
+            parentInnerSid: run.parentInnerSid,
+          });
         }
         case "cleanupStale": {
           const cutoff = body.nowMs - body.maxAgeMs;

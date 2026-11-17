@@ -1,7 +1,9 @@
 import {
   createAgentCapabilityPorts,
+  injectAgentCapabilityPorts,
   executeShoppingAgentRun,
   getShoppingAgentRun,
+  getShoppingAgentRunForPoll,
   prepareShoppingAgentRun,
   type RunPortsFactory,
   type ShoppingAgentOrchestrationEnv,
@@ -10,6 +12,7 @@ import { shoppingRequest } from "../../../shopping-agent/src/index.js";
 import type { CustomerAccessTokenDeps } from "../../../shopping-merchant/src/identity/customer-access-token.js";
 import {
   AGENT_CAPABILITY_COOKIE,
+  AGENT_CAPABILITY_COOKIE_PATH,
   AGENT_CAPABILITY_TTL_MS,
   clearAgentCapabilityCookie,
   encodeAgentCapabilityCookie,
@@ -45,6 +48,7 @@ function orchestrationEnv(
     BROWSER: env.BROWSER,
     MERCHANT_ORIGIN: env.MERCHANT_ORIGIN,
     AGENT_MODEL: env.AGENT_MODEL,
+    SELF_SUBFETCH: env.SELF_SUBFETCH,
   };
 }
 
@@ -106,7 +110,11 @@ export async function handleAgentStart(
 
   const orchEnv = orchestrationEnv(env);
   const ownerId = customer.customerId;
-  const prepared = await prepareShoppingAgentRun(orchEnv, { ownerId, goal });
+  const prepared = await prepareShoppingAgentRun(orchEnv, {
+    ownerId,
+    goal,
+    parentInnerSid: customer.innerSid,
+  });
 
   const capSecret = mintAgentCapabilitySecret();
   const expiresAtMs = Date.now() + AGENT_CAPABILITY_TTL_MS;
@@ -132,14 +140,15 @@ export async function handleAgentStart(
     name: AGENT_CAPABILITY_COOKIE,
     value: signedCap,
     domain: new URL(env.MERCHANT_ORIGIN).hostname,
-    path: "/",
+    path: AGENT_CAPABILITY_COOKIE_PATH,
     secure: true,
     httpOnly: true,
     sameSite: "Strict" as const,
   };
 
-  const ports: RunPortsFactory =
-    deps.agentPorts ?? createAgentCapabilityPorts([capabilityCookie]);
+  const ports: RunPortsFactory = deps.agentPorts
+    ? injectAgentCapabilityPorts(deps.agentPorts, [capabilityCookie])
+    : createAgentCapabilityPorts([capabilityCookie]);
 
   const runExecution = async (): Promise<void> => {
     try {
@@ -190,13 +199,16 @@ export async function handleAgentPoll(
       "Agent runs are not connected.",
     );
   }
-  const run = await getShoppingAgentRun(
+  const polled = await getShoppingAgentRunForPoll(
     orchestrationEnv(env),
     customer.customerId,
     runId,
   );
-  if (!run || run.ownerId !== customer.customerId) {
+  if (!polled || polled.run.ownerId !== customer.customerId) {
     return problem(404, "run_not_found", "Agent run not found.");
   }
-  return json(run);
+  if (polled.parentInnerSid !== customer.innerSid) {
+    return problem(404, "run_not_found", "Agent run not found.");
+  }
+  return json(polled.run);
 }

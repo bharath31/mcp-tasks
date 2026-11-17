@@ -54,7 +54,7 @@ export async function handleTestMintAgentCap(
   });
   return json({
     cookie: `nsh_agent_cap=${encodeURIComponent(signed)}`,
-    csrfToken: agentBrowserCsrfToken(runId, secret),
+    csrfToken: await agentBrowserCsrfToken(env, runId, secret),
     runId,
   });
 }

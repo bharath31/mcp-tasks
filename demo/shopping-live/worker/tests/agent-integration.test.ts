@@ -41,7 +41,7 @@ async function waitForRun(
   throw new Error("agent_run_timeout");
 }
 
-test("authenticated agent start persists sanitized events and updates customer cart", async () => {
+test("authenticated agent start persists sanitized run events (orchestration-only ports)", async () => {
   const { cookie, csrf } = await harness.login();
   const start = await apiJson<{
     id?: string;

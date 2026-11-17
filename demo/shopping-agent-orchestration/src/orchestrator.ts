@@ -28,6 +28,25 @@ export const DEFAULT_PRODUCTION_PORTS: RunPortsFactory = ({ config, env }) => ({
   launchBrowser: createPuppeteerLauncher(env.BROWSER, config),
 });
 
+export function injectAgentCapabilityPorts(
+  base: RunPortsFactory,
+  capabilityCookies: BrowserInitCookie[],
+): RunPortsFactory {
+  return (ctx) => {
+    const inner = base(ctx);
+    const innerLaunch = inner.launchBrowser;
+    return {
+      ...inner,
+      launchBrowser: (opts) =>
+        innerLaunch({
+          ...opts,
+          agentCartApiOnly: true,
+          initCookies: [...(opts.initCookies ?? []), ...capabilityCookies],
+        }),
+    };
+  };
+}
+
 export function createAgentCapabilityPorts(
   capabilityCookies: BrowserInitCookie[],
 ): RunPortsFactory {
@@ -86,6 +105,7 @@ export async function prepareShoppingAgentRun(
     op: "createRun",
     runId: cred.runId,
     goal: input.goal.trim(),
+    parentInnerSid: input.parentInnerSid,
     credential: cred,
   });
   const parsed = await readAgentRunJson(res);
@@ -101,13 +121,22 @@ export async function getShoppingAgentRun(
   ownerId: string,
   runId: string,
 ): Promise<PublicAgentRun | null> {
+  const polled = await getShoppingAgentRunForPoll(env, ownerId, runId);
+  return polled?.run ?? null;
+}
+
+export async function getShoppingAgentRunForPoll(
+  env: ShoppingAgentOrchestrationEnv,
+  ownerId: string,
+  runId: string,
+): Promise<{ run: PublicAgentRun; parentInnerSid: string } | null> {
   const res = await agentRunRpc(agentRunStub(env, ownerId), ownerId, {
     op: "getRun",
     runId,
   });
   const parsed = await readAgentRunJson(res);
-  if (!parsed.ok) return null;
-  return parsed.run ?? null;
+  if (!parsed.ok || !parsed.run || !parsed.parentInnerSid) return null;
+  return { run: parsed.run, parentInnerSid: parsed.parentInnerSid };
 }
 
 async function finishAgentRunFailed(

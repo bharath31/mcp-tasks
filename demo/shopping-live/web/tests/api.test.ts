@@ -20,6 +20,9 @@ test("api routes match the live shopping contract", () => {
   const routes = [
     '"/session"',
     '"/agent/start"',
+    '"/agent-browser/session"',
+    '"/agent-browser/cart"',
+    '"/agent-browser/cart/items"',
     "`/agent/${",
     '"/cart"',
     '"/cart/items"',

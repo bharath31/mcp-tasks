@@ -20,6 +20,8 @@ export type ShoppingAgentOrchestrationEnv = ShoppingAgentOrchestrationBindings &
   MERCHANT_ORIGIN: string;
   /** Workers AI model id (optional; shopping-agent config default otherwise). */
   AGENT_MODEL?: string;
+  /** Test harness only — in-worker loopback to agent-browser HTTP. */
+  SELF_SUBFETCH?: Fetcher;
 };
 
 export const RUN_STATUSES = [
@@ -55,6 +57,8 @@ export type PublicRunEvent = {
 export type StartRunInput = {
   ownerId: string;
   goal: string;
+  /** Parent OAuth login session that started the run (poll binding). */
+  parentInnerSid: string;
   config?: Partial<ShoppingAgentConfig>;
 };
 

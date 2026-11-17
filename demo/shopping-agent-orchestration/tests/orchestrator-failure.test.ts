@@ -34,6 +34,7 @@ test("executor failure always finishes run as failed", async () => {
   const prepared = await prepareShoppingAgentRun(env, {
     ownerId,
     goal: "view catalog",
+    parentInnerSid: "parent-sid",
   });
   const config = shoppingAgentConfig.parse({ merchantOrigin: MERCHANT });
 
@@ -68,6 +69,7 @@ test("model error reply does not leak credential material", async () => {
   const prepared = await prepareShoppingAgentRun(env, {
     ownerId,
     goal: "view catalog",
+    parentInnerSid: "parent-sid",
   });
   const config = shoppingAgentConfig.parse({ merchantOrigin: MERCHANT });
   const secret = prepared.credential.secret;

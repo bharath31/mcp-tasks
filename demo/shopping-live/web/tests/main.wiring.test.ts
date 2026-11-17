@@ -25,7 +25,7 @@ test("main clears aria-busy after render", () => {
 
 test("Guardian review links use noopener noreferrer", () => {
   assert.match(mainSrc, /rel: "noopener noreferrer"/);
-  assert.match(mainSrc, /safeNavHref\(ui\.approval\.reviewUrl/);
+  assert.match(mainSrc, /safeNavHref\(\s*ui\.approval\.reviewUrl/s);
 });
 
 test("auth links validate URLs before href", () => {

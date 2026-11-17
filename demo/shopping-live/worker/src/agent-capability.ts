@@ -81,18 +81,37 @@ export function parseAgentCapabilityCookie(req: Request): string | null {
   }
 }
 
-export function agentBrowserCsrfToken(runId: string, secret: string): string {
-  return `${runId}.${secret.slice(0, 16)}`;
+const AGENT_BROWSER_CSRF_PURPOSE = "nominee:agent-browser-csrf:v1";
+
+export async function agentBrowserCsrfToken(
+  env: ShoppingLiveEnv,
+  runId: string,
+  secret: string,
+): Promise<string> {
+  const sessionSecret = env.SHOPPING_SESSION_SECRET;
+  if (!sessionSecret) throw new Error("session_secret_missing");
+  return signValue(
+    sessionSecret,
+    JSON.stringify({
+      purpose: AGENT_BROWSER_CSRF_PURPOSE,
+      runId,
+      capSecret: secret,
+    }),
+  );
 }
 
-export function agentBrowserCsrfMatches(
+export async function agentBrowserCsrfMatches(
+  env: ShoppingLiveEnv,
   runId: string,
   secret: string,
   header: string | null,
-): boolean {
+): Promise<boolean> {
   if (!header) return false;
-  return header === agentBrowserCsrfToken(runId, secret);
+  const expected = await agentBrowserCsrfToken(env, runId, secret);
+  return header === expected;
 }
+
+export const AGENT_CAPABILITY_COOKIE_PATH = "/api/agent-browser";
 
 export function formatAgentCapabilitySetCookie(
   signedValue: string,
@@ -100,9 +119,9 @@ export function formatAgentCapabilitySetCookie(
   maxAgeSec: number,
 ): string {
   const secure = secureCookieParts(origin);
-  return `${AGENT_CAPABILITY_COOKIE}=${encodeURIComponent(signedValue)}; HttpOnly; SameSite=Strict; Path=/; Max-Age=${maxAgeSec}${secure}`;
+  return `${AGENT_CAPABILITY_COOKIE}=${encodeURIComponent(signedValue)}; HttpOnly; SameSite=Strict; Path=${AGENT_CAPABILITY_COOKIE_PATH}; Max-Age=${maxAgeSec}${secure}`;
 }
 
 export function clearAgentCapabilityCookie(origin: string): string {
-  return `${AGENT_CAPABILITY_COOKIE}=; HttpOnly; SameSite=Strict; Path=/; Max-Age=0${secureCookieParts(origin)}`;
+  return `${AGENT_CAPABILITY_COOKIE}=; HttpOnly; SameSite=Strict; Path=${AGENT_CAPABILITY_COOKIE_PATH}; Max-Age=0${secureCookieParts(origin)}`;
 }

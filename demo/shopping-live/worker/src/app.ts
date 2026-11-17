@@ -20,7 +20,13 @@ import {
 } from "./auth.js";
 import { assertSameOrigin, sessionCsrfToken } from "./csrf.js";
 import { resolveCustomerSession } from "./session.js";
-import { addCartItem, createCustomerQuote, readCustomerCart } from "./cart.js";
+import {
+  addAgentBrowserCartItem,
+  addCartItem,
+  createCustomerQuote,
+  readAgentBrowserCart,
+  readCustomerCart,
+} from "./cart.js";
 import { pollCustomerApproval, startCustomerApproval } from "./approval.js";
 import {
   executeCustomerOrder,
@@ -111,14 +117,14 @@ export function createShoppingApp(deps: AgentHostDeps = {}) {
             });
           }
           if (path === "/api/agent-browser/cart" && req.method === "GET") {
-            const cart = await readCustomerCart(env, customer);
+            const cart = await readAgentBrowserCart(env, customer);
             return json({ cart });
           }
           if (
             path === "/api/agent-browser/cart/items" &&
             req.method === "POST"
           ) {
-            if (!agentBrowserPostCsrfOk(agentBrowser, req)) {
+            if (!(await agentBrowserPostCsrfOk(env, agentBrowser, req))) {
               return problem(
                 403,
                 "csrf_required",
@@ -136,7 +142,12 @@ export function createShoppingApp(deps: AgentHostDeps = {}) {
             if (!productId) {
               return problem(400, "invalid_item", "productId is required.");
             }
-            const cart = await addCartItem(env, customer, productId, quantity);
+            const cart = await addAgentBrowserCartItem(
+              env,
+              customer,
+              productId,
+              quantity,
+            );
             return json({ cart });
           }
           return problem(404, "not_found", "Not found.");

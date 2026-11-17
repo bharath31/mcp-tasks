@@ -11,6 +11,7 @@ export type AgentRunRpc =
       op: "createRun";
       runId: string;
       goal: string;
+      parentInnerSid: string;
       credential: AgentRunCredential;
     }
   | {
@@ -49,7 +50,7 @@ export type AgentRunRpc =
     };
 
 export type AgentRunRpcResponse =
-  | { ok: true; run?: PublicAgentRun }
+  | { ok: true; run?: PublicAgentRun; parentInnerSid?: string }
   | { ok: false; error: string };
 
 export async function agentRunRpc(

@@ -34,6 +34,7 @@ test("orchestrator runs shopping agent with injectable ports and persists redact
   const prepared = await prepareShoppingAgentRun(env, {
     ownerId,
     goal: "view catalog",
+    parentInnerSid: "parent-sid",
   });
   const config = shoppingAgentConfig.parse({ merchantOrigin: MERCHANT });
 
@@ -80,6 +81,7 @@ test("prepare + stub path matches direct RPC create", async () => {
   const prepared = await prepareShoppingAgentRun(env, {
     ownerId,
     goal: "hello",
+    parentInnerSid: "parent-sid",
   });
   const res = await agentRunStub(env, ownerId).fetch(
     "http://agent-runs/internal",

@@ -32,7 +32,9 @@ test("owner-bound DO rejects cross-owner polling", async () => {
       op: "createRun",
       runId: cred.runId,
       goal: "add tray",
-      credential: cred,
+      parentInnerSid: "parent-sid",
+      parentInnerSid: "parent-sid",
+    credential: cred,
     }),
   );
   assert.equal(create.ok, true);
@@ -53,6 +55,7 @@ test("credential secret is never stored on run record", async () => {
     op: "createRun",
     runId: cred.runId,
     goal: "add tray",
+    parentInnerSid: "parent-sid",
     credential: cred,
   });
   const got = await readRpc(
@@ -74,6 +77,7 @@ test("verifyAndStart requires matching scoped credential", async () => {
     op: "createRun",
     runId: cred.runId,
     goal: "browse",
+    parentInnerSid: "parent-sid",
     credential: cred,
   });
   const bad = await readRpc(
@@ -90,7 +94,9 @@ test("verifyAndStart requires matching scoped credential", async () => {
     await harness.dispatchRpc("owner-c", {
       op: "verifyAndStart",
       runId: cred.runId,
-      credential: cred,
+      parentInnerSid: "parent-sid",
+      parentInnerSid: "parent-sid",
+    credential: cred,
     }),
   );
   assert.equal(good.ok, true);
@@ -103,11 +109,13 @@ test("mutating RPCs without credential are rejected", async () => {
     op: "createRun",
     runId: cred.runId,
     goal: "browse",
+    parentInnerSid: "parent-sid",
     credential: cred,
   });
   await harness.dispatchRpc("owner-auth", {
     op: "verifyAndStart",
     runId: cred.runId,
+    parentInnerSid: "parent-sid",
     credential: cred,
   });
 
@@ -130,6 +138,7 @@ test("expired credential is rejected at start", async () => {
     op: "createRun",
     runId: cred.runId,
     goal: "browse",
+    parentInnerSid: "parent-sid",
     credential: cred,
   });
   const expiredCred = { ...cred, expiresAtMs: Date.now() - 1 };
@@ -151,7 +160,9 @@ test("createRun rejects oversized goal", async () => {
       op: "createRun",
       runId: cred.runId,
       goal: "x".repeat(2500),
-      credential: cred,
+      parentInnerSid: "parent-sid",
+      parentInnerSid: "parent-sid",
+    credential: cred,
     }),
   );
   assert.equal(res.ok, false);
@@ -163,12 +174,14 @@ test("cleanupStale marks stuck running as failed and blocks late writes", async 
     op: "createRun",
     runId: cred.runId,
     goal: "browse",
+    parentInnerSid: "parent-sid",
     credential: cred,
   });
   const startedAt = Date.now();
   await harness.dispatchRpc("owner-stale", {
     op: "verifyAndStart",
     runId: cred.runId,
+    parentInnerSid: "parent-sid",
     credential: cred,
   });
 
@@ -192,7 +205,9 @@ test("cleanupStale marks stuck running as failed and blocks late writes", async 
     await harness.dispatchRpc("owner-stale", {
       op: "appendEvents",
       runId: cred.runId,
-      credential: cred,
+      parentInnerSid: "parent-sid",
+      parentInnerSid: "parent-sid",
+    credential: cred,
       events: [{ atMs: Date.now(), kind: "progress", message: "late" }],
     }),
   );

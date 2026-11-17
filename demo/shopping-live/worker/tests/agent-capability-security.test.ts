@@ -62,6 +62,25 @@ test("agent-browser POST requires capability CSRF", async () => {
   assert.equal(body.code, "csrf_required");
 });
 
+test("agent-browser GET allows absent Origin header", async () => {
+  const { csrf } = await harness.login("auth0|cap-no-origin");
+  const cap = await harness.mintAgentCap("auth0|cap-no-origin", csrf);
+  const { status } = await apiJson(harness.mf, "/api/agent-browser/session", {
+    cookie: cap.cookie,
+  });
+  assert.equal(status, 200);
+});
+
+test("agent-browser GET rejects foreign Origin when present", async () => {
+  const { csrf } = await harness.login("auth0|cap-bad-origin");
+  const cap = await harness.mintAgentCap("auth0|cap-bad-origin", csrf);
+  const { status } = await apiJson(harness.mf, "/api/agent-browser/cart", {
+    cookie: cap.cookie,
+    headers: { origin: "https://evil.example" },
+  });
+  assert.equal(status, 403);
+});
+
 test("agent-browser rejects off-origin mutations", async () => {
   const { csrf } = await harness.login("auth0|cap-origin");
   const cap = await harness.mintAgentCap("auth0|cap-origin", csrf);
@@ -96,6 +115,10 @@ test("revoked capability fails agent-browser read", async () => {
     body: JSON.stringify({ productId: "tray", quantity: 1 }),
   });
   assert.equal(add.status, 200);
+  const alive = await apiJson(harness.mf, "/api/agent-browser/cart", {
+    cookie: cap.cookie,
+  });
+  assert.equal(alive.status, 200);
   await harness.mf.dispatchFetch(`${ORIGIN}/test/revoke-agent-cap`, {
     method: "POST",
     headers: { "content-type": "application/json", origin: ORIGIN },
@@ -113,6 +136,10 @@ test("revoked capability fails agent-browser read", async () => {
 test("logout revokes agent-browser access for parent session", async () => {
   const { cookie, csrf } = await harness.login();
   const cap = await harness.mintAgentCap(TEST_CUSTOMER, csrf);
+  const active = await apiJson(harness.mf, "/api/agent-browser/session", {
+    cookie: cap.cookie,
+  });
+  assert.equal(active.status, 200);
   const logout = await harness.mf.dispatchFetch(`${ORIGIN}/auth/logout`, {
     method: "POST",
     redirect: "manual",
@@ -149,8 +176,41 @@ test("cross-customer capability cannot read another customer cart", async () => 
     cart?: { items?: { productId: string }[] };
   }>(harness.mf, "/api/cart", { cookie: b.cookie });
   assert.ok((cartB.cart?.items ?? []).some((i) => i.productId === "cup"));
+  const pre = await apiJson(harness.mf, "/api/agent-browser/cart", {
+    cookie: capA.cookie,
+    headers: { origin: ORIGIN },
+  });
+  assert.equal(pre.status, 200);
   const { body: cartA } = await apiJson<{
     cart?: { items?: { productId: string }[] };
-  }>(harness.mf, "/api/agent-browser/cart", { cookie: capA.cookie });
+  }>(harness.mf, "/api/agent-browser/cart", {
+    cookie: capA.cookie,
+    headers: { origin: ORIGIN },
+  });
   assert.equal((cartA.cart?.items ?? []).length, 0);
+});
+
+test("agent run poll requires same parent login session", async () => {
+  const first = await harness.login("auth0|poll-a");
+  const start = await apiJson<{ id?: string }>(harness.mf, "/api/agent/start", {
+    method: "POST",
+    headers: {
+      "content-type": "application/json",
+      origin: ORIGIN,
+      "x-nominee-csrf": first.csrf,
+    },
+    cookie: first.cookie,
+    body: JSON.stringify({ goal: "Add tray" }),
+  });
+  assert.equal(start.status, 200);
+  assert.ok(start.body.id);
+  const second = await harness.login("auth0|poll-a");
+  const poll = await apiJson(harness.mf, `/api/agent/${encodeURIComponent(start.body.id!)}`, {
+    cookie: second.cookie,
+  });
+  assert.equal(poll.status, 404);
+  const own = await apiJson(harness.mf, `/api/agent/${encodeURIComponent(start.body.id!)}`, {
+    cookie: first.cookie,
+  });
+  assert.equal(own.status, 200);
 });

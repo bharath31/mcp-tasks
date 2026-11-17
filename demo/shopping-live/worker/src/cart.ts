@@ -5,7 +5,7 @@ import type {
 import { hostCatalogProduct } from "./catalog.js";
 import { customerStateRpc, customerStateStub } from "./customer-state-do.js";
 import { merchantLedgerRpc } from "./merchant-client.js";
-import { browserShoppingActor } from "./actor.js";
+import { agentBrowserCartActor, browserShoppingActor } from "./actor.js";
 import type { ShoppingLiveEnv } from "./env.js";
 import type { AuthenticatedCustomer } from "./session.js";
 
@@ -119,6 +119,91 @@ export async function readCustomerCart(
   if (!read.ok) return null;
   const cart = (await read.json()) as Cart;
   return enrichCart(cart);
+}
+
+export async function readAgentBrowserCart(
+  env: ShoppingLiveEnv,
+  customer: AuthenticatedCustomer,
+): Promise<ClientCart | null> {
+  const stub = customerStateStub(env, customer.customerId);
+  const cartRes = await customerStateRpc(stub, customer.customerId, {
+    op: "getCartId",
+  });
+  const { cartId } = (await cartRes.json()) as { cartId?: string | null };
+  if (!cartId) return null;
+
+  const browserSession = await browserSessionId(env, customer.customerId);
+  const actor = agentBrowserCartActor(
+    env,
+    customer.customerId,
+    browserSession,
+  );
+  const read = await merchantLedgerRpc(env, customer.customerId, {
+    op: "readCart",
+    actor,
+    cartId,
+  });
+  if (!read.ok) return null;
+  const cart = (await read.json()) as Cart;
+  return enrichCart(cart);
+}
+
+export async function addAgentBrowserCartItem(
+  env: ShoppingLiveEnv,
+  customer: AuthenticatedCustomer,
+  productId: string,
+  quantity: number,
+): Promise<ClientCart> {
+  const product = hostCatalogProduct(productId);
+  if (
+    !product ||
+    !Number.isSafeInteger(quantity) ||
+    quantity < 1 ||
+    quantity > 100
+  ) {
+    throw new Error("invalid_item");
+  }
+
+  const cartId = await ensureCart(env, customer);
+  const browserSession = await browserSessionId(env, customer.customerId);
+  const actor = agentBrowserCartActor(
+    env,
+    customer.customerId,
+    browserSession,
+  );
+
+  const current = await merchantLedgerRpc(env, customer.customerId, {
+    op: "readCart",
+    actor,
+    cartId,
+  });
+  if (!current.ok) throw new Error("cart_read_failed");
+  const cart = (await current.json()) as Cart;
+  const items = [...cart.items];
+  const idx = items.findIndex((i) => i.productId === productId);
+  if (idx >= 0) {
+    const existing = items[idx]!;
+    items[idx] = { ...existing, quantity: existing.quantity + quantity };
+  } else {
+    items.push({
+      productId: product.id,
+      quantity,
+      priceMinor: product.priceMinor,
+      currency: product.currency,
+    });
+  }
+
+  const updated = await merchantLedgerRpc(env, customer.customerId, {
+    op: "updateCart",
+    actor,
+    cartId,
+    items,
+  });
+  if (!updated.ok) {
+    const err = (await updated.json().catch(() => ({}))) as { error?: string };
+    throw new Error(err.error ?? "cart_update_failed");
+  }
+  return enrichCart((await updated.json()) as Cart);
 }
 
 export async function addCartItem(
