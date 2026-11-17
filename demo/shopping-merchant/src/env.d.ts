@@ -1,0 +1,28 @@
+/** Minimal Worker/DO shapes for typecheck without bundling workers-types in this package. */
+declare module "cloudflare:workers" {
+  export class DurableObject<Env = unknown> {
+    protected ctx: DurableObjectState;
+    protected env: Env;
+    constructor(ctx: DurableObjectState, env: Env);
+  }
+}
+
+interface DurableObjectStorage {
+  readonly sql: SqlStorage;
+  transactionSync<T>(closure: () => T): T;
+}
+
+interface DurableObjectState {
+  readonly storage: DurableObjectStorage;
+}
+
+interface SqlStorage {
+  exec<T = Record<string, unknown>>(
+    query: string,
+    ...bindings: unknown[]
+  ): SqlStorageCursor<T>;
+}
+
+interface SqlStorageCursor<T> extends Iterable<T> {
+  one(): T;
+}
