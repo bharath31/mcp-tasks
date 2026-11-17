@@ -15,6 +15,8 @@ This package is **not wired** into Policy Desk or a public HTTP entrypoint yet.
 
 Session guardrails (exact merchant hostname) are the primary network control. Host-side `setRequestInterception` is defense in depth and **does not** fully cover subresource edge cases or merchant API authorization. The agent **never** clicks checkout controls and returns `checkoutAllowed: false` in cart snapshots.
 
+Wall-clock session budget uses `raceWithSessionBudget` around browser launch and each `model.run` call. That stops the **host** from waiting past the deadline; it does **not** cancel an in-flight Workers AI request or a Cloudflare Browser Run session that already started. Late launch promises are closed via `discardLateBrowserSession` so they are never used for host actions.
+
 Catalog and cart snapshots are scraped from the live storefront DOM and reconciled to host-owned product ids by **exact display name**. Grid order may change; nth-child selectors are not used. Displayed prices are informational only (`CATALOG_PRICE_DISCLAIMER`).
 
 ### Dependencies

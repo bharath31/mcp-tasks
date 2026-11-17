@@ -104,6 +104,49 @@ export function buildCatalogFromGrid(
   return { products, errors };
 }
 
+export function prepareCatalogForHost(
+  products: ReconciledCatalogProduct[],
+  gridErrors: string[],
+):
+  | {
+      ok: true;
+      catalogProducts: {
+        id: string;
+        name: string;
+        priceMinor: number;
+        currency: string;
+      }[];
+    }
+  | { ok: false; error: string } {
+  const priceErrors: string[] = [];
+  const catalogProducts: {
+    id: string;
+    name: string;
+    priceMinor: number;
+    currency: string;
+  }[] = [];
+  for (const p of products) {
+    if (p.priceMinor == null || p.currency == null) {
+      priceErrors.push(`invalid displayed price for ${p.id}`);
+      continue;
+    }
+    catalogProducts.push({
+      id: p.id,
+      name: p.name,
+      priceMinor: p.priceMinor,
+      currency: p.currency,
+    });
+  }
+  const allErrors = [...gridErrors, ...priceErrors];
+  if (allErrors.length > 0) {
+    return { ok: false, error: allErrors.join("; ") };
+  }
+  if (!catalogProducts.length) {
+    return { ok: false, error: "No catalog products on page" };
+  }
+  return { ok: true, catalogProducts };
+}
+
 /** Strip a trailing currency amount from a cart line name span. */
 export function cartLineDisplayName(nameLine: string): string {
   const t = nameLine.trim();

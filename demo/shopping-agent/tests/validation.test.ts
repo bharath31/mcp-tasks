@@ -53,6 +53,13 @@ test("defense-in-depth request filter blocks foreign HTTPS hosts", () => {
   );
 });
 
+test("defense-in-depth request filter rejects cleartext merchant subresources", () => {
+  assert.equal(
+    shouldAllowBrowserRequest(baseConfig, "http://shop.example.test/a.svg"),
+    false,
+  );
+});
+
 test("product display names are host-owned and not derived from model input", () => {
   assert.equal(expectedProductDisplayName("tray"), "Catchall tray");
   assert.doesNotThrow(() => PERMITTED_TOOL_NAMES.has("add_to_cart"));

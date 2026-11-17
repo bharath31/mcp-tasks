@@ -59,7 +59,7 @@ export function shouldAllowBrowserRequest(
 ): boolean {
   try {
     const u = new URL(requestUrl);
-    if (u.protocol !== "https:" && u.protocol !== "http:") return false;
+    if (u.protocol !== "https:") return false;
     // Subresources on the merchant origin are permitted; other HTTPS origins are denied.
     return u.hostname === merchantHostname(config);
   } catch {

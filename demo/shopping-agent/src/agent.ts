@@ -20,7 +20,14 @@ import type {
 } from "./ports.js";
 import { safeEvent, type ShoppingAgentEvent } from "./events.js";
 import { redactText } from "./redact.js";
-import { assertWithinBudget, SessionBudgetExceededError } from "./session-budget.js";
+import {
+  assertWithinBudget,
+  discardLateBrowserSession,
+  discardLateModelRun,
+  raceWithSessionBudget,
+  SessionBudgetExceededError,
+  type SessionBudget,
+} from "./session-budget.js";
 
 export const shoppingRequest = z
   .object({
@@ -62,6 +69,7 @@ export async function runShoppingAgent(opts: {
   const sessionId = opts.sessionId ?? crypto.randomUUID();
   const started = now();
   const deadline = started + config.sessionTimeoutMs;
+  const budget: SessionBudget = { deadlineMs: deadline, now };
 
   let browser: BrowserSessionPort | undefined;
   let hostSteps = 0;
@@ -76,12 +84,20 @@ export async function runShoppingAgent(opts: {
   });
 
   try {
-    browser = await opts.launchBrowser({
+    const launchWork = opts.launchBrowser({
       sessionId,
       merchantHostname: merchantHostname(config),
       allowedDomains: [merchantHostname(config)],
       sessionDeadlineMs: deadline,
     });
+    try {
+      browser = await raceWithSessionBudget(budget, launchWork);
+    } catch (e) {
+      if (e instanceof SessionBudgetExceededError) {
+        discardLateBrowserSession(launchWork);
+      }
+      throw e;
+    }
 
     const messages: ModelMessage[] = [
       { role: "user", content: request.goal },
@@ -95,13 +111,22 @@ export async function runShoppingAgent(opts: {
       }
 
       emit({ type: "model_start", n: i + 1 });
-      assertWithinBudget({ deadlineMs: deadline, now });
-      const raw = await opts.model.run(config.model, {
+      assertWithinBudget(budget);
+      const modelWork = opts.model.run(config.model, {
         messages: [{ role: "system", content: SYSTEM(config) }, ...messages],
         tools: [...AGENT_TOOLS],
         temperature: config.temperature,
         max_completion_tokens: 1200,
       });
+      let raw: unknown;
+      try {
+        raw = await raceWithSessionBudget(budget, modelWork);
+      } catch (e) {
+        if (e instanceof SessionBudgetExceededError) {
+          discardLateModelRun(modelWork);
+        }
+        throw e;
+      }
       if (now() > deadline) {
         emit({ type: "budget_exhausted", kind: "timeout" });
         status = "budget_exhausted";

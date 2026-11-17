@@ -6,6 +6,7 @@ import {
   assertUniqueGridProductName,
   buildCartFromDom,
   buildCatalogFromGrid,
+  prepareCatalogForHost,
   type CartLineSnapshot,
   type GridArticleSnapshot,
 } from "../dom.js";
@@ -29,6 +30,9 @@ import type {
 import {
   assertWithinBudget,
   capWaitMs,
+  discardLateBrowserSession,
+  raceWithSessionBudget,
+  SessionBudgetExceededError,
   type SessionBudget,
 } from "../session-budget.js";
 import { waitForShopGridReady } from "./grid-waits.js";
@@ -45,6 +49,7 @@ const GRID_WAIT_MS = 20_000;
 const CART_POLL_MS = 8_000;
 const CART_POLL_INTERVAL_MS = 250;
 const SHOP_GRID_PROBE_MS = 5_000;
+const NAVIGATION_TIMEOUT_MS = 30_000;
 
 async function attachRequestPolicy(
   page: Page,
@@ -229,39 +234,6 @@ function remainingOrZero(budget: SessionBudget): number {
   return Math.max(0, budget.deadlineMs - budget.now());
 }
 
-function catalogProductsForHost(
-  products: ReturnType<typeof buildCatalogFromGrid>["products"],
-): {
-  catalogProducts: {
-    id: string;
-    name: string;
-    priceMinor: number;
-    currency: string;
-  }[];
-  errors: string[];
-} {
-  const errors: string[] = [];
-  const catalogProducts: {
-    id: string;
-    name: string;
-    priceMinor: number;
-    currency: string;
-  }[] = [];
-  for (const p of products) {
-    if (p.priceMinor == null || p.currency == null) {
-      errors.push(`invalid displayed price for ${p.id}`);
-      continue;
-    }
-    catalogProducts.push({
-      id: p.id,
-      name: p.name,
-      priceMinor: p.priceMinor,
-      currency: p.currency,
-    });
-  }
-  return { catalogProducts, errors };
-}
-
 class PuppeteerBrowserSession implements BrowserSessionPort {
   private readonly budget: SessionBudget;
 
@@ -276,16 +248,34 @@ class PuppeteerBrowserSession implements BrowserSessionPort {
     this.budget = { deadlineMs: sessionDeadlineMs, now };
   }
 
+  private assertLivePageTrusted(): void {
+    assertTrustedAbsoluteUrl(this.config, this.page.url());
+  }
+
   async gotoTrusted(url: string): Promise<void> {
     assertWithinBudget(this.budget);
     assertTrustedAbsoluteUrl(this.config, url);
-    await this.page.goto(url, { waitUntil: "domcontentloaded", timeout: 30_000 });
+    const gotoTimeout = capWaitMs(this.budget, NAVIGATION_TIMEOUT_MS);
+    try {
+      await this.page.goto(url, {
+        waitUntil: "domcontentloaded",
+        timeout: gotoTimeout,
+      });
+    } catch (e) {
+      if (this.budget.now() >= this.budget.deadlineMs) {
+        throw new SessionBudgetExceededError();
+      }
+      throw e;
+    }
+    this.assertLivePageTrusted();
     await refuseCheckoutClicks(this.page);
     await maybeWaitForShopGrid(this.page, this.budget, url);
+    this.assertLivePageTrusted();
   }
 
   async runHostAction(action: HostAction): Promise<HostActionResult> {
     assertWithinBudget(this.budget);
+    this.assertLivePageTrusted();
     switch (action.kind) {
       case "navigate":
         return {
@@ -300,20 +290,18 @@ class PuppeteerBrowserSession implements BrowserSessionPort {
           articles,
           this.config.productIds,
         );
-        const { catalogProducts, errors: priceErrors } =
-          catalogProductsForHost(products);
-        const allErrors = [...errors, ...priceErrors];
-        if (!catalogProducts.length && allErrors.length) {
+        const prepared = prepareCatalogForHost(products, errors);
+        if (!prepared.ok) {
           return {
             ok: false,
-            error: allErrors.join("; "),
+            error: prepared.error,
             code: "catalog_parse",
           };
         }
         return {
           ok: true,
           kind: "view_catalog",
-          catalog: { products: catalogProducts },
+          catalog: { products: prepared.catalogProducts },
         };
       }
       case "add_to_cart": {
@@ -382,9 +370,26 @@ export function createPuppeteerLauncher(
   config: ShoppingAgentConfig,
 ): BrowserLauncher {
   return async ({ sessionId, allowedDomains, sessionDeadlineMs }) => {
-    const browser = await puppeteer.launch(binding, {
+    const budget: SessionBudget = {
+      deadlineMs: sessionDeadlineMs,
+      now: Date.now,
+    };
+    const launchWork = puppeteer.launch(binding, {
       guardrails: { allowedDomains },
     });
+    let browser: Awaited<ReturnType<typeof puppeteer.launch>>;
+    try {
+      browser = await raceWithSessionBudget(budget, launchWork);
+    } catch (e) {
+      if (e instanceof SessionBudgetExceededError) {
+        discardLateBrowserSession(
+          launchWork.then((b) => ({
+            close: () => b.close(),
+          })),
+        );
+      }
+      throw e;
+    }
     try {
       const page = await browser.newPage();
       await attachRequestPolicy(page, config);

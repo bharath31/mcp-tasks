@@ -5,6 +5,7 @@ import {
   assertUniqueGridProductName,
   buildCartFromDom,
   buildCatalogFromGrid,
+  prepareCatalogForHost,
   parseDisplayedPriceMinor,
   reconcileExactProductName,
   type CartLineSnapshot,
@@ -114,6 +115,31 @@ test("buildCatalogFromGrid does not coerce invalid prices to zero", () => {
   ];
   const { products } = buildCatalogFromGrid(badPrice, ["tray"]);
   assert.equal(products[0]?.priceMinor, null);
+});
+
+test("prepareCatalogForHost fails when any reconciled row lacks a live price", () => {
+  const { products, errors } = buildCatalogFromGrid(
+    [
+      {
+        name: "Catchall tray",
+        priceText: "$24.00",
+        buttonLabel: "Add to cart",
+        buttonDisabled: false,
+      },
+      {
+        name: "Pencil cup",
+        priceText: "TBD",
+        buttonLabel: "Add to cart",
+        buttonDisabled: false,
+      },
+    ],
+    STILLROOM_PRODUCT_IDS,
+  );
+  const prepared = prepareCatalogForHost(products, errors);
+  assert.equal(prepared.ok, false);
+  if (!prepared.ok) {
+    assert.match(prepared.error, /invalid displayed price/);
+  }
 });
 
 test("assertUniqueGridProductName blocks duplicate live names", () => {
