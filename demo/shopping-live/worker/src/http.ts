@@ -25,7 +25,10 @@ export function serviceUnavailable(code: string, message: string): Response {
   return problem(503, code, message);
 }
 
-export function publicOrigin(req: Request, env: { SHOPPING_PUBLIC_ORIGIN?: string }): string {
+export function publicOrigin(
+  req: Request,
+  env: { SHOPPING_PUBLIC_ORIGIN?: string },
+): string {
   const configured = env.SHOPPING_PUBLIC_ORIGIN?.trim();
   if (configured) {
     try {

@@ -79,7 +79,8 @@ function el<K extends keyof HTMLElementTagNameMap>(
     if (value === undefined || value === false) continue;
     if (key === "className") node.className = String(value);
     else if (key.startsWith("data-")) node.setAttribute(key, String(value));
-    else if (key === "disabled" && value === true) node.setAttribute("disabled", "");
+    else if (key === "disabled" && value === true)
+      node.setAttribute("disabled", "");
     else if (key === "ariaHidden" && value === true)
       node.setAttribute("aria-hidden", "true");
     else if (typeof value === "string") node.setAttribute(key, value);
@@ -121,23 +122,24 @@ function authControls(): HTMLElement {
     );
     return wrap;
   }
-  const logoutHref = safeNavHref(ui.session?.logoutUrl, window.location.origin);
-  if (ui.session?.authenticated && logoutHref) {
+  if (ui.session?.authenticated) {
+    const logoutBtn = el(
+      "button",
+      {
+        type: "button",
+        className: "button button--ghost",
+        "data-nominee-action": "logout",
+      },
+      ["Sign out"],
+    );
+    logoutBtn.addEventListener("click", () => void signOut());
     wrap.append(
       el("span", { className: "auth-label" }, [
         ui.session.customerId
           ? `Customer ${ui.session.customerId}`
           : "Signed in",
       ]),
-      el(
-        "a",
-        {
-          className: "button button--ghost",
-          href: logoutHref,
-          "data-nominee-action": "logout",
-        },
-        ["Sign out"],
-      ),
+      logoutBtn,
     );
     return wrap;
   }
@@ -206,7 +208,10 @@ function consumerPanel(): HTMLElement {
   }
   panel.append(pills);
 
-  const form = el("form", { className: "composer", "data-nominee-agent-form": "true" });
+  const form = el("form", {
+    className: "composer",
+    "data-nominee-agent-form": "true",
+  });
   const input = el("input", {
     type: "text",
     name: "goal",
@@ -236,7 +241,9 @@ function consumerPanel(): HTMLElement {
   panel.append(form);
 
   if (ui.agentError) {
-    panel.append(el("p", { className: "error", role: "alert" }, [ui.agentError]));
+    panel.append(
+      el("p", { className: "error", role: "alert" }, [ui.agentError]),
+    );
   }
 
   const feed = el("div", {
@@ -290,7 +297,9 @@ function checkoutPanel(): HTMLElement {
   );
 
   if (ui.cartError) {
-    section.append(el("p", { className: "error", role: "alert" }, [ui.cartError]));
+    section.append(
+      el("p", { className: "error", role: "alert" }, [ui.cartError]),
+    );
   }
 
   const quoteBtn = el(
@@ -305,7 +314,10 @@ function checkoutPanel(): HTMLElement {
     ["Review quote"],
   );
   quoteBtn.addEventListener("click", () => void requestQuote());
-  section.append(quoteBtn, el("p", { className: "hint" }, [gateLabel(quoteGate)]));
+  section.append(
+    quoteBtn,
+    el("p", { className: "hint" }, [gateLabel(quoteGate)]),
+  );
 
   if (ui.quote) {
     section.append(
@@ -323,7 +335,9 @@ function checkoutPanel(): HTMLElement {
     );
   }
   if (ui.quoteError) {
-    section.append(el("p", { className: "error", role: "alert" }, [ui.quoteError]));
+    section.append(
+      el("p", { className: "error", role: "alert" }, [ui.quoteError]),
+    );
   }
 
   const approvalBtn = el(
@@ -338,10 +352,16 @@ function checkoutPanel(): HTMLElement {
     ["Start Guardian approval"],
   );
   approvalBtn.addEventListener("click", () => void startApproval());
-  section.append(approvalBtn, el("p", { className: "hint" }, [gateLabel(approvalGate)]));
+  section.append(
+    approvalBtn,
+    el("p", { className: "hint" }, [gateLabel(approvalGate)]),
+  );
 
   if (ui.approval) {
-    const reviewHref = safeNavHref(ui.approval.reviewUrl, window.location.origin);
+    const reviewHref = safeNavHref(
+      ui.approval.reviewUrl,
+      window.location.origin,
+    );
     const review =
       reviewHref && ui.approval.status === "pending"
         ? el(
@@ -364,7 +384,9 @@ function checkoutPanel(): HTMLElement {
     );
   }
   if (ui.approvalError) {
-    section.append(el("p", { className: "error", role: "alert" }, [ui.approvalError]));
+    section.append(
+      el("p", { className: "error", role: "alert" }, [ui.approvalError]),
+    );
   }
 
   const executeBtn = el(
@@ -379,10 +401,17 @@ function checkoutPanel(): HTMLElement {
     ["Complete checkout"],
   );
   executeBtn.addEventListener("click", () => void executeOrder());
-  section.append(executeBtn, el("p", { className: "hint" }, [gateLabel(executeGate)]));
+  section.append(
+    executeBtn,
+    el("p", { className: "hint" }, [gateLabel(executeGate)]),
+  );
 
   if (ui.orderMessage) {
-    section.append(el("p", { className: "order-message", role: "status" }, [ui.orderMessage]));
+    section.append(
+      el("p", { className: "order-message", role: "status" }, [
+        ui.orderMessage,
+      ]),
+    );
   }
 
   return section;
@@ -408,11 +437,15 @@ function merchantBrowser(): HTMLElement {
     el("h2", { id: "agent-heading", className: "visually-hidden" }, [
       "What the agent sees",
     ]),
-    el("p", { className: "browser-url", "data-nominee-merchant-url": "stillroom" }, [
-      signedIn
-        ? "https://shop.stillroom.supply/"
-        : "Merchant storefront — sign in to enable shopping",
-    ]),
+    el(
+      "p",
+      { className: "browser-url", "data-nominee-merchant-url": "stillroom" },
+      [
+        signedIn
+          ? "https://shop.stillroom.supply/"
+          : "Merchant storefront — sign in to enable shopping",
+      ],
+    ),
   );
 
   const shop = el("section", { id: "shop", className: "shop" });
@@ -467,7 +500,8 @@ function merchantBrowser(): HTMLElement {
     for (const item of items) {
       const product =
         STORE_PRODUCTS.find((p) => p.id === item.productId) ?? item;
-      const name = "name" in product && product.name ? product.name : item.productId;
+      const name =
+        "name" in product && product.name ? product.name : item.productId;
       const priceMinor =
         item.priceMinor ??
         ("priceMinor" in product ? product.priceMinor : undefined);
@@ -479,13 +513,17 @@ function merchantBrowser(): HTMLElement {
         el("li", {}, [
           el("span", {}, [line]),
           el("div", {}, [
-            el("button", { type: "button", disabled: true, "aria-label": "Remove one" }, [
-              "−",
-            ]),
+            el(
+              "button",
+              { type: "button", disabled: true, "aria-label": "Remove one" },
+              ["−"],
+            ),
             el("span", {}, [String(item.quantity)]),
-            el("button", { type: "button", disabled: true, "aria-label": "Add one" }, [
-              "+",
-            ]),
+            el(
+              "button",
+              { type: "button", disabled: true, "aria-label": "Add one" },
+              ["+"],
+            ),
           ]),
         ]),
       );
@@ -545,6 +583,19 @@ async function withBusy<T>(label: string, fn: () => Promise<T>): Promise<T> {
     ui.busy = null;
     render();
   }
+}
+
+async function signOut(): Promise<void> {
+  await withBusy("sign-out", async () => {
+    const result = await shoppingApi.signOut();
+    if (!result.ok) {
+      ui.sessionError = result.error.message;
+      return;
+    }
+    setSessionCsrfToken(null);
+    ui.sessionError = null;
+    await bootstrap();
+  });
 }
 
 async function loadSession(): Promise<void> {

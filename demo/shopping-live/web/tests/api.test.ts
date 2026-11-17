@@ -28,5 +28,6 @@ test("api routes match the live shopping contract", () => {
     "`/approval/${",
     '"/order/execute"',
   ];
-  for (const route of routes) assert.match(src, new RegExp(route.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")));
+  for (const route of routes)
+    assert.match(src, new RegExp(route.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")));
 });

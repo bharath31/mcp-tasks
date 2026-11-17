@@ -30,5 +30,6 @@ test("Guardian review links use noopener noreferrer", () => {
 
 test("auth links validate URLs before href", () => {
   assert.match(mainSrc, /safeNavHref\(ui\.session\?\.loginUrl/);
-  assert.match(mainSrc, /safeNavHref\(ui\.session\?\.logoutUrl/);
+  assert.match(mainSrc, /shoppingApi\.signOut/);
+  assert.match(mainSrc, /data-nominee-action": "logout"/);
 });

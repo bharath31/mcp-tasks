@@ -1,4 +1,7 @@
-import type { Cart, Quote as MerchantQuote } from "../../../shopping-merchant/src/types.js";
+import type {
+  Cart,
+  Quote as MerchantQuote,
+} from "../../../shopping-merchant/src/types.js";
 import { hostCatalogProduct } from "./catalog.js";
 import { customerStateRpc, customerStateStub } from "./customer-state-do.js";
 import { merchantLedgerRpc } from "./merchant-client.js";
@@ -147,7 +150,8 @@ export async function addCartItem(
   const cart = (await current.json()) as Cart;
   const items = [...cart.items];
   const idx = items.findIndex((i) => i.productId === productId);
-  if (idx >= 0) items[idx] = { ...items[idx], quantity: items[idx].quantity + quantity };
+  if (idx >= 0)
+    items[idx] = { ...items[idx], quantity: items[idx].quantity + quantity };
   else {
     items.push({
       productId: product.id,

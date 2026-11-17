@@ -13,7 +13,6 @@ export type ShoppingLiveEnv = MerchantLedgerEnv &
     SHOPPING_MERCHANT_SHIPPING_ADDRESS_ID?: string;
     SHOPPING_MERCHANT_WALLET_MODE?: string;
     SHOPPING_MERCHANT_WALLET_LABEL?: string;
-    SHOPPING_TEST_HOOKS?: string;
   };
 
 export const MAX_CUSTOMER_SESSIONS = 8;

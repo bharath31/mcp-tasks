@@ -6,7 +6,10 @@ const ORIGIN = "https://shop.example.test";
 
 test("safeNavHref allows same-origin relative paths", () => {
   assert.equal(safeNavHref("/login", ORIGIN), "/login");
-  assert.equal(safeNavHref("/auth/logout?return=/", ORIGIN), "/auth/logout?return=/");
+  assert.equal(
+    safeNavHref("/auth/logout?return=/", ORIGIN),
+    "/auth/logout?return=/",
+  );
 });
 
 test("safeNavHref allows same-origin absolute https URLs as relative paths", () => {

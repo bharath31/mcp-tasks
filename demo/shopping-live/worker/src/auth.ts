@@ -2,7 +2,12 @@ import { shoppingIdentityConfigured } from "../../../shopping-merchant/src/ident
 import { verifyCustomerAccessToken } from "../../../shopping-merchant/src/identity/index.js";
 import type { CustomerAccessTokenDeps } from "../../../shopping-merchant/src/identity/customer-access-token.js";
 import { OAUTH_COOKIE, type ShoppingLiveEnv } from "./env.js";
-import { randomBase64Url, sha256Base64Url, signValue, verifySignedValue } from "./crypto-util.js";
+import {
+  randomBase64Url,
+  sha256Base64Url,
+  signValue,
+  verifySignedValue,
+} from "./crypto-util.js";
 import { json, problem, publicOrigin, secureCookieParts } from "./http.js";
 import { mintSessionCookie } from "./session.js";
 
@@ -11,11 +16,14 @@ const OAUTH_TTL_MS = 5 * 60 * 1000;
 type OAuthTx = {
   state: string;
   verifier: string;
-  nonce: string;
   exp: number;
 };
 
-function oauthCookieHeader(value: string, origin: string, maxAge: number): string {
+function oauthCookieHeader(
+  value: string,
+  origin: string,
+  maxAge: number,
+): string {
   return `${OAUTH_COOKIE}=${encodeURIComponent(value)}; HttpOnly; SameSite=Lax; Path=/auth; Max-Age=${maxAge}${secureCookieParts(origin)}`;
 }
 
@@ -36,29 +44,36 @@ export async function handleAuthLogin(
   env: ShoppingLiveEnv,
 ): Promise<Response> {
   if (!authConfigured(env)) {
-    return problem(503, "auth_unconfigured", "Customer sign-in is not configured.");
+    return problem(
+      503,
+      "auth_unconfigured",
+      "Customer sign-in is not configured.",
+    );
   }
   const origin = publicOrigin(req, env);
   const state = randomBase64Url(32);
   const verifier = randomBase64Url(48);
-  const nonce = randomBase64Url(32);
   const tx: OAuthTx = {
     state,
     verifier,
-    nonce,
     exp: Date.now() + OAUTH_TTL_MS,
   };
-  const signed = await signValue(env.SHOPPING_SESSION_SECRET!, JSON.stringify(tx));
+  const signed = await signValue(
+    env.SHOPPING_SESSION_SECRET!,
+    JSON.stringify(tx),
+  );
   const challenge = await sha256Base64Url(verifier);
   const redirectUri = `${origin}/auth/callback`;
   const authorize = new URL(`https://${env.SHOPPING_AUTH0_DOMAIN}/authorize`);
   authorize.searchParams.set("client_id", env.SHOPPING_AUTH0_CLIENT_ID!);
   authorize.searchParams.set("response_type", "code");
   authorize.searchParams.set("redirect_uri", redirectUri);
-  authorize.searchParams.set("scope", "openid profile offline_access shopping:customer");
+  authorize.searchParams.set(
+    "scope",
+    "openid profile offline_access shopping:customer",
+  );
   authorize.searchParams.set("audience", env.SHOPPING_API_AUDIENCE);
   authorize.searchParams.set("state", state);
-  authorize.searchParams.set("nonce", nonce);
   authorize.searchParams.set("code_challenge", challenge);
   authorize.searchParams.set("code_challenge_method", "S256");
   return new Response(null, {
@@ -66,7 +81,11 @@ export async function handleAuthLogin(
     headers: {
       location: authorize.href,
       "cache-control": "no-store",
-      "set-cookie": oauthCookieHeader(signed, origin, Math.floor(OAUTH_TTL_MS / 1000)),
+      "set-cookie": oauthCookieHeader(
+        signed,
+        origin,
+        Math.floor(OAUTH_TTL_MS / 1000),
+      ),
     },
   });
 }
@@ -77,7 +96,11 @@ export async function handleAuthCallback(
   deps: CustomerAccessTokenDeps = {},
 ): Promise<Response> {
   if (!authConfigured(env)) {
-    return problem(503, "auth_unconfigured", "Customer sign-in is not configured.");
+    return problem(
+      503,
+      "auth_unconfigured",
+      "Customer sign-in is not configured.",
+    );
   }
   const origin = publicOrigin(req, env);
   const url = new URL(req.url);
@@ -87,40 +110,63 @@ export async function handleAuthCallback(
     .get("cookie")
     ?.match(new RegExp(`(?:^|;\\s*)${OAUTH_COOKIE}=([^;]+)`))?.[1];
   if (!code || !state || !cookieRaw) {
-    return problem(400, "invalid_oauth_callback", "OAuth callback is incomplete.");
+    return problem(
+      400,
+      "invalid_oauth_callback",
+      "OAuth callback is incomplete.",
+    );
   }
   const txJson = await verifySignedValue(
     env.SHOPPING_SESSION_SECRET!,
     decodeURIComponent(cookieRaw),
   );
   if (!txJson) {
-    return problem(400, "invalid_oauth_state", "OAuth transaction cookie is invalid.");
+    return problem(
+      400,
+      "invalid_oauth_state",
+      "OAuth transaction cookie is invalid.",
+    );
   }
   let tx: OAuthTx;
   try {
     tx = JSON.parse(txJson) as OAuthTx;
   } catch {
-    return problem(400, "invalid_oauth_state", "OAuth transaction cookie is invalid.");
+    return problem(
+      400,
+      "invalid_oauth_state",
+      "OAuth transaction cookie is invalid.",
+    );
   }
   if (tx.state !== state || tx.exp <= Date.now()) {
-    return problem(400, "invalid_oauth_state", "OAuth state expired or mismatched.");
+    return problem(
+      400,
+      "invalid_oauth_state",
+      "OAuth state expired or mismatched.",
+    );
   }
   const redirectUri = `${origin}/auth/callback`;
-  const tokenRes = await fetch(`https://${env.SHOPPING_AUTH0_DOMAIN}/oauth/token`, {
-    method: "POST",
-    headers: { "content-type": "application/x-www-form-urlencoded" },
-    body: new URLSearchParams({
-      grant_type: "authorization_code",
-      client_id: env.SHOPPING_AUTH0_CLIENT_ID!,
-      client_secret: env.SHOPPING_AUTH0_CLIENT_SECRET!,
-      code,
-      code_verifier: tx.verifier,
-      redirect_uri: redirectUri,
-    }),
-    redirect: "error",
-  });
+  const tokenRes = await fetch(
+    `https://${env.SHOPPING_AUTH0_DOMAIN}/oauth/token`,
+    {
+      method: "POST",
+      headers: { "content-type": "application/x-www-form-urlencoded" },
+      body: new URLSearchParams({
+        grant_type: "authorization_code",
+        client_id: env.SHOPPING_AUTH0_CLIENT_ID!,
+        client_secret: env.SHOPPING_AUTH0_CLIENT_SECRET!,
+        code,
+        code_verifier: tx.verifier,
+        redirect_uri: redirectUri,
+      }),
+      redirect: "manual",
+    },
+  );
   if (!tokenRes.ok) {
-    return problem(503, "token_exchange_failed", "Auth0 token exchange failed.");
+    return problem(
+      503,
+      "token_exchange_failed",
+      "Auth0 token exchange failed.",
+    );
   }
   const tokenBody = (await tokenRes.json()) as {
     access_token?: string;
@@ -139,7 +185,9 @@ export async function handleAuthCallback(
   }
   const expiresAtMs =
     Date.now() +
-    (typeof tokenBody.expires_in === "number" ? tokenBody.expires_in * 1000 : 3600_000);
+    (typeof tokenBody.expires_in === "number"
+      ? tokenBody.expires_in * 1000
+      : 3600_000);
   const setCookie = await mintSessionCookie(
     env,
     verified.customerId,
@@ -160,10 +208,11 @@ export async function handleAuthCallback(
 export async function handleAuthLogout(
   req: Request,
   env: ShoppingLiveEnv,
+  deps: CustomerAccessTokenDeps = {},
 ): Promise<Response> {
   const { clearSessionCookie } = await import("./session.js");
   const origin = publicOrigin(req, env);
-  const { clearCookie } = await clearSessionCookie(env, req, origin);
+  const { clearCookie } = await clearSessionCookie(env, req, origin, deps);
   return new Response(null, {
     status: 303,
     headers: {

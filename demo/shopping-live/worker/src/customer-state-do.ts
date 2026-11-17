@@ -14,7 +14,12 @@ type SessionRecord = {
 
 type CustomerStateRpc =
   | { op: "bindCustomer"; customerId: string }
-  | { op: "createSession"; sid: string; accessToken: string; expiresAtMs: number }
+  | {
+      op: "createSession";
+      sid: string;
+      accessToken: string;
+      expiresAtMs: number;
+    }
   | { op: "getSession"; sid: string }
   | { op: "revokeSession"; sid: string }
   | { op: "getCartId" }
@@ -65,7 +70,7 @@ export class CustomerHostState extends DurableObject<ShoppingLiveEnv> {
       return Response.json({ error: "invalid_json" }, { status: 400 });
     }
     await this.loadSessions();
-  try {
+    try {
       const headerCustomer = request.headers.get("x-nominee-customer-id");
       if (body.op === "bindCustomer") {
         await this.assertBinding(body.customerId);
@@ -81,7 +86,10 @@ export class CustomerHostState extends DurableObject<ShoppingLiveEnv> {
             if (rec.expiresAtMs <= now) this.sessions.delete(sid);
           }
           if (this.sessions.size >= MAX_CUSTOMER_SESSIONS) {
-            return Response.json({ error: "session_capacity" }, { status: 429 });
+            return Response.json(
+              { error: "session_capacity" },
+              { status: 429 },
+            );
           }
           this.sessions.set(body.sid, {
             accessToken: body.accessToken,
@@ -119,7 +127,10 @@ export class CustomerHostState extends DurableObject<ShoppingLiveEnv> {
           return Response.json({ browserSessionId: id });
         }
         case "setBrowserSessionId": {
-          await this.ctx.storage.put(BROWSER_SESSION_KEY, body.browserSessionId);
+          await this.ctx.storage.put(
+            BROWSER_SESSION_KEY,
+            body.browserSessionId,
+          );
           return Response.json({ ok: true });
         }
         default:

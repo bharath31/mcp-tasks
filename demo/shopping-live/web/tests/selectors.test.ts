@@ -19,7 +19,10 @@ test("merchant DOM includes shopping-agent selector roots", () => {
   assert.match(mainSrc, /id: "cart"/);
   assert.match(mainSrc, /className: "cart-list"/);
   assert.equal(SHOP_GRID_SELECTOR, "#shop .grid");
-  assert.equal(SHOP_READY_SELECTOR, "#shop .grid article button:not([disabled])");
+  assert.equal(
+    SHOP_READY_SELECTOR,
+    "#shop .grid article button:not([disabled])",
+  );
   assert.equal(CART_LIST_SELECTOR, "#cart .cart-list");
 });
 

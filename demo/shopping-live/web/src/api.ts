@@ -22,8 +22,7 @@ export class ShoppingApiError extends Error {
 let sessionCsrf: string | null = null;
 
 export function setSessionCsrfToken(token: string | null | undefined): void {
-  sessionCsrf =
-    typeof token === "string" && token.length > 0 ? token : null;
+  sessionCsrf = typeof token === "string" && token.length > 0 ? token : null;
 }
 
 async function request<T>(
@@ -38,10 +37,7 @@ async function request<T>(
       Accept: "application/json",
       ...(init?.headers as Record<string, string> | undefined),
     };
-    if (
-      sessionCsrf &&
-      ["POST", "PUT", "PATCH", "DELETE"].includes(method)
-    ) {
+    if (sessionCsrf && ["POST", "PUT", "PATCH", "DELETE"].includes(method)) {
       headers["x-nominee-csrf"] = sessionCsrf;
     }
     response = await fetch(`/api${path}`, {
@@ -94,8 +90,64 @@ async function request<T>(
 }
 
 /** Typed client for the live shopping worker — session cookies only. */
+async function signOutRequest(): Promise<
+  | { ok: true; data: Record<string, never> }
+  | { ok: false; error: ShoppingApiError }
+> {
+  let response: Response;
+  try {
+    const headers: Record<string, string> = {
+      Accept: "application/json",
+    };
+    if (sessionCsrf) {
+      headers["x-nominee-csrf"] = sessionCsrf;
+    }
+    response = await fetch("/auth/logout", {
+      method: "POST",
+      cache: "no-store",
+      headers,
+    });
+  } catch {
+    return {
+      ok: false,
+      error: new ShoppingApiError(
+        "The Nominee shopping API is not reachable from this browser.",
+        "network_error",
+        0,
+      ),
+    };
+  }
+  if (response.status === 303 || response.ok) {
+    return { ok: true, data: {} };
+  }
+  let body: unknown;
+  try {
+    body = await response.json();
+  } catch {
+    return {
+      ok: false,
+      error: new ShoppingApiError(
+        "Sign out could not be completed.",
+        "sign_out_failed",
+        response.status,
+      ),
+    };
+  }
+  const record = body as { code?: string; message?: string; error?: string };
+  return {
+    ok: false,
+    error: new ShoppingApiError(
+      record.message ?? record.error ?? "Sign out could not be completed.",
+      record.code ?? "sign_out_failed",
+      response.status,
+    ),
+  };
+}
+
 export const shoppingApi = {
   session: () => request<SessionResponse>("/session"),
+
+  signOut: () => signOutRequest(),
 
   startAgent: (goal: string) =>
     request<AgentRun>("/agent/start", {
@@ -103,8 +155,7 @@ export const shoppingApi = {
       body: JSON.stringify({ goal }),
     }),
 
-  agent: (id: string) =>
-    request<AgentRun>(`/agent/${encodeURIComponent(id)}`),
+  agent: (id: string) => request<AgentRun>(`/agent/${encodeURIComponent(id)}`),
 
   cart: () => request<{ cart: Cart | null }>("/cart"),
 

@@ -7,24 +7,24 @@
   "assets": {
     "directory": "../web/dist",
     "binding": "ASSETS",
-    "run_worker_first": ["/api/*", "/auth/*"]
+    "run_worker_first": ["/api/*", "/auth/*"],
   },
   "durable_objects": {
     "bindings": [
       { "name": "CUSTOMER_STATE", "class_name": "CustomerHostState" },
-      { "name": "MERCHANT_LEDGER", "class_name": "CustomerMerchantLedger" }
-    ]
+      { "name": "MERCHANT_LEDGER", "class_name": "CustomerMerchantLedger" },
+    ],
   },
   "migrations": [
-  {
-  "tag": "v1",
-  "new_classes": ["CustomerHostState", "CustomerMerchantLedger"]
-}
+    {
+      "tag": "v1",
+      "new_classes": ["CustomerHostState", "CustomerMerchantLedger"],
+    },
   ],
   "vars": {
     "SHOPPING_BROWSER_AGENT_ID": "browser-shopping",
     "SHOPPING_MERCHANT_SHIPPING_ADDRESS_ID": "merchant-default",
     "SHOPPING_MERCHANT_WALLET_MODE": "simulated",
-    "SHOPPING_MERCHANT_WALLET_LABEL": "Stillroom wallet"
-  }
+    "SHOPPING_MERCHANT_WALLET_LABEL": "Stillroom wallet",
+  },
 }

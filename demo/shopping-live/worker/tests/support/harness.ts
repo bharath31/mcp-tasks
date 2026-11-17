@@ -39,48 +39,84 @@ export async function buildShoppingWorker(): Promise<string> {
   return bundle.outputFiles[0]!.text;
 }
 
+export async function buildProductionWorkerBundle(): Promise<{
+  script: string;
+  metafile: import("esbuild").Metafile;
+}> {
+  const workerRoot = join(here, "../..");
+  const bundle = await build({
+    entryPoints: [join(workerRoot, "src/worker.ts")],
+    bundle: true,
+    write: false,
+    metafile: true,
+    format: "esm",
+    platform: "browser",
+    conditions: ["workerd", "worker", "browser"],
+    external: ["cloudflare:workers"],
+    target: "es2023",
+  });
+  return {
+    script: bundle.outputFiles[0]!.text,
+    metafile: bundle.metafile!,
+  };
+}
+
+export type OutboundHandler = (
+  request: Request,
+  miniflare: Miniflare,
+) => Promise<Response>;
+
 export type Harness = {
   mf: Miniflare;
   jwks: JWTVerifyGetKey;
   login: (customerId?: string) => Promise<{ cookie: string; csrf: string }>;
 };
 
-export async function startHarness(): Promise<Harness> {
+export async function startHarness(options?: {
+  outbound?: OutboundHandler;
+}): Promise<Harness> {
   const script = await buildShoppingWorker();
   const jwks = await shoppingTestJwks();
-  const mf = new Miniflare(
-    convertV4MiniflareOptions({
-      workers: [
-        {
-          name: "shopping-live",
-          modules: true,
-          script,
-          compatibilityDate: "2026-10-09",
-          bindings: {
-            MERCHANT_HOST_INTERNAL_SECRET: HOST_SECRET,
-            SHOPPING_AUTH0_DOMAIN: TEST_DOMAIN,
-            SHOPPING_API_AUDIENCE: TEST_AUDIENCE,
-            SHOPPING_AUTH0_CLIENT_ID: "test-client",
-            SHOPPING_AUTH0_CLIENT_SECRET: "test-secret",
-            SHOPPING_SESSION_SECRET: SESSION_SECRET,
-            SHOPPING_PUBLIC_ORIGIN: ORIGIN,
-            SHOPPING_MERCHANT_SHIPPING_ADDRESS_ID: "merchant-default",
-            SHOPPING_BROWSER_AGENT_ID: "browser-shopping",
-            SHOPPING_MERCHANT_WALLET_MODE: "simulated",
-            SHOPPING_MERCHANT_WALLET_LABEL: "Stillroom wallet",
-            SHOPPING_TEST_HOOKS: "1",
-          },
-          durableObjects: {
-            CUSTOMER_STATE: { className: "CustomerHostState", useSQLite: true },
-            MERCHANT_LEDGER: {
-              className: "CustomerMerchantLedger",
-              useSQLite: true,
-            },
-          },
-        },
-      ],
-    }),
-  );
+  const worker: Record<string, unknown> = {
+    name: "shopping-live",
+    modules: true,
+    script,
+    compatibilityDate: "2026-10-09",
+    bindings: {
+      MERCHANT_HOST_INTERNAL_SECRET: HOST_SECRET,
+      SHOPPING_AUTH0_DOMAIN: TEST_DOMAIN,
+      SHOPPING_API_AUDIENCE: TEST_AUDIENCE,
+      SHOPPING_AUTH0_CLIENT_ID: "test-client",
+      SHOPPING_AUTH0_CLIENT_SECRET: "test-secret",
+      SHOPPING_SESSION_SECRET: SESSION_SECRET,
+      SHOPPING_PUBLIC_ORIGIN: ORIGIN,
+      SHOPPING_MERCHANT_SHIPPING_ADDRESS_ID: "merchant-default",
+      SHOPPING_BROWSER_AGENT_ID: "browser-shopping",
+      SHOPPING_MERCHANT_WALLET_MODE: "simulated",
+      SHOPPING_MERCHANT_WALLET_LABEL: "Stillroom wallet",
+    },
+    durableObjects: {
+      CUSTOMER_STATE: { className: "CustomerHostState", useSQLite: true },
+      MERCHANT_LEDGER: {
+        className: "CustomerMerchantLedger",
+        useSQLite: true,
+      },
+    },
+  };
+  const mfOptions = convertV4MiniflareOptions({
+    workers: [worker],
+  } as Parameters<typeof convertV4MiniflareOptions>[0]);
+  if (options?.outbound) {
+    const first = mfOptions.workers[0]!;
+    first.dev = {
+      ...first.dev,
+      outboundService: {
+        type: "fetcher",
+        handler: options.outbound,
+      },
+    };
+  }
+  const mf = new Miniflare(mfOptions);
 
   async function login(
     customerId = TEST_CUSTOMER,

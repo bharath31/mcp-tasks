@@ -119,6 +119,50 @@ test("forged client prices are replaced by server catalog", async () => {
   assert.equal(add.body.cart?.items?.[0]?.priceMinor, 2400);
 });
 
+test("GET logout does not revoke session", async () => {
+  const { cookie } = await harness.login();
+  const logout = await harness.mf.dispatchFetch(`${ORIGIN}/auth/logout`, {
+    headers: { cookie },
+  });
+  assert.equal(logout.status, 405);
+  const { status } = await apiJson(harness.mf, "/api/cart", { cookie });
+  assert.equal(status, 200);
+});
+
+test("POST logout requires CSRF", async () => {
+  const { cookie } = await harness.login();
+  const res = await harness.mf.dispatchFetch(`${ORIGIN}/auth/logout`, {
+    method: "POST",
+    headers: {
+      origin: ORIGIN,
+      "content-type": "application/json",
+      cookie,
+    },
+    body: "{}",
+  });
+  assert.equal(res.status, 403);
+  const body = (await res.json()) as { code?: string };
+  assert.equal(body.code, "csrf_required");
+});
+
+test("POST logout revokes session with CSRF", async () => {
+  const { cookie, csrf } = await harness.login();
+  const logout = await harness.mf.dispatchFetch(`${ORIGIN}/auth/logout`, {
+    method: "POST",
+    redirect: "manual",
+    headers: {
+      origin: ORIGIN,
+      "content-type": "application/json",
+      "x-nominee-csrf": csrf,
+      cookie,
+    },
+    body: "{}",
+  });
+  assert.equal(logout.status, 303);
+  const { status } = await apiJson(harness.mf, "/api/cart", { cookie });
+  assert.equal(status, 401);
+});
+
 test("authenticated session and quote use merchant ledger", async () => {
   const { cookie, csrf } = await harness.login("auth0|quote-customer");
   await apiJson(harness.mf, "/api/cart/items", {
@@ -131,20 +175,18 @@ test("authenticated session and quote use merchant ledger", async () => {
     cookie,
     body: JSON.stringify({ productId: "cup", quantity: 1 }),
   });
-  const quote = await apiJson<{ quote?: { verified?: boolean; totalMinor?: number } }>(
-    harness.mf,
-    "/api/quote",
-    {
-      method: "POST",
-      headers: {
-        "content-type": "application/json",
-        origin: ORIGIN,
-        "x-nominee-csrf": csrf,
-      },
-      cookie,
-      body: JSON.stringify({}),
+  const quote = await apiJson<{
+    quote?: { verified?: boolean; totalMinor?: number };
+  }>(harness.mf, "/api/quote", {
+    method: "POST",
+    headers: {
+      "content-type": "application/json",
+      origin: ORIGIN,
+      "x-nominee-csrf": csrf,
     },
-  );
+    cookie,
+    body: JSON.stringify({}),
+  });
   assert.equal(quote.status, 200);
   assert.equal(quote.body.quote?.verified, true);
   assert.equal(quote.body.quote?.totalMinor, 1800);

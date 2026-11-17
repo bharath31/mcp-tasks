@@ -3,14 +3,20 @@ export function randomBase64Url(byteLength: number): string {
   crypto.getRandomValues(bytes);
   let binary = "";
   for (const b of bytes) binary += String.fromCharCode(b);
-  return btoa(binary).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
+  return btoa(binary)
+    .replace(/\+/g, "-")
+    .replace(/\//g, "_")
+    .replace(/=+$/, "");
 }
 
 export function base64UrlEncode(data: ArrayBuffer | Uint8Array): string {
   const bytes = data instanceof Uint8Array ? data : new Uint8Array(data);
   let binary = "";
   for (const b of bytes) binary += String.fromCharCode(b);
-  return btoa(binary).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
+  return btoa(binary)
+    .replace(/\+/g, "-")
+    .replace(/\//g, "_")
+    .replace(/=+$/, "");
 }
 
 export async function sha256Base64Url(input: string): Promise<string> {
@@ -31,7 +37,10 @@ async function hmacKey(secret: string): Promise<CryptoKey> {
   );
 }
 
-export async function signValue(secret: string, payload: string): Promise<string> {
+export async function signValue(
+  secret: string,
+  payload: string,
+): Promise<string> {
   const key = await hmacKey(secret);
   const sig = await crypto.subtle.sign(
     "HMAC",

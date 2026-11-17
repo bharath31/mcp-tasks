@@ -5,11 +5,12 @@ import {
 } from "../../../shopping-merchant/src/identity/index.js";
 import { shoppingIdentityConfigured } from "../../../shopping-merchant/src/identity/config.js";
 import { SESSION_COOKIE, type ShoppingLiveEnv } from "./env.js";
+import { customerStateRpc, customerStateStub } from "./customer-state-do.js";
 import {
-  customerStateRpc,
-  customerStateStub,
-} from "./customer-state-do.js";
-import { randomBase64Url, signValue, verifySignedValue } from "./crypto-util.js";
+  randomBase64Url,
+  signValue,
+  verifySignedValue,
+} from "./crypto-util.js";
 import { secureCookieParts } from "./http.js";
 
 export type AuthenticatedCustomer = {
@@ -122,8 +123,9 @@ export async function clearSessionCookie(
   env: ShoppingLiveEnv,
   req: Request,
   origin: string,
+  deps: CustomerAccessTokenDeps = {},
 ): Promise<{ clearCookie: string; customerId?: string }> {
-  const session = await resolveCustomerSession(req, env);
+  const session = await resolveCustomerSession(req, env, deps);
   if (session) {
     const stub = customerStateStub(env, session.customerId);
     await customerStateRpc(stub, session.customerId, {

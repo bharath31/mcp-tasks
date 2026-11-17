@@ -2,7 +2,10 @@ import { CSRF_HEADER } from "./env.js";
 import { publicOrigin } from "./http.js";
 import type { ShoppingLiveEnv } from "./env.js";
 
-export function assertSameOrigin(req: Request, env: ShoppingLiveEnv): Response | null {
+export function assertSameOrigin(
+  req: Request,
+  env: ShoppingLiveEnv,
+): Response | null {
   const origin = publicOrigin(req, env);
   const requestOrigin = req.headers.get("origin");
   if (requestOrigin !== origin) {
