@@ -1,4 +1,5 @@
 import type { AgentActor, HumanActor, TrustedActor } from "../types.js";
+import { SHOPPING_CUSTOMER_SCOPE } from "./config.js";
 
 /** Capabilities granted to bounded shopping agent sessions (no approval or execution). */
 export const AGENT_SESSION_SCOPES = [
@@ -72,7 +73,8 @@ function assertHumanCustomer(customer: HumanActor): boolean {
     customer?.kind === "human" &&
     typeof customer.customerId === "string" &&
     customer.customerId.length > 0 &&
-    Array.isArray(customer.scopes)
+    Array.isArray(customer.scopes) &&
+    customer.scopes.includes(SHOPPING_CUSTOMER_SCOPE)
   );
 }
 

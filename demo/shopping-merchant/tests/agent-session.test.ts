@@ -39,7 +39,7 @@ async function verifiedHuman() {
   return verifiedCustomerAsHumanActor(v!);
 }
 
-test("grantSession ignores caller actor JSON and binds server ids + fixed scopes", async () => {
+test("grantSession binds verified customer to server ids and fixed scopes", async () => {
   const sessions = service();
   const customer = await verifiedHuman();
   const granted = await sessions.grantSession(customer);
@@ -127,16 +127,17 @@ test("verifyBearer fails closed on corrupt stored grant scopes", async () => {
   assert.equal(await sessions.verifyBearer(granted.bearer), null);
 });
 
-test("grantSession requires verified human actor shape", async () => {
+test("grantSession rejects missing customer identity or required scope", async () => {
   const sessions = service();
-  const bad = await sessions.grantSession({
-    kind: "human",
-    customerId: "",
-    scopes: [],
-  });
-  assert.equal(bad.ok, false);
-  if (bad.ok) return;
-  assert.equal(bad.reason, "invalid_customer");
+  for (const customer of [
+    { kind: "human" as const, customerId: "", scopes: ["shopping:customer"] },
+    { kind: "human" as const, customerId: "customer", scopes: [] },
+  ]) {
+    assert.deepEqual(await sessions.grantSession(customer), {
+      ok: false,
+      reason: "invalid_customer",
+    });
+  }
 });
 
 test("createAgentSessionService rejects invalid merchantAgentId and TTL before persisting", async () => {
