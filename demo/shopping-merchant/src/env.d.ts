@@ -16,6 +16,19 @@ interface DurableObjectState {
   readonly storage: DurableObjectStorage;
 }
 
+interface DurableObjectId {
+  toString(): string;
+}
+
+interface DurableObjectStub {
+  fetch(input: RequestInfo, init?: RequestInit): Promise<Response>;
+}
+
+interface DurableObjectNamespace {
+  idFromName(name: string): DurableObjectId;
+  get(id: DurableObjectId): DurableObjectStub;
+}
+
 interface SqlStorage {
   exec<T = Record<string, unknown>>(
     query: string,

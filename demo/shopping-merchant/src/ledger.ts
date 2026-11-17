@@ -87,9 +87,12 @@ export function createMerchantLedger(
     if (actor.kind === "agent") {
       if (cartScope && !actor.scopes.includes("cart:write")) fail();
       if (
-        row.agent_id &&
-        (actor.agentId !== row.agent_id ||
-          actor.pairwiseUserId !== row.pairwise_user_id)
+        !nonempty(row.agent_id as string) ||
+        !nonempty(row.pairwise_user_id as string) ||
+        !nonempty(row.session_id as string) ||
+        actor.agentId !== row.agent_id ||
+        actor.pairwiseUserId !== row.pairwise_user_id ||
+        actor.sessionId !== row.session_id
       ) {
         fail();
       }

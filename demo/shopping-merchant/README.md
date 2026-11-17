@@ -12,7 +12,7 @@ Prototype **Cloudflare Durable Object** merchant ledger for Nominee shopping. It
 | Catalog, unit prices | `SERVER_CATALOG` inside the ledger |
 | Ship-to destination | `customerAccount.getAddress(customerId, addressId)` |
 | Quote fields | Immutable snapshot at issuance (items, totals, destination, operation, revision, expiry) |
-| Customer approval | `injectCustomerApproval` after `verifyCustomerApproval` returns true — **no public HTTP `/approve` route** |
+| Customer approval | Authenticated Worker calls `createTrustedMerchantHost(ledger).injectCustomerApproval` after `verifyCustomerApproval` — **not** exposed on the DO `fetch` RPC |
 
 Every purchase requires **direct customer approval** (`requirement` is always `customer_verification`). Agents may build carts and quotes; execution stays blocked until the host injects verified approval.
 
@@ -27,6 +27,10 @@ Every purchase requires **direct customer approval** (`requirement` is always `c
 ## One DO per customer
 
 Production routing should use `env.MERCHANT_LEDGER.idFromName(customerId)` so each customer's carts, quotes, and executions live in one SQLite database inside their DO. The Worker must authenticate the caller, bind `x-nominee-customer-id`, and forward RPC to the stub.
+
+**Hard prerequisite:** identity and approval proof are established in the Worker (Auth0 / Task Authority / passkey, etc.). A shared secret header alone does not prove customer approval. The DO rejects `injectCustomerApproval` RPC; only the Worker-side trusted host may call `ledger.injectCustomerApproval` after `verifyCustomerApproval`.
+
+Port implementations (`customerAccount`, `verifyCustomerApproval`, `orderProvider`) cannot be Wrangler `env` bindings (they are functions). The Worker entry module must call `registerMerchantLedgerPorts(...)` at startup, wiring env-backed service fetches into those ports. Do not pass port objects from untrusted request bodies.
 
 ## Remaining integration work
 

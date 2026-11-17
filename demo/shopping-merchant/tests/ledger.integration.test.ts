@@ -165,6 +165,77 @@ test("provider uncertainty stays processing; reconcile recovers", async () => {
   db.close();
 });
 
+test("agent session continuity: same agent and user with a different session is denied", async () => {
+  const { ledger, db } = memoryLedger();
+  const cart = ledger.createCart(agent);
+  assert.throws(
+    () =>
+      ledger.updateCart(
+        cart.id,
+        { ...agent, sessionId: "session-other" },
+        [{ productId: "mug", quantity: 1, priceMinor: 1800, currency: "USD" }],
+      ),
+    /not_found_or_forbidden/,
+  );
+  db.close();
+});
+
+test("malformed agent principal is rejected on every surface", async () => {
+  const { ledger, db } = memoryLedger();
+  const cart = ledger.createCart(agent);
+  const badAgent = {
+    kind: "agent" as const,
+    agentId: "agent-a",
+    pairwiseUserId: "user-u",
+    sessionId: "",
+    scopes: ["cart:write", "checkout:write", "addresses:read"],
+  };
+  assert.throws(() => ledger.readCart(cart.id, badAgent), /not_found_or_forbidden/);
+  await assert.rejects(
+    ledger.createQuote(cart.id, badAgent, "fixture-home"),
+    /not_found_or_forbidden/,
+  );
+  db.close();
+});
+
+test("approval replay after requote does not execute stale revision", async () => {
+  const { ledger, host, approval, provider, db } = memoryLedger();
+  const cart = ledger.createCart(agent);
+  ledger.updateCart(cart.id, agent, [
+    { productId: "mug", quantity: 1, priceMinor: 1800, currency: "USD" },
+  ]);
+  const quote = await ledger.createQuote(cart.id, agent, "fixture-home");
+  approval.approveForTest(quote);
+  await host.injectCustomerApproval(quote.id, human);
+  await host.injectCustomerApproval(quote.id, human);
+  ledger.updateCart(cart.id, agent, [
+    { productId: "tea", quantity: 1, priceMinor: 1200, currency: "USD" },
+  ]);
+  const quote2 = await ledger.createQuote(cart.id, agent, "fixture-home");
+  approval.approveForTest(quote2);
+  await host.injectCustomerApproval(quote2.id, human);
+  await assert.rejects(ledger.executeQuote(quote.id, agent), /stale_quote/);
+  assert.equal(provider.getPlaceCalls(), 0);
+  db.close();
+});
+
+test("async interleave: cart mutation during execute claim surfaces stale quote", async () => {
+  const { ledger, host, approval, db } = memoryLedger();
+  const cart = ledger.createCart(agent);
+  ledger.updateCart(cart.id, agent, [
+    { productId: "mug", quantity: 1, priceMinor: 1800, currency: "USD" },
+  ]);
+  const quote = await ledger.createQuote(cart.id, agent, "fixture-home");
+  approval.approveForTest(quote);
+  await host.injectCustomerApproval(quote.id, human);
+  const executeP = host.executeQuote(quote.id, agent);
+  ledger.updateCart(cart.id, agent, [
+    { productId: "mug", quantity: 2, priceMinor: 1800, currency: "USD" },
+  ]);
+  await assert.rejects(executeP, /stale_quote/);
+  db.close();
+});
+
 test("hosted injectCustomerApproval is the approval surface; absent proof verifier fails closed", async () => {
   const db = new DatabaseSync(":memory:");
   const broken = createMerchantLedger(

@@ -55,6 +55,18 @@ export function initMerchantSchema(db: SqlDatabase): void {
   }
 }
 
+/** SqlStorage cursor.one() throws when no row; other errors must propagate. */
+export function isSqlStorageNoRowError(error: unknown): boolean {
+  if (!(error instanceof Error)) return false;
+  const message = error.message.toLowerCase();
+  return (
+    message.includes("no results") ||
+    message.includes("no rows") ||
+    message.includes("expected exactly one row") ||
+    message.includes("cursor returned no rows")
+  );
+}
+
 export function createDoSqlDatabase(storage: DurableObjectStorage): SqlDatabase {
   const sql = storage.sql;
   return {
@@ -64,8 +76,9 @@ export function createDoSqlDatabase(storage: DurableObjectStorage): SqlDatabase 
         one() {
           try {
             return cursor.one() as SqlRow;
-          } catch {
-            return null;
+          } catch (error) {
+            if (isSqlStorageNoRowError(error)) return null;
+            throw error;
           }
         },
         all() {

@@ -52,13 +52,14 @@ export function createFixtureApprovalVerifier(): CustomerApprovalVerifier & {
   });
 }
 
-/** In-memory simulated order provider; never charges; not restart-durable. */
-export function createFixtureOrderProvider(): OrderProviderPort & {
+export type FixtureOrderProvider = OrderProviderPort & {
   getPlaceCalls(): number;
-  configurePlace(
-    mode: "success" | "null" | "throw" | "slow",
-  ): void;
-} {
+  configurePlace(mode: "success" | "null" | "throw" | "slow"): void;
+  seedOrder(idempotencyKey: string, id?: string): void;
+};
+
+/** In-memory simulated order provider; never charges; not restart-durable. */
+export function createFixtureOrderProvider(): FixtureOrderProvider {
   const orders = new Map<string, { id: string }>();
   let placeMode: "success" | "null" | "throw" | "slow" = "success";
   let placeCalls = 0;

@@ -6,12 +6,18 @@ import { DurableObject } from "cloudflare:workers";
 import { createMerchantLedger } from "./ledger.js";
 import { createDoSqlDatabase } from "./sql.js";
 import type { MerchantLedgerPorts } from "./types.js";
-import type { TrustedActor, HumanActor } from "./types.js";
+import type { TrustedActor } from "./types.js";
 
-export type MerchantLedgerEnv = {
-  /** Host-injected ports are wired by the Worker bundle, not from request bodies. */
-  MERCHANT_PORTS?: MerchantLedgerPorts;
-};
+/**
+ * Worker `env` may only carry Wrangler-bindable values (KV, secrets, service bindings).
+ * Port implementations live in the Worker module and are registered at cold start via
+ * {@link registerMerchantLedgerPorts} before the DO stub is used.
+ */
+export type MerchantLedgerEnv = Record<string, unknown>;
+
+declare global {
+  var __nomineeMerchantLedgerPorts: MerchantLedgerPorts | undefined;
+}
 
 type RpcBody =
   | { op: "createCart"; actor: TrustedActor }
@@ -24,9 +30,13 @@ type RpcBody =
     }
   | { op: "createQuote"; actor: TrustedActor; cartId: string; shippingAddressId: string }
   | { op: "getQuote"; actor: TrustedActor; quoteId: string }
-  | { op: "injectCustomerApproval"; actor: HumanActor; quoteId: string }
   | { op: "executeQuote"; actor: TrustedActor; quoteId: string }
   | { op: "reconcileQuote"; actor: TrustedActor; quoteId: string };
+
+/** Called from the Worker entry module after env is available (not from client fetch). */
+export function registerMerchantLedgerPorts(ports: MerchantLedgerPorts): void {
+  globalThis.__nomineeMerchantLedgerPorts = ports;
+}
 
 export class CustomerMerchantLedger extends DurableObject<MerchantLedgerEnv> {
   private customerId: string | undefined;
@@ -37,7 +47,7 @@ export class CustomerMerchantLedger extends DurableObject<MerchantLedgerEnv> {
   }
 
   private ports(): MerchantLedgerPorts {
-    const ports = this.env.MERCHANT_PORTS;
+    const ports = globalThis.__nomineeMerchantLedgerPorts;
     if (!ports?.customerAccount || !ports.verifyCustomerApproval || !ports.orderProvider) {
       throw new Error("merchant_ports_unconfigured");
     }
@@ -66,7 +76,8 @@ export class CustomerMerchantLedger extends DurableObject<MerchantLedgerEnv> {
         headers: { "content-type": "application/json" },
       });
     }
-  // Internal RPC only: the Worker must authenticate before forwarding.
+    // Internal RPC only: the Worker must authenticate identity before forwarding actors.
+    // Customer approval is never accepted on this surface; the host calls ledger.injectCustomerApproval.
     let body: RpcBody;
     try {
       body = (await request.json()) as RpcBody;
@@ -75,6 +86,16 @@ export class CustomerMerchantLedger extends DurableObject<MerchantLedgerEnv> {
         status: 400,
         headers: { "content-type": "application/json" },
       });
+    }
+    if ((body as { op?: string }).op === "injectCustomerApproval") {
+      return new Response(
+        JSON.stringify({
+          error: "customer_approval_host_only",
+          detail:
+            "Approval must be injected by the authenticated Worker via createTrustedMerchantHost after independent proof; never from raw DO fetch.",
+        }),
+        { status: 403, headers: { "content-type": "application/json" } },
+      );
     }
     const ledger = this.ledgerFor(customerId);
     try {
@@ -98,9 +119,6 @@ export class CustomerMerchantLedger extends DurableObject<MerchantLedgerEnv> {
           break;
         case "getQuote":
           result = ledger.getQuote(body.quoteId, body.actor);
-          break;
-        case "injectCustomerApproval":
-          result = await ledger.injectCustomerApproval(body.quoteId, body.actor);
           break;
         case "executeQuote":
           result = await ledger.executeQuote(body.quoteId, body.actor);
