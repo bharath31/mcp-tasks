@@ -57,11 +57,12 @@ const NAVIGATION_TIMEOUT_MS = 30_000;
 async function attachRequestPolicy(
   page: Page,
   config: ShoppingAgentConfig,
+  agentCartApiOnly: boolean,
 ): Promise<void> {
   await page.setRequestInterception(true);
   page.on("request", (req) => {
     const url = req.url();
-    if (shouldAllowBrowserRequest(config, url)) {
+    if (shouldAllowBrowserRequest(config, url, { agentCartApiOnly })) {
       void req.continue();
       return;
     }
@@ -374,14 +375,23 @@ export function createPuppeteerLauncher(
   binding: Fetcher,
   config: ShoppingAgentConfig,
 ): BrowserLauncher {
-  return async ({ sessionId, allowedDomains, sessionDeadlineMs }) => {
+  return async ({
+    sessionId,
+    allowedDomains,
+    sessionDeadlineMs,
+    initCookies,
+    agentCartApiOnly = false,
+  }) => {
     const budget: SessionBudget = {
       deadlineMs: sessionDeadlineMs,
       now: Date.now,
     };
-    const launchWork = puppeteer.launch(binding, {
-      guardrails: { allowedDomains },
-    });
+    const launchWork = puppeteer.launch(
+      binding as Parameters<typeof puppeteer.launch>[0],
+      {
+        guardrails: { allowedDomains },
+      },
+    );
     let browser: Awaited<ReturnType<typeof puppeteer.launch>>;
     try {
       browser = await raceWithSessionBudget(budget, launchWork);
@@ -397,7 +407,20 @@ export function createPuppeteerLauncher(
     }
     try {
       const page = await browser.newPage();
-      await attachRequestPolicy(page, config);
+      if (initCookies?.length) {
+        await page.setCookie(
+          ...initCookies.map((c) => ({
+            name: c.name,
+            value: c.value,
+            domain: c.domain,
+            path: c.path,
+            secure: c.secure,
+            httpOnly: c.httpOnly,
+            sameSite: c.sameSite,
+          })),
+        );
+      }
+      await attachRequestPolicy(page, config, agentCartApiOnly);
       return new PuppeteerBrowserSession(
         sessionId,
         config,

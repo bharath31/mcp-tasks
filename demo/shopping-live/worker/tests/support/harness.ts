@@ -11,9 +11,22 @@ import {
 import type { JWTVerifyGetKey } from "jose";
 
 const here = dirname(fileURLToPath(import.meta.url));
+const puppeteerStubPath = join(here, "puppeteer-stub.ts");
+
+function puppeteerStubPlugin(): import("esbuild").Plugin {
+  return {
+    name: "puppeteer-stub",
+    setup(build: import("esbuild").PluginBuild) {
+      build.onResolve({ filter: /^@cloudflare\/puppeteer$/ }, () => ({
+        path: puppeteerStubPath,
+      }));
+    },
+  };
+}
 export const HOST_SECRET = "test-host-internal-secret";
 export const SESSION_SECRET = "test-session-secret-32bytes-min";
 export const ORIGIN = "http://localhost:8787";
+export const MERCHANT_ORIGIN = "https://localhost:8787";
 
 export async function buildShoppingWorker(options?: {
   merchantDo?: "fixture" | "production";
@@ -22,19 +35,17 @@ export async function buildShoppingWorker(options?: {
     options?.merchantDo === "production"
       ? join(here, "merchant-do-production-shim.ts")
       : join(here, "merchant-do-shim.ts");
-  const plugins =
-    options?.merchantDo === "production"
-      ? [
-          {
-            name: "merchant-do-shim",
-            setup(build: import("esbuild").PluginBuild) {
-              build.onResolve({ filter: /merchant-do-shim\.js$/ }, () => ({
-                path: merchantShim,
-              }));
-            },
-          },
-        ]
-      : [];
+  const plugins: import("esbuild").Plugin[] = [puppeteerStubPlugin()];
+  if (options?.merchantDo === "production") {
+    plugins.push({
+      name: "merchant-do-shim",
+      setup(build: import("esbuild").PluginBuild) {
+        build.onResolve({ filter: /merchant-do-shim\.js$/ }, () => ({
+          path: merchantShim,
+        }));
+      },
+    });
+  }
   const bundle = await build({
     entryPoints: [join(here, "test-worker-entry.ts")],
     bundle: true,
@@ -64,6 +75,7 @@ export async function buildProductionWorkerBundle(): Promise<{
     conditions: ["workerd", "worker", "browser"],
     external: ["cloudflare:workers"],
     target: "es2023",
+    plugins: [puppeteerStubPlugin()],
   });
   return {
     script: bundle.outputFiles[0]!.text,
@@ -82,6 +94,10 @@ export type Harness = {
   mf: Miniflare;
   jwks: JWTVerifyGetKey;
   login: (customerId?: string) => Promise<{ cookie: string; csrf: string }>;
+  mintAgentCap: (
+    customerId: string,
+    innerSid: string,
+  ) => Promise<{ cookie: string; csrf: string; runId: string }>;
 };
 
 export async function startHarness(options?: {
@@ -111,6 +127,10 @@ export async function startHarness(options?: {
       SHOPPING_MERCHANT_WALLET_MODE: "simulated",
       SHOPPING_MERCHANT_WALLET_LABEL: "Stillroom wallet",
       SHOPPING_MERCHANT_DISPLAY_NAME: "Stillroom",
+      MERCHANT_ORIGIN,
+      SHOPPING_AGENT_AWAIT_RUN: "1",
+      AI: {},
+      BROWSER: {},
       ...options?.bindings,
     },
     durableObjects: {
@@ -119,6 +139,7 @@ export async function startHarness(options?: {
         className: "CustomerMerchantLedger",
         useSQLite: true,
       },
+      AGENT_RUNS: { className: "ShoppingAgentRunState", useSQLite: true },
     },
   };
   const runtime: { mf: Miniflare | null } = { mf: null };
@@ -158,7 +179,28 @@ export async function startHarness(options?: {
     return { cookie: body.cookie, csrf: body.csrfToken };
   }
 
-  return { mf, jwks, login };
+  async function mintAgentCap(
+    customerId: string,
+    innerSid: string,
+  ): Promise<{ cookie: string; csrf: string; runId: string }> {
+    const res = await mf.dispatchFetch(`${ORIGIN}/test/mint-agent-cap`, {
+      method: "POST",
+      headers: { "content-type": "application/json", origin: ORIGIN },
+      body: JSON.stringify({ customerId, innerSid }),
+    });
+    assertOk(res);
+    const body = (await res.json()) as {
+      cookie?: string;
+      csrfToken?: string;
+      runId?: string;
+    };
+    if (!body.cookie || !body.csrfToken || !body.runId) {
+      throw new Error("mint_agent_cap_failed");
+    }
+    return { cookie: body.cookie, csrf: body.csrfToken, runId: body.runId };
+  }
+
+  return { mf, jwks, login, mintAgentCap };
 }
 
 export function assertOk(res: DispatchResponse): void {

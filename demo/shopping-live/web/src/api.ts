@@ -20,9 +20,17 @@ export class ShoppingApiError extends Error {
 }
 
 let sessionCsrf: string | null = null;
+let agentBrowserCsrf: string | null = null;
 
 export function setSessionCsrfToken(token: string | null | undefined): void {
   sessionCsrf = typeof token === "string" && token.length > 0 ? token : null;
+}
+
+export function setAgentBrowserCsrfToken(
+  token: string | null | undefined,
+): void {
+  agentBrowserCsrf =
+    typeof token === "string" && token.length > 0 ? token : null;
 }
 
 async function request<T>(
@@ -39,6 +47,13 @@ async function request<T>(
     };
     if (sessionCsrf && ["POST", "PUT", "PATCH", "DELETE"].includes(method)) {
       headers["x-nominee-csrf"] = sessionCsrf;
+    }
+    if (
+      agentBrowserCsrf &&
+      path.startsWith("/agent-browser/") &&
+      ["POST", "PUT", "PATCH", "DELETE"].includes(method)
+    ) {
+      headers["x-nominee-agent-browser-csrf"] = agentBrowserCsrf;
     }
     response = await fetch(`/api${path}`, {
       ...init,
@@ -156,6 +171,19 @@ export const shoppingApi = {
     }),
 
   agent: (id: string) => request<AgentRun>(`/agent/${encodeURIComponent(id)}`),
+
+  agentBrowserSession: () =>
+    request<{ agentBrowser: boolean; csrfToken: string }>(
+      "/agent-browser/session",
+    ),
+
+  agentBrowserCart: () => request<{ cart: Cart | null }>("/agent-browser/cart"),
+
+  agentBrowserAddCartItem: (productId: string, quantity = 1) =>
+    request<{ cart: Cart | null }>("/agent-browser/cart/items", {
+      method: "POST",
+      body: JSON.stringify({ productId, quantity }),
+    }),
 
   cart: () => request<{ cart: Cart | null }>("/cart"),
 

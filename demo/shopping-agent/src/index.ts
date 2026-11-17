@@ -29,6 +29,7 @@ export { safeEvent, type ShoppingAgentEvent } from "./events.js";
 export type {
   BrowserSessionPort,
   BrowserLauncher,
+  BrowserInitCookie,
   ModelPort,
   ModelMessage,
   HostActionResult,

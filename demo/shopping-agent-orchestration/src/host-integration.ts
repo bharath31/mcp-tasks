@@ -48,7 +48,7 @@ export const HOST_HTTP_CONTRACT = {
 } as const;
 
 export const UNIMPLEMENTED_HOST_CONSTRAINTS = [
-  "Browser Run session does not inherit customer auth cookies (see ORCHESTRATION_BLOCKERS).",
+  "Agent browser cart access uses host-minted capability cookies (see shopping-live worker); never customer session/JWT.",
   "No Guardian approval, quote execution, or order placement in this orchestration slice.",
   "Production Workers AI and Browser Run calls require deployed bindings; CI uses injectable ports only.",
 ] as const;

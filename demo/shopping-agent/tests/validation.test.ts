@@ -60,6 +60,25 @@ test("defense-in-depth request filter rejects cleartext merchant subresources", 
   );
 });
 
+test("agent cart mode blocks non-agent-browser API paths", () => {
+  assert.equal(
+    shouldAllowBrowserRequest(
+      baseConfig,
+      "https://shop.example.test/api/quote",
+      { agentCartApiOnly: true },
+    ),
+    false,
+  );
+  assert.equal(
+    shouldAllowBrowserRequest(
+      baseConfig,
+      "https://shop.example.test/api/agent-browser/cart",
+      { agentCartApiOnly: true },
+    ),
+    true,
+  );
+});
+
 test("product display names are host-owned and not derived from model input", () => {
   assert.equal(expectedProductDisplayName("tray"), "Catchall tray");
   assert.doesNotThrow(() => PERMITTED_TOOL_NAMES.has("add_to_cart"));

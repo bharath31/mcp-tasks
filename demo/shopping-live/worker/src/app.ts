@@ -1,6 +1,17 @@
 import type { CustomerAccessTokenDeps } from "../../../shopping-merchant/src/identity/customer-access-token.js";
 import type { ShoppingLiveEnv } from "./env.js";
-import { json, problem, publicOrigin, serviceUnavailable } from "./http.js";
+import { json, problem, serviceUnavailable } from "./http.js";
+import {
+  agentBrowserAsCustomer,
+  agentBrowserPostCsrfOk,
+  resolveAgentBrowserContext,
+} from "./agent-browser-auth.js";
+import {
+  agentIntegrationConfigured,
+  handleAgentPoll,
+  handleAgentStart,
+  type AgentHostDeps,
+} from "./agent-host.js";
 import {
   handleAuthCallback,
   handleAuthLogin,
@@ -16,18 +27,24 @@ import {
   guardianOrderExecutionEnabled,
 } from "./order.js";
 
-const DEFERRED_AGENT_PREFIX = "/api/agent";
+const AGENT_PREFIX = "/api/agent";
+const AGENT_BROWSER_PREFIX = "/api/agent-browser";
 
-function isDeferredAgent(path: string): boolean {
-  return (
-    path === DEFERRED_AGENT_PREFIX ||
-    path.startsWith(`${DEFERRED_AGENT_PREFIX}/`)
-  );
-}
-
-export function createShoppingApp(deps: CustomerAccessTokenDeps = {}) {
+export function createShoppingApp(deps: AgentHostDeps = {}) {
   return {
-    async fetch(req: Request, env: ShoppingLiveEnv): Promise<Response> {
+    async fetch(
+      req: Request,
+      env: ShoppingLiveEnv,
+      ctx?: ExecutionContext,
+    ): Promise<Response> {
+      const executionCtx =
+        ctx ??
+        ({
+          waitUntil(promise: Promise<unknown>) {
+            void promise;
+          },
+          passThroughOnException() {},
+        } as ExecutionContext);
       const url = new URL(req.url);
       const path = url.pathname;
 
@@ -66,7 +83,96 @@ export function createShoppingApp(deps: CustomerAccessTokenDeps = {}) {
       }
 
       if (path.startsWith("/api/")) {
-        if (isDeferredAgent(path) && req.method !== "OPTIONS") {
+        if (path.startsWith(AGENT_BROWSER_PREFIX) && req.method !== "OPTIONS") {
+          const agentBrowser = await resolveAgentBrowserContext(req, env);
+          if (!agentBrowser) {
+            return problem(
+              403,
+              "agent_browser_denied",
+              "Agent browser access denied.",
+            );
+          }
+          const customer = await agentBrowserAsCustomer(
+            env,
+            agentBrowser,
+            deps,
+          );
+          if (!customer) {
+            return problem(
+              401,
+              "parent_session_revoked",
+              "Parent session is no longer active.",
+            );
+          }
+          if (path === "/api/agent-browser/session" && req.method === "GET") {
+            return json({
+              agentBrowser: true,
+              csrfToken: agentBrowser.csrfToken,
+            });
+          }
+          if (path === "/api/agent-browser/cart" && req.method === "GET") {
+            const cart = await readCustomerCart(env, customer);
+            return json({ cart });
+          }
+          if (
+            path === "/api/agent-browser/cart/items" &&
+            req.method === "POST"
+          ) {
+            if (!agentBrowserPostCsrfOk(agentBrowser, req)) {
+              return problem(
+                403,
+                "csrf_required",
+                "Agent browser CSRF token mismatch.",
+              );
+            }
+            const body = (await req.json().catch(() => null)) as {
+              productId?: unknown;
+              quantity?: unknown;
+            } | null;
+            const productId =
+              typeof body?.productId === "string" ? body.productId.trim() : "";
+            const quantity =
+              typeof body?.quantity === "number" ? body.quantity : 1;
+            if (!productId) {
+              return problem(400, "invalid_item", "productId is required.");
+            }
+            const cart = await addCartItem(env, customer, productId, quantity);
+            return json({ cart });
+          }
+          return problem(404, "not_found", "Not found.");
+        }
+
+        if (path === "/api/agent/start" && req.method === "POST") {
+          const customer = await resolveCustomerSession(req, env, deps);
+          if (!customer) {
+            return problem(401, "unauthorized", "Sign in required.");
+          }
+          const blocked = assertSameOrigin(req, env);
+          if (blocked) return blocked;
+          const csrf =
+            req.headers.get("x-nominee-csrf") ??
+            req.headers.get("X-Nominee-Csrf");
+          if (csrf !== sessionCsrfToken(customer.innerSid)) {
+            return problem(403, "csrf_required", "CSRF token mismatch.");
+          }
+          return handleAgentStart(req, env, customer, executionCtx, deps);
+        }
+
+        const agentPoll = path.match(/^\/api\/agent\/([^/]+)$/);
+        if (agentPoll && req.method === "GET") {
+          const customer = await resolveCustomerSession(req, env, deps);
+          if (!customer) {
+            return problem(401, "unauthorized", "Sign in required.");
+          }
+          const runId = decodeURIComponent(agentPoll[1]!);
+          return handleAgentPoll(env, customer, runId);
+        }
+
+        if (
+          (path === AGENT_PREFIX || path.startsWith(`${AGENT_PREFIX}/`)) &&
+          !agentIntegrationConfigured(env) &&
+          req.method !== "OPTIONS"
+        ) {
           return serviceUnavailable(
             "agent_unavailable",
             "Agent runs are not connected in this slice.",

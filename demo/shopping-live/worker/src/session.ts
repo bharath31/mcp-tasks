@@ -132,7 +132,16 @@ export async function clearSessionCookie(
       op: "revokeSession",
       sid: session.innerSid,
     });
+    await customerStateRpc(stub, session.customerId, {
+      op: "revokeAgentCapabilitiesForSession",
+      innerSid: session.innerSid,
+    });
   }
+  const { clearAgentCapabilityCookie } = await import("./agent-capability.js");
+  const clearCap = clearAgentCapabilityCookie(origin);
   const clearCookie = `${SESSION_COOKIE}=; HttpOnly; SameSite=Lax; Path=/; Max-Age=0${secureCookieParts(origin)}`;
-  return { clearCookie, customerId: session?.customerId };
+  return {
+    clearCookie: `${clearCookie}, ${clearCap}`,
+    customerId: session?.customerId,
+  };
 }

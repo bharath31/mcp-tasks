@@ -10,6 +10,9 @@ import {
 } from "./crypto-util.js";
 import { json, problem, publicOrigin, secureCookieParts } from "./http.js";
 import { mintSessionCookie } from "./session.js";
+import { agentIntegrationConfigured } from "./agent-host.js";
+import { guardianOrderExecutionEnabled } from "./order.js";
+import { shoppingCibaConfigured } from "../../../shopping-merchant/src/ciba/config.js";
 
 const OAUTH_TTL_MS = 5 * 60 * 1000;
 
@@ -230,6 +233,7 @@ export function sessionPayload(
 ): Record<string, unknown> {
   const origin = publicOrigin(req, env);
   const authReady = authConfigured(env);
+  const agentReady = agentIntegrationConfigured(env);
   return {
     authenticated: Boolean(customer),
     customerId: customer?.customerId,
@@ -239,11 +243,11 @@ export function sessionPayload(
       mode: env.SHOPPING_MERCHANT_WALLET_MODE === "live" ? "live" : "simulated",
       label: env.SHOPPING_MERCHANT_WALLET_LABEL ?? "Merchant wallet",
     },
-    agentConnected: false,
+    agentConnected: agentReady,
     capabilities: {
-      agentRuns: false,
-      guardianApproval: false,
-      orderExecute: false,
+      agentRuns: agentReady,
+      guardianApproval: shoppingCibaConfigured(env),
+      orderExecute: guardianOrderExecutionEnabled(env),
     },
   };
 }

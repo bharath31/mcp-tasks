@@ -3,12 +3,16 @@
     "target": "ES2023",
     "module": "ESNext",
     "moduleResolution": "Bundler",
-    "lib": ["ES2023", "WebWorker"],
+    "lib": ["ES2023", "WebWorker", "DOM"],
     "strict": true,
     "skipLibCheck": true,
     "noEmit": true,
-    "types": ["node"],
-    "typeRoots": ["../../../node_modules/@types"]
+    "types": ["@cloudflare/workers-types", "node"],
+    "typeRoots": ["../../../node_modules/@types", "../../../node_modules"],
+    "paths": {
+      "@nominee/shopping-agent": ["../../shopping-agent/src/index.ts"],
+      "@nominee/shopping-agent/*": ["../../shopping-agent/src/*"]
+    }
   },
   "include": ["tests/**/*.ts", "src/env.d.ts"]
 }

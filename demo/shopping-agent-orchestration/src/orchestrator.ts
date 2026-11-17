@@ -13,11 +13,8 @@ import {
 } from "./credential.js";
 import { shoppingEventToPublic } from "./run-events.js";
 import { sanitizePublicText } from "./sanitize.js";
-import {
-  agentRunRpc,
-  agentRunStub,
-  readAgentRunJson,
-} from "./rpc.js";
+import { agentRunRpc, agentRunStub, readAgentRunJson } from "./rpc.js";
+import type { BrowserInitCookie } from "@nominee/shopping-agent";
 import type {
   PublicAgentRun,
   RunPortsFactory,
@@ -31,16 +28,34 @@ export const DEFAULT_PRODUCTION_PORTS: RunPortsFactory = ({ config, env }) => ({
   launchBrowser: createPuppeteerLauncher(env.BROWSER, config),
 });
 
+export function createAgentCapabilityPorts(
+  capabilityCookies: BrowserInitCookie[],
+): RunPortsFactory {
+  return ({ config, env }) => {
+    const base = DEFAULT_PRODUCTION_PORTS({ config, env });
+    const innerLaunch = createPuppeteerLauncher(env.BROWSER, config);
+    return {
+      model: base.model,
+      launchBrowser: async (opts) =>
+        innerLaunch({
+          ...opts,
+          agentCartApiOnly: true,
+          initCookies: capabilityCookies,
+        }),
+    };
+  };
+}
+
 export const DEFAULT_MAX_RUNNING_AGE_MS = 30 * 60 * 1000;
 
 export type OrchestrationBlockers = {
-  /** Authenticated storefront session cookies are not injected into Browser Run yet. */
+  /** Host must mint short-lived agent-browser capability cookies; never copy customer session/JWT. */
   browserAuthenticatedSession: string;
 };
 
 export const ORCHESTRATION_BLOCKERS: OrchestrationBlockers = {
   browserAuthenticatedSession:
-    "createPuppeteerLauncher opens an isolated Browser Run session with merchant guardrails only. It does not propagate the customer's host session cookie or OAuth access token into the browser. Signed-in cart sync from the agent requires a host-defined cookie bootstrap (not implemented in shopping-agent or this module).",
+    "Signed-in agent cart sync is implemented by shopping-live via host-minted agent capability cookies injected into Browser Run only. Customer session cookies and OAuth tokens must never be copied into the model or browser.",
 };
 
 export function resolveOrchestrationConfig(
@@ -129,8 +144,8 @@ export async function executeShoppingAgentRun(opts: {
   const now = opts.now ?? Date.now;
   let executionStarted = false;
   const buffer: ShoppingAgentEvent[] = [];
-  let flushEventsImpl: ((events: ShoppingAgentEvent[]) => Promise<void>) | null =
-    null;
+  let flushEventsImpl:
+    ((events: ShoppingAgentEvent[]) => Promise<void>) | null = null;
 
   let persistenceTail: Promise<void> = Promise.resolve();
   const queuePersistence = (work: () => Promise<void>): void => {
@@ -152,7 +167,9 @@ export async function executeShoppingAgentRun(opts: {
     executionStarted = true;
 
     flushEventsImpl = async (events: ShoppingAgentEvent[]) => {
-      const mapped = events.map((e) => shoppingEventToPublic(e, now(), secrets));
+      const mapped = events.map((e) =>
+        shoppingEventToPublic(e, now(), secrets),
+      );
       if (!mapped.length) return;
       const res = await agentRunRpc(stub, opts.ownerId, {
         op: "appendEvents",

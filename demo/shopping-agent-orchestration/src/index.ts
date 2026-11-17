@@ -1,6 +1,4 @@
-export {
-  ShoppingAgentRunState,
-} from "./agent-run-do.js";
+export { ShoppingAgentRunState } from "./agent-run-do.js";
 export {
   agentRunCredential,
   mintAgentRunCredential,
@@ -17,13 +15,11 @@ export {
   cleanupStaleAgentRuns,
   resolveOrchestrationConfig,
   DEFAULT_PRODUCTION_PORTS,
+  createAgentCapabilityPorts,
   ORCHESTRATION_BLOCKERS,
   type OrchestrationBlockers,
 } from "./orchestrator.js";
-export {
-  shoppingEventToPublic,
-  assertPublicEventsSafe,
-} from "./run-events.js";
+export { shoppingEventToPublic, assertPublicEventsSafe } from "./run-events.js";
 export {
   agentRunRpc,
   agentRunStub,

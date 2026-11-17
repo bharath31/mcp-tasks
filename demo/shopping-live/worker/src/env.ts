@@ -1,13 +1,21 @@
 import type { ShoppingIdentityEnv } from "../../../shopping-merchant/src/identity/config.js";
 import type { MerchantLedgerEnv } from "../../../shopping-merchant/src/port-env.js";
 import type { ShoppingCibaEnv } from "../../../shopping-merchant/src/ciba/config.js";
+import type { ShoppingAgentOrchestrationBindings } from "../../../shopping-agent-orchestration/src/types.js";
+import type { WorkersAiBinding } from "@nominee/shopping-agent";
 
 export type ShoppingLiveEnv = MerchantLedgerEnv &
   ShoppingIdentityEnv &
-  Partial<ShoppingCibaEnv> & {
+  Partial<ShoppingCibaEnv> &
+  Partial<ShoppingAgentOrchestrationBindings> & {
     ASSETS: Fetcher;
     MERCHANT_LEDGER?: DurableObjectNamespace;
     CUSTOMER_STATE: DurableObjectNamespace;
+    MERCHANT_ORIGIN?: string;
+    AGENT_MODEL?: string;
+    AI?: WorkersAiBinding;
+    BROWSER?: Fetcher;
+    AGENT_RUNS?: DurableObjectNamespace;
     SHOPPING_AUTH0_CLIENT_ID?: string;
     SHOPPING_AUTH0_CLIENT_SECRET?: string;
     SHOPPING_SESSION_SECRET?: string;
@@ -20,6 +28,8 @@ export type ShoppingLiveEnv = MerchantLedgerEnv &
     SHOPPING_MERCHANT_WALLET_LABEL?: string;
     /** Fail-closed unless explicitly enabled by operator after live Guardian confirmation. */
     SHOPPING_GUARDIAN_EXECUTE_ENABLED?: string;
+    /** Test harness: await agent execution in-request instead of waitUntil. */
+    SHOPPING_AGENT_AWAIT_RUN?: string;
   };
 
 export const MAX_CUSTOMER_SESSIONS = 8;

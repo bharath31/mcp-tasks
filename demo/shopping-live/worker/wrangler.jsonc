@@ -13,15 +13,23 @@
     "bindings": [
       { "name": "CUSTOMER_STATE", "class_name": "CustomerHostState" },
       { "name": "MERCHANT_LEDGER", "class_name": "CustomerMerchantLedger" },
+      { "name": "AGENT_RUNS", "class_name": "ShoppingAgentRunState" },
     ],
   },
+  "ai": { "binding": "AI" },
+  "browser": { "binding": "BROWSER" },
   "migrations": [
     {
       "tag": "v1",
       "new_classes": ["CustomerHostState", "CustomerMerchantLedger"],
     },
+    {
+      "tag": "v2",
+      "new_classes": ["ShoppingAgentRunState"],
+    },
   ],
   "vars": {
+    "MERCHANT_ORIGIN": "https://nominee-shopping-live.workers.dev",
     "SHOPPING_BROWSER_AGENT_ID": "browser-shopping",
     "SHOPPING_MERCHANT_SHIPPING_ADDRESS_ID": "merchant-default",
     "SHOPPING_MERCHANT_DISPLAY_NAME": "Stillroom",

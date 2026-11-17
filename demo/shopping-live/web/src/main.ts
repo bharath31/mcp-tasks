@@ -1,4 +1,8 @@
-import { setSessionCsrfToken, shoppingApi } from "./api.js";
+import {
+  setAgentBrowserCsrfToken,
+  setSessionCsrfToken,
+  shoppingApi,
+} from "./api.js";
 import { formatMoney, STORE_PRODUCTS } from "./catalog.js";
 import { safeNavHref } from "./nav.js";
 import {
@@ -31,6 +35,7 @@ type UiState = {
   agentError: string | null;
   busy: string | null;
   apiAvailable: boolean;
+  agentBrowserCart: boolean;
 };
 
 const POLL_MS = 4000;
@@ -51,7 +56,12 @@ const ui: UiState = {
   agentError: null,
   busy: null,
   apiAvailable: false,
+  agentBrowserCart: false,
 };
+
+function merchantCartEnabled(): boolean {
+  return sessionVerified(ui.session) || ui.agentBrowserCart;
+}
 
 let pollGeneration = 0;
 let agentPollTimer: number | undefined;
@@ -418,7 +428,7 @@ function checkoutPanel(): HTMLElement {
 }
 
 function merchantBrowser(): HTMLElement {
-  const signedIn = sessionVerified(ui.session);
+  const signedIn = merchantCartEnabled();
   const panel = el("section", {
     className: "panel agent-panel",
     "data-nominee-panel": "agent-browser",
@@ -613,13 +623,26 @@ async function loadSession(): Promise<void> {
   }
 }
 
+async function loadAgentBrowserSession(): Promise<void> {
+  const result = await shoppingApi.agentBrowserSession();
+  if (result.ok && result.data.agentBrowser) {
+    ui.agentBrowserCart = true;
+    setAgentBrowserCsrfToken(result.data.csrfToken);
+  } else {
+    ui.agentBrowserCart = false;
+    setAgentBrowserCsrfToken(null);
+  }
+}
+
 async function refreshCart(): Promise<void> {
-  if (!sessionVerified(ui.session)) {
+  if (!merchantCartEnabled()) {
     ui.cart = null;
     ui.cartError = null;
     return;
   }
-  const result = await shoppingApi.cart();
+  const result = ui.agentBrowserCart
+    ? await shoppingApi.agentBrowserCart()
+    : await shoppingApi.cart();
   if (result.ok) {
     ui.cart = result.data.cart;
     ui.cartError = null;
@@ -630,9 +653,11 @@ async function refreshCart(): Promise<void> {
 }
 
 async function addToCart(productId: string): Promise<void> {
-  if (!sessionVerified(ui.session)) return;
+  if (!merchantCartEnabled()) return;
   await withBusy("cart-add", async () => {
-    const result = await shoppingApi.addCartItem(productId, 1);
+    const result = ui.agentBrowserCart
+      ? await shoppingApi.agentBrowserAddCartItem(productId, 1)
+      : await shoppingApi.addCartItem(productId, 1);
     if (result.ok) {
       ui.cart = result.data.cart;
       ui.cartError = null;
@@ -759,6 +784,12 @@ async function bootstrap(): Promise<void> {
   ui.orderMessage = null;
   ui.agent = null;
   await loadSession();
+  if (!sessionVerified(ui.session)) {
+    await loadAgentBrowserSession();
+  } else {
+    ui.agentBrowserCart = false;
+    setAgentBrowserCsrfToken(null);
+  }
   await refreshCart();
   render();
 }

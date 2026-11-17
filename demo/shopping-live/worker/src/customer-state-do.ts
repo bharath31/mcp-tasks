@@ -6,9 +6,16 @@ const BINDING_KEY = "nominee:bound_customer_id";
 const BROWSER_SESSION_KEY = "nominee:browser_session_id";
 const CART_KEY = "nominee:cart_id";
 const SESSIONS_KEY = "nominee:sessions";
+const AGENT_CAPS_KEY = "nominee:agent_capabilities";
 
 type SessionRecord = {
   accessToken: string;
+  expiresAtMs: number;
+};
+
+type AgentCapabilityRecord = {
+  innerSid: string;
+  digest: string;
   expiresAtMs: number;
 };
 
@@ -25,11 +32,25 @@ type CustomerStateRpc =
   | { op: "getCartId" }
   | { op: "setCartId"; cartId: string }
   | { op: "getBrowserSessionId" }
-  | { op: "setBrowserSessionId"; browserSessionId: string };
+  | { op: "setBrowserSessionId"; browserSessionId: string }
+  | {
+      op: "putAgentCapability";
+      runId: string;
+      innerSid: string;
+      digest: string;
+      expiresAtMs: number;
+    }
+  | { op: "verifyAgentCapability"; runId: string; digest: string }
+  | { op: "revokeAgentCapability"; runId: string }
+  | { op: "revokeAgentCapabilitiesExcept"; keepRunId: string }
+  | { op: "revokeAgentCapabilitiesForSession"; innerSid: string }
+  | { op: "revokeAllAgentCapabilities" };
 
 export class CustomerHostState extends DurableObject<ShoppingLiveEnv> {
   private sessionsLoaded = false;
   private sessions = new Map<string, SessionRecord>();
+  private capsLoaded = false;
+  private agentCaps = new Map<string, AgentCapabilityRecord>();
 
   private async loadSessions(): Promise<void> {
     if (this.sessionsLoaded) return;
@@ -52,6 +73,33 @@ export class CustomerHostState extends DurableObject<ShoppingLiveEnv> {
     );
   }
 
+  private async loadAgentCaps(): Promise<void> {
+    if (this.capsLoaded) return;
+    const stored = await this.ctx.storage.get<string>(AGENT_CAPS_KEY);
+    if (typeof stored === "string") {
+      try {
+        const parsed = JSON.parse(stored) as [string, AgentCapabilityRecord][];
+        this.agentCaps = new Map(parsed);
+      } catch {
+        this.agentCaps = new Map();
+      }
+    }
+    this.capsLoaded = true;
+  }
+
+  private async persistAgentCaps(): Promise<void> {
+    await this.ctx.storage.put(
+      AGENT_CAPS_KEY,
+      JSON.stringify([...this.agentCaps.entries()]),
+    );
+  }
+
+  private pruneExpiredCaps(now: number): void {
+    for (const [runId, rec] of this.agentCaps) {
+      if (rec.expiresAtMs <= now) this.agentCaps.delete(runId);
+    }
+  }
+
   private async assertBinding(customerId: string): Promise<void> {
     const bound = await this.ctx.storage.get<string>(BINDING_KEY);
     if (!bound) {
@@ -70,6 +118,8 @@ export class CustomerHostState extends DurableObject<ShoppingLiveEnv> {
       return Response.json({ error: "invalid_json" }, { status: 400 });
     }
     await this.loadSessions();
+    await this.loadAgentCaps();
+    const now = Date.now();
     try {
       const headerCustomer = request.headers.get("x-nominee-customer-id");
       if (body.op === "bindCustomer") {
@@ -81,7 +131,6 @@ export class CustomerHostState extends DurableObject<ShoppingLiveEnv> {
 
       switch (body.op) {
         case "createSession": {
-          const now = Date.now();
           for (const [sid, rec] of this.sessions) {
             if (rec.expiresAtMs <= now) this.sessions.delete(sid);
           }
@@ -107,7 +156,11 @@ export class CustomerHostState extends DurableObject<ShoppingLiveEnv> {
         }
         case "revokeSession": {
           this.sessions.delete(body.sid);
+          for (const [runId, cap] of this.agentCaps) {
+            if (cap.innerSid === body.sid) this.agentCaps.delete(runId);
+          }
           await this.persistSessions();
+          await this.persistAgentCaps();
           return Response.json({ ok: true });
         }
         case "getCartId": {
@@ -131,6 +184,75 @@ export class CustomerHostState extends DurableObject<ShoppingLiveEnv> {
             BROWSER_SESSION_KEY,
             body.browserSessionId,
           );
+          return Response.json({ ok: true });
+        }
+        case "putAgentCapability": {
+          this.pruneExpiredCaps(now);
+          this.agentCaps.set(body.runId, {
+            innerSid: body.innerSid,
+            digest: body.digest,
+            expiresAtMs: body.expiresAtMs,
+          });
+          await this.persistAgentCaps();
+          return Response.json({ ok: true });
+        }
+        case "verifyAgentCapability": {
+          this.pruneExpiredCaps(now);
+          const rec = this.agentCaps.get(body.runId);
+          if (!rec || rec.digest !== body.digest) {
+            return Response.json(
+              { error: "capability_invalid" },
+              { status: 403 },
+            );
+          }
+          if (rec.expiresAtMs <= now) {
+            this.agentCaps.delete(body.runId);
+            await this.persistAgentCaps();
+            return Response.json(
+              { error: "capability_expired" },
+              { status: 401 },
+            );
+          }
+          if (!this.sessions.has(rec.innerSid)) {
+            return Response.json(
+              { error: "parent_session_revoked" },
+              { status: 401 },
+            );
+          }
+          const session = this.sessions.get(rec.innerSid)!;
+          if (session.expiresAtMs <= now) {
+            return Response.json(
+              { error: "parent_session_expired" },
+              { status: 401 },
+            );
+          }
+          return Response.json({
+            innerSid: rec.innerSid,
+            expiresAtMs: rec.expiresAtMs,
+          });
+        }
+        case "revokeAgentCapability": {
+          this.agentCaps.delete(body.runId);
+          await this.persistAgentCaps();
+          return Response.json({ ok: true });
+        }
+        case "revokeAgentCapabilitiesExcept": {
+          for (const runId of this.agentCaps.keys()) {
+            if (runId !== body.keepRunId) this.agentCaps.delete(runId);
+          }
+          await this.persistAgentCaps();
+          return Response.json({ ok: true });
+        }
+        case "revokeAgentCapabilitiesForSession": {
+          for (const [runId, cap] of this.agentCaps) {
+            if (cap.innerSid === body.innerSid) this.agentCaps.delete(runId);
+          }
+          await this.persistAgentCaps();
+          return Response.json({ ok: true });
+        }
+        case "revokeAllAgentCapabilities": {
+          this.agentCaps.clear();
+          await this.persistAgentCaps();
           return Response.json({ ok: true });
         }
         default:

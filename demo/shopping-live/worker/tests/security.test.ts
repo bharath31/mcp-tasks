@@ -30,7 +30,7 @@ test("malformed session cookie returns 401 on cart", async () => {
   assert.equal(status, 401);
 });
 
-test("deferred agent route returns 503", async () => {
+test("agent start requires authenticated customer session", async () => {
   const { status, body } = await apiJson<{ code?: string }>(
     harness.mf,
     "/api/agent/start",
@@ -40,11 +40,11 @@ test("deferred agent route returns 503", async () => {
         "content-type": "application/json",
         origin: ORIGIN,
       },
-      body: JSON.stringify({ goal: "x" }),
+      body: JSON.stringify({ goal: "Add a tray to my cart" }),
     },
   );
-  assert.equal(status, 503);
-  assert.equal(body.code, "agent_unavailable");
+  assert.equal(status, 401);
+  assert.equal(body.code, "unauthorized");
 });
 
 test("CSRF blocks cart mutation without token", async () => {
