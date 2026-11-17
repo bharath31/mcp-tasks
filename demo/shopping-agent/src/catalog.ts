@@ -27,17 +27,6 @@ export const STILLROOM_CATALOG: readonly CatalogProduct[] = [
   { id: "weight", name: "Paper weight", priceMinor: 3200, currency: "USD" },
 ] as const;
 
-/**
- * Fixed DOM mapping for the reference storefront grid (#shop .grid article).
- * The model cannot supply selectors; only these indices are clickable.
- */
-export const PRODUCT_GRID_INDEX: Record<StillroomProductId, number> = {
-  tray: 1,
-  cup: 2,
-  book: 3,
-  weight: 4,
-};
-
 /** Buttons that mark the checkout boundary — host refuses to click these. */
 export const CHECKOUT_CONTROL_LABELS = [
   "Review quote",

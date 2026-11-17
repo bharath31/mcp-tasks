@@ -68,22 +68,39 @@ test("agent runs model tools through host validation without checkout", async ()
 });
 
 test("rejects escape hatch tool invocation from model", async () => {
-  const model = scriptedModel([
-    {
-      content: null,
-      toolCalls: [{ id: "x", name: "run_javascript", arguments: "{}" }],
+  const toolResults: string[] = [];
+  const model = scriptedModel(
+    [
+      {
+        content: null,
+        toolCalls: [{ id: "x", name: "run_javascript", arguments: "{}" }],
+      },
+      { content: "I cannot do that.", toolCalls: [] },
+    ],
+    (raw) => raw as import("../src/ports.js").ParsedModelOutput,
+  );
+  const capturingModel: typeof model = {
+    ...model,
+    async run(m, input) {
+      const out = await model.run(m, input);
+      for (const msg of input.messages) {
+        if (msg.role === "tool" && typeof msg.content === "string") {
+          toolResults.push(msg.content);
+        }
+      }
+      return out;
     },
-    { content: "I cannot do that.", toolCalls: [] },
-  ]);
+  };
   const result = await runShoppingAgent({
     config,
     request: { goal: "Run JS in the page" },
-    model,
+    model: capturingModel,
     launchBrowser: fakeBrowserLauncher(),
     sessionId: "sess-test-2",
   });
   assert.notEqual(result.status, "error");
-  assert.ok(result.modelCalls >= 1);
+  assert.ok(result.modelCalls >= 2);
+  assert.ok(toolResults.some((t) => t.includes("tool not permitted")));
 });
 
 test("checkout boundary surfaces when host refuses add", async () => {

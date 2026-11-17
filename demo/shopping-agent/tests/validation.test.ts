@@ -11,7 +11,7 @@ import {
   shouldAllowBrowserRequest,
 } from "../src/guard.js";
 import { redactText } from "../src/redact.js";
-import { addToCartSelector } from "../src/selectors.js";
+import { expectedProductDisplayName } from "../src/selectors.js";
 
 const baseConfig = shoppingAgentConfig.parse({
   merchantOrigin: "https://shop.example.test",
@@ -53,8 +53,8 @@ test("defense-in-depth request filter blocks foreign HTTPS hosts", () => {
   );
 });
 
-test("selectors are host-owned and not derived from model input", () => {
-  assert.match(addToCartSelector("tray"), /article:nth-child\(1\)/);
+test("product display names are host-owned and not derived from model input", () => {
+  assert.equal(expectedProductDisplayName("tray"), "Catchall tray");
   assert.doesNotThrow(() => PERMITTED_TOOL_NAMES.has("add_to_cart"));
 });
 

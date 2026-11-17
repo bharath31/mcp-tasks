@@ -11,7 +11,12 @@ export type CartSnapshot = {
 
 export type HostActionResult =
   | { ok: true; kind: "navigate"; url: string }
-  | { ok: true; kind: "view_catalog"; catalog: CatalogSnapshot }
+  | {
+      ok: true;
+      kind: "view_catalog";
+      catalog: CatalogSnapshot;
+      disclaimer?: string;
+    }
   | { ok: true; kind: "add_to_cart"; productId: string }
   | { ok: true; kind: "view_cart"; cart: CartSnapshot }
   | { ok: true; kind: "stop"; summary: string }

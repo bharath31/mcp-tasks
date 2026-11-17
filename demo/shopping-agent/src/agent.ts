@@ -131,11 +131,17 @@ export async function runShoppingAgent(opts: {
 
       for (const call of toolCalls) {
         if (!PERMITTED_TOOL_NAMES.has(call.name)) {
+          const err = `tool not permitted: ${call.name}`;
           emit({
             type: "host_action",
             action: { kind: "stop", summary: "denied" },
             ok: false,
-            error: `tool not permitted: ${call.name}`,
+            error: err,
+          });
+          messages.push({
+            role: "tool",
+            tool_call_id: call.id,
+            content: clipToolResult({ ok: false, error: err }),
           });
           continue;
         }

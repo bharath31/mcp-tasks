@@ -34,7 +34,15 @@ export type {
   HostActionResult,
 } from "./ports.js";
 export { executeHostAction } from "./executor.js";
-export { addToCartSelector } from "./selectors.js";
+export {
+  expectedProductDisplayName,
+  SHOP_GRID_SELECTOR,
+} from "./selectors.js";
+export {
+  buildCatalogFromGrid,
+  buildCartFromDom,
+  CATALOG_PRICE_DISCLAIMER,
+} from "./dom.js";
 export {
   runShoppingAgent,
   shoppingRequest,
