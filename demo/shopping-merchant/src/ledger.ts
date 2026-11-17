@@ -2,6 +2,10 @@ import { catalogProduct } from "./catalog.js";
 import { initMerchantSchema, type SqlDatabase, type SqlRow } from "./sql.js";
 
 import { SERVER_CATALOG } from "./catalog.js";
+import {
+  recordApprovalWithConsumedChallenge,
+  type RecordCibaLedgerApprovalOptions,
+} from "./ciba/ledger-bridge.js";
 import type {
   AgentActor,
   Cart,
@@ -417,6 +421,21 @@ export function createMerchantLedger(
       return quoteView(record.data as string);
     },
 
+    hasCustomerApprovalForQuote(quote: Quote): boolean {
+      if (quote.customerId !== customerId) fail();
+      const row = db
+        .exec(
+          `SELECT 1 AS ok FROM quote_customer_approvals
+           WHERE quote_id = ? AND operation_id = ? AND revision = ? AND customer_id = ?`,
+          quote.id,
+          quote.operationId,
+          quote.revision,
+          quote.customerId,
+        )
+        .one();
+      return Boolean(row);
+    },
+
     async validateQuote(quoteId: string, actor: TrustedActor): Promise<Quote> {
       const record = requireRow(
         db.exec("SELECT * FROM quotes WHERE id = ?", quoteId).one(),
@@ -728,6 +747,31 @@ export function createMerchantLedger(
 
     // Only an adapter that atomically fences all dispatch and updates this ledger
     // in the same transaction may provide atomicAbandonAbsent on ports.
+    /**
+     * Trusted-host-only: atomically consume an approved CIBA challenge and record ledger approval.
+     * Does not call verifyCustomerApproval or re-poll the CIBA provider.
+     *
+     * `purchase_ciba_challenges.status = 'approved'` is trusted internal state written exclusively
+     * by the CIBA coordinator after a verified direct provider poll (proof bound from the token
+     * response). Call only from the host seam after poll success — never from a public transition.
+     * Do not nest inside another ledger `db.transaction`; the bridge opens its own transaction.
+     */
+    recordCustomerApprovalFromCibaChallenge(
+      challengeId: string,
+      actor: HumanActor,
+      quote: Quote,
+      options: RecordCibaLedgerApprovalOptions,
+    ) {
+      validateActor(actor);
+      if (actor.kind !== "human") fail();
+      return recordApprovalWithConsumedChallenge(
+        db,
+        customerId,
+        { challengeId, quote, actor },
+        options,
+      );
+    },
+
     async abandonQuote(
       quoteId: string,
       actor: TrustedActor,

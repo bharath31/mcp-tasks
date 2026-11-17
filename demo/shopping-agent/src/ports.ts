@@ -66,10 +66,24 @@ export interface ModelPort {
   parseOutput(raw: unknown): ParsedModelOutput;
 }
 
+export type BrowserInitCookie = {
+  name: string;
+  value: string;
+  domain: string;
+  path: string;
+  secure: boolean;
+  httpOnly: boolean;
+  sameSite: "Strict" | "Lax" | "None";
+};
+
 export type BrowserLauncher = (opts: {
   sessionId: string;
   merchantHostname: string;
   allowedDomains: string[];
   /** Wall-clock millis after which host waits must fail closed. */
   sessionDeadlineMs: number;
+  /** Host-issued capability cookies for agent browser cart sync only. */
+  initCookies?: BrowserInitCookie[];
+  /** Deny non–agent-browser `/api/*` subresource requests. */
+  agentCartApiOnly?: boolean;
 }) => Promise<BrowserSessionPort>;

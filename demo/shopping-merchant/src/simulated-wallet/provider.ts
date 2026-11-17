@@ -49,6 +49,94 @@ function readBalanceMinor(db: SqlDatabase, customerId: string): number {
  * **Not human approval.** Spending authority still requires the merchant host to verify
  * customer consent and quote terms before invoking `place`.
  */
+/**
+ * Debit path for {@link createSimulatedWalletOrderProvider}; caller must hold an open DB transaction.
+ */
+export function placeSimulatedWalletOrderWithinTransaction(
+  db: SqlDatabase,
+  customerId: string,
+  quote: Quote,
+  idempotencyKey: string,
+): { id: string } | null {
+  if (!nonempty(idempotencyKey)) {
+    throw new Error("sim_wallet_idempotency_required");
+  }
+  assertQuotePayable(quote, customerId);
+  const terms = quoteTermsFingerprint(quote);
+  initSimulatedWalletSchema(db);
+
+  const prior = db
+    .exec(
+      "SELECT order_id, terms_fingerprint, quote_id, customer_id, total_minor, currency FROM sim_wallet_orders WHERE idempotency_key = ?",
+      idempotencyKey,
+    )
+    .one();
+  if (prior) {
+    assertOrderTermsMatch(prior, terms, quote);
+    return { id: prior.order_id as string };
+  }
+
+  const priorOperation = db
+    .exec(
+      "SELECT idempotency_key, order_id, terms_fingerprint, quote_id, customer_id, total_minor, currency FROM sim_wallet_orders WHERE customer_id = ? AND operation_id = ?",
+      customerId,
+      quote.operationId,
+    )
+    .one();
+  if (priorOperation) {
+    assertOrderTermsMatch(priorOperation, terms, quote);
+    throw new Error("sim_wallet_operation_debited");
+  }
+
+  db.exec(
+    "INSERT OR IGNORE INTO sim_wallet_balances (customer_id, balance_minor) VALUES (?, 0)",
+    customerId,
+  );
+  const balanceBefore = readBalanceMinor(db, customerId);
+  if (balanceBefore < quote.totalMinor) {
+    return null;
+  }
+  const balanceAfterExpected = balanceBefore - quote.totalMinor;
+  if (!Number.isSafeInteger(balanceAfterExpected)) {
+    throw new Error("sim_wallet_balance_overflow");
+  }
+  db.exec(
+    `UPDATE sim_wallet_balances
+     SET balance_minor = balance_minor - ?
+     WHERE customer_id = ? AND balance_minor >= ?`,
+    quote.totalMinor,
+    customerId,
+    quote.totalMinor,
+  );
+  const balanceAfter = readBalanceMinor(db, customerId);
+  if (balanceAfter !== balanceAfterExpected) {
+    throw new Error("sim_wallet_balance_inconsistency");
+  }
+
+  const orderId = crypto.randomUUID();
+  try {
+    db.exec(
+      `INSERT INTO sim_wallet_orders
+       (idempotency_key, order_id, customer_id, quote_id, operation_id, total_minor, currency, terms_fingerprint)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+      idempotencyKey,
+      orderId,
+      quote.customerId,
+      quote.id,
+      quote.operationId,
+      quote.totalMinor,
+      quote.currency,
+      terms,
+    );
+  } catch (error) {
+    if (isSqliteUniqueViolation(error)) {
+      throw new Error("sim_wallet_operation_debited");
+    }
+    throw error;
+  }
+  return { id: orderId };
+}
+
 export function createSimulatedWalletOrderProvider(
   db: SqlDatabase,
   customerId: string,
@@ -60,84 +148,14 @@ export function createSimulatedWalletOrderProvider(
 
   return {
     async place({ quote, idempotencyKey }) {
-      if (!nonempty(idempotencyKey)) {
-        throw new Error("sim_wallet_idempotency_required");
-      }
-      assertQuotePayable(quote, customerId);
-      const terms = quoteTermsFingerprint(quote);
-
-      return db.transaction(() => {
-        const prior = db
-          .exec(
-            "SELECT order_id, terms_fingerprint, quote_id, customer_id, total_minor, currency FROM sim_wallet_orders WHERE idempotency_key = ?",
-            idempotencyKey,
-          )
-          .one();
-        if (prior) {
-          assertOrderTermsMatch(prior, terms, quote);
-          return { id: prior.order_id as string };
-        }
-
-        const priorOperation = db
-          .exec(
-            "SELECT idempotency_key, order_id, terms_fingerprint, quote_id, customer_id, total_minor, currency FROM sim_wallet_orders WHERE customer_id = ? AND operation_id = ?",
-            customerId,
-            quote.operationId,
-          )
-          .one();
-        if (priorOperation) {
-          assertOrderTermsMatch(priorOperation, terms, quote);
-          throw new Error("sim_wallet_operation_debited");
-        }
-
-        db.exec(
-          "INSERT OR IGNORE INTO sim_wallet_balances (customer_id, balance_minor) VALUES (?, 0)",
+      return db.transaction(() =>
+        placeSimulatedWalletOrderWithinTransaction(
+          db,
           customerId,
-        );
-        const balanceBefore = readBalanceMinor(db, customerId);
-        if (balanceBefore < quote.totalMinor) {
-          return null;
-        }
-        const balanceAfterExpected = balanceBefore - quote.totalMinor;
-        if (!Number.isSafeInteger(balanceAfterExpected)) {
-          throw new Error("sim_wallet_balance_overflow");
-        }
-        db.exec(
-          `UPDATE sim_wallet_balances
-           SET balance_minor = balance_minor - ?
-           WHERE customer_id = ? AND balance_minor >= ?`,
-          quote.totalMinor,
-          customerId,
-          quote.totalMinor,
-        );
-        const balanceAfter = readBalanceMinor(db, customerId);
-        if (balanceAfter !== balanceAfterExpected) {
-          throw new Error("sim_wallet_balance_inconsistency");
-        }
-
-        const orderId = crypto.randomUUID();
-        try {
-          db.exec(
-            `INSERT INTO sim_wallet_orders
-             (idempotency_key, order_id, customer_id, quote_id, operation_id, total_minor, currency, terms_fingerprint)
-             VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
-            idempotencyKey,
-            orderId,
-            quote.customerId,
-            quote.id,
-            quote.operationId,
-            quote.totalMinor,
-            quote.currency,
-            terms,
-          );
-        } catch (error) {
-          if (isSqliteUniqueViolation(error)) {
-            throw new Error("sim_wallet_operation_debited");
-          }
-          throw error;
-        }
-        return { id: orderId };
-      });
+          quote,
+          idempotencyKey,
+        ),
+      );
     },
 
     async reconcile({ quote, idempotencyKey }) {

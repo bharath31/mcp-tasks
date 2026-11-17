@@ -1,0 +1,16 @@
+{
+  "compilerOptions": {
+    "target": "ES2023",
+    "module": "ESNext",
+    "moduleResolution": "bundler",
+    "strict": true,
+    "noEmit": true,
+    "skipLibCheck": true,
+    "lib": ["ES2023", "WebWorker", "DOM"],
+    "types": ["@cloudflare/workers-types", "node"],
+    "paths": {
+      "@nominee/shopping-agent": ["../shopping-agent/src/index.ts"]
+    }
+  },
+  "include": ["src/**/*.ts", "tests/**/*.ts"]
+}

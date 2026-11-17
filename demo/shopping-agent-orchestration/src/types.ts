@@ -1,0 +1,72 @@
+import type {
+  BrowserLauncher,
+  ModelPort,
+  ShoppingAgentConfig,
+  WorkersAiBinding,
+} from "@nominee/shopping-agent";
+
+/** Wrangler-style bindings the shopping-live host must wire (not edited in this slice). */
+export type ShoppingAgentOrchestrationBindings = {
+  /** Workers AI (`"ai": { "binding": "AI" }`). */
+  AI: WorkersAiBinding;
+  /** Browser Run (`"browser": { "binding": "BROWSER" }`). */
+  BROWSER: Fetcher;
+  /** Owner-bound run ledger (`new_sqlite_classes` / Durable Object). */
+  AGENT_RUNS: DurableObjectNamespace;
+};
+
+export type ShoppingAgentOrchestrationEnv =
+  ShoppingAgentOrchestrationBindings & {
+    /** HTTPS storefront origin; must match shopping-agent config. */
+    MERCHANT_ORIGIN: string;
+    /** Workers AI model id (optional; shopping-agent config default otherwise). */
+    AGENT_MODEL?: string;
+    /** Test harness only — in-worker loopback to agent-browser HTTP. */
+    SELF_SUBFETCH?: Fetcher;
+  };
+
+export const RUN_STATUSES = [
+  "pending",
+  "running",
+  "completed",
+  "stopped",
+  "budget_exhausted",
+  "failed",
+] as const;
+
+export type RunStatus = (typeof RUN_STATUSES)[number];
+
+/** UI/API-safe run record (no secrets, no live-view URLs). */
+export type PublicAgentRun = {
+  id: string;
+  ownerId: string;
+  status: RunStatus;
+  goal: string;
+  createdAtMs: number;
+  updatedAtMs: number;
+  sessionId: string | null;
+  reply: string | null;
+  events: PublicRunEvent[];
+};
+
+export type PublicRunEvent = {
+  atMs: number;
+  kind: string;
+  message: string;
+};
+
+export type StartRunInput = {
+  ownerId: string;
+  goal: string;
+  /** Parent OAuth login session that started the run (poll binding). */
+  parentInnerSid: string;
+  config?: Partial<ShoppingAgentConfig>;
+};
+
+export type RunPortsFactory = (ctx: {
+  config: ShoppingAgentConfig;
+  env: ShoppingAgentOrchestrationEnv;
+}) => {
+  model: ModelPort;
+  launchBrowser: BrowserLauncher;
+};

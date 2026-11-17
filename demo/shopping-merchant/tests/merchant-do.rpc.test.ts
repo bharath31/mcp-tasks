@@ -67,12 +67,12 @@ function merchantMiniflare(
   opts?: { omitHostSecret?: boolean; productionPorts?: boolean },
 ): Miniflare {
   const bindings: Record<string, string> = {};
-  if (!opts?.productionPorts) {
-    bindings.MERCHANT_HOST_INTERNAL_SECRET = opts?.omitHostSecret
-      ? ""
-      : HOST_SECRET;
-  } else if (!opts?.omitHostSecret) {
+  if (!opts?.omitHostSecret) {
     bindings.MERCHANT_HOST_INTERNAL_SECRET = HOST_SECRET;
+  }
+  if (opts?.productionPorts) {
+    bindings.SHOPPING_MERCHANT_SHIPPING_ADDRESS_ID = "merchant-default";
+    bindings.SHOPPING_MERCHANT_DISPLAY_NAME = "Fixture Shop";
   }
   return new Miniflare(
     convertV4MiniflareOptions({
@@ -322,23 +322,109 @@ test("DO abandonQuote RPC is secret-gated and surfaces ledger abandon errors", a
   }
 });
 
-test("production DO ports stay unconfigured even with legacy fixture env keys", async () => {
+test("production DO startPurchaseCiba stays unavailable without CIBA env", async () => {
+  const prodCustomer = "auth0|ciba-off-customer";
   const mf = merchantMiniflare(scriptProductionPorts, {
     productionPorts: true,
   });
   try {
-    const response = await mf.dispatchFetch("http://ledger/", {
+    const human = {
+      kind: "human",
+      customerId: prodCustomer,
+      scopes: ["shopping:customer"],
+    };
+    const started = await mf.dispatchFetch("http://ledger/", {
       method: "POST",
       headers: {
-        "x-nominee-customer-id": CUSTOMER,
+        "x-nominee-customer-id": prodCustomer,
         "content-type": "application/json",
         [MERCHANT_HOST_INTERNAL_SECRET_HEADER]: HOST_SECRET,
       },
-      body: JSON.stringify({ op: "createCart", actor: agent }),
+      body: JSON.stringify({
+        op: "startPurchaseCiba",
+        actor: human,
+        quoteId: "missing",
+        browserSessionId: "sess",
+        agentId: null,
+      }),
     });
-    assert.equal(response.status, 503);
-    const body = (await response.json()) as { error: string };
-    assert.match(body.error, /merchant_ports_unconfigured/);
+    assert.equal(started.status, 403);
+  } finally {
+    await mf.dispose();
+  }
+});
+
+test("production DO wires fenced wallet and merchant demo address", async () => {
+  const prodCustomer = "auth0|quote-customer";
+  const prodAgent = { ...agent, customerId: prodCustomer };
+  const mf = merchantMiniflare(scriptProductionPorts, {
+    productionPorts: true,
+  });
+  try {
+    const cartRes = await mf.dispatchFetch("http://ledger/", {
+      method: "POST",
+      headers: {
+        "x-nominee-customer-id": prodCustomer,
+        "content-type": "application/json",
+        [MERCHANT_HOST_INTERNAL_SECRET_HEADER]: HOST_SECRET,
+      },
+      body: JSON.stringify({ op: "createCart", actor: prodAgent }),
+    });
+    assert.equal(cartRes.status, 200);
+    const cart = (await cartRes.json()) as { id: string };
+    const updateRes = await mf.dispatchFetch("http://ledger/", {
+      method: "POST",
+      headers: {
+        "x-nominee-customer-id": prodCustomer,
+        "content-type": "application/json",
+        [MERCHANT_HOST_INTERNAL_SECRET_HEADER]: HOST_SECRET,
+      },
+      body: JSON.stringify({
+        op: "updateCart",
+        actor: prodAgent,
+        cartId: cart.id,
+        items: [
+          { productId: "mug", quantity: 1, priceMinor: 1800, currency: "USD" },
+        ],
+      }),
+    });
+    assert.equal(updateRes.status, 200);
+    const quoteRes = await mf.dispatchFetch("http://ledger/", {
+      method: "POST",
+      headers: {
+        "x-nominee-customer-id": prodCustomer,
+        "content-type": "application/json",
+        [MERCHANT_HOST_INTERNAL_SECRET_HEADER]: HOST_SECRET,
+      },
+      body: JSON.stringify({
+        op: "createQuote",
+        actor: prodAgent,
+        cartId: cart.id,
+        shippingAddressId: "merchant-default",
+      }),
+    });
+    assert.equal(quoteRes.status, 200);
+    const quote = (await quoteRes.json()) as {
+      id: string;
+      totalMinor: number;
+    };
+    assert.equal(quote.totalMinor > 0, true);
+    const injectRes = await mf.dispatchFetch("http://ledger/", {
+      method: "POST",
+      headers: {
+        "x-nominee-customer-id": prodCustomer,
+        "content-type": "application/json",
+        [MERCHANT_HOST_INTERNAL_SECRET_HEADER]: HOST_SECRET,
+      },
+      body: JSON.stringify({
+        op: "hostInjectCustomerApproval",
+        quoteId: quote.id,
+        actor: { kind: "human", customerId: prodCustomer, scopes: [] },
+      }),
+    });
+    assert.equal(injectRes.status, 409);
+    const err = (await injectRes.json()) as { error: string };
+    assert.match(err.error, /customer_approval_unverified/);
   } finally {
     await mf.dispose();
   }

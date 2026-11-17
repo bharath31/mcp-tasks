@@ -1,0 +1,11 @@
+{
+  "name": "@nominee/shopping-live-web",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "node build.mjs",
+    "typecheck": "tsc --noEmit -p tsconfig.json",
+    "test": "npm run typecheck && node --import tsx --test tests/*.test.ts",
+    "test:browser": "node tests/browser.cjs && node --import tsx --test tests/browser-agent-capability.test.ts"
+  }
+}

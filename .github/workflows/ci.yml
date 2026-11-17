@@ -77,6 +77,13 @@ jobs:
       - run: npm --prefix demo/shopping-merchant test
       - run: npm --prefix demo/shopping-agent run typecheck
       - run: npm --prefix demo/shopping-agent test
+      - run: npm ci --prefix demo/shopping-agent-orchestration
+      - run: npm --prefix demo/shopping-agent-orchestration run typecheck
+      - run: npm --prefix demo/shopping-agent-orchestration test
+      - run: npm --prefix demo/shopping-live/web run build
+      - run: npm --prefix demo/shopping-live/web test
+      - run: npm --prefix demo/shopping-live/worker run build
+      - run: npm --prefix demo/shopping-live/worker run typecheck:tests
       - run: npm --prefix examples/storefront exec -- playwright-core install --with-deps chromium
       - name: Fixture browser smoke (actual local backend)
         run: |
@@ -88,3 +95,9 @@ jobs:
           trap 'kill "$server" 2>/dev/null || true' EXIT
           for i in $(seq 1 60); do grep -q 'Fixture only:' /tmp/fixture-server.log && break; sleep 1; done
           npm run test:fixture-browser
+      - name: Shopping live web browser smoke
+        run: |
+          export CHROME_PATH="$(find ~/.cache/ms-playwright -path '*chrome-linux*/chrome' -type f | head -1)"
+          test -x "$CHROME_PATH"
+          npm --prefix demo/shopping-live/web run build
+          CHROME_PATH="$CHROME_PATH" npm --prefix demo/shopping-live/web run test:browser

@@ -58,16 +58,27 @@ export function buildNavigationUrl(
   return `${url.replace(/\/$/, "")}${hash}`;
 }
 
+const AGENT_BROWSER_CART_PATHS = [
+  "/api/agent-browser/session",
+  "/api/agent-browser/cart",
+  "/api/agent-browser/cart/items",
+] as const;
+
 /** Defense-in-depth: host-side request URL policy (complements Browser Run guardrails). */
 export function shouldAllowBrowserRequest(
   config: ShoppingAgentConfig,
   requestUrl: string,
+  opts?: { agentCartApiOnly?: boolean },
 ): boolean {
   try {
     const u = new URL(requestUrl);
     if (u.protocol !== "https:") return false;
-    // Subresources on the merchant origin are permitted; other HTTPS origins are denied.
-    return u.hostname === merchantHostname(config);
+    if (u.hostname !== merchantHostname(config)) return false;
+    if (!opts?.agentCartApiOnly) return true;
+    if (!u.pathname.startsWith("/api/")) return true;
+    return AGENT_BROWSER_CART_PATHS.some(
+      (path) => u.pathname === path || u.pathname.startsWith(`${path}/`),
+    );
   } catch {
     return false;
   }

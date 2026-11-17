@@ -18,6 +18,12 @@ Debiting this wallet is **payment simulation**, not customer approval. The trust
 - **`reconcile` with a row** → `{ id }` when the quote matches stored terms; otherwise `sim_wallet_idempotency_conflict`.
 - **Post-expiry recovery:** Same as any other replay—match the original snapshot; no expiry wall-clock gate in the wallet.
 
-## Integration (future slice)
+## Ledger fencing (atomic abandonment)
 
-Wire `createSimulatedWalletOrderProvider(db, customerId)` inside the Durable Object when port-env is implemented. Do not import test fixtures from production bundles.
+`createFencedSimulatedWalletLedgerSlice(db, customerId)` returns `orderProvider` plus `atomicAbandonAbsent` on the **same** `SqlDatabase` as the merchant ledger. `place` runs only when a `processing` `checkout_executions` row matches the quote id, customer, provider key, persisted quote terms fingerprint, and unexpired `expiresAt`; wallet debits reuse `placeSimulatedWalletOrderWithinTransaction` in that transaction. `atomicAbandonAbsent` synchronously rechecks wallet absence and marks the execution abandoned in one transaction — it does not infer safety from reconcile `absent` alone.
+
+Merge the slice with `customerAccount` and `verifyCustomerApproval` at the DO host; do not wire from `port-env` until production ports exist.
+
+## Integration
+
+`CustomerMerchantLedger` wires `createFencedSimulatedWalletLedgerSlice` via `createMerchantLedgerPorts`. Trusted first bind calls `initializeTrustedSimulatedWalletOnce` with `SIMULATED_WALLET_INITIAL_BALANCE_MINOR` from `constants.ts` (never public top-up).

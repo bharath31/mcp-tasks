@@ -20,6 +20,8 @@
     "auth0/approval-ui",
     "demo/refund-workflow",
     "demo/shopping-agent",
-    "demo/shopping-merchant"
+    "demo/shopping-agent-orchestration",
+    "demo/shopping-merchant",
+    "demo/shopping-live/worker"
   ]
 }

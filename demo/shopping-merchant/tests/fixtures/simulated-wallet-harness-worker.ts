@@ -7,6 +7,7 @@ import { AGENT_SESSION_SCOPES } from "../../src/identity/index.js";
 import { createMerchantLedger } from "../../src/ledger.js";
 import { createDoSqlDatabase, initMerchantSchema } from "../../src/sql.js";
 import {
+  createFencedSimulatedWalletLedgerSlice,
   createSimulatedWalletOrderProvider,
   peekSimulatedWalletOrder,
   provisionSimulatedWalletFunds,
@@ -29,10 +30,17 @@ type PlaceBody = {
 
 type LedgerRpcBody = {
   op:
-    "ledger-setup-checkout" | "ledger-execute-with-fault" | "ledger-reconcile";
+    | "ledger-setup-checkout"
+    | "ledger-execute-with-fault"
+    | "ledger-reconcile"
+    | "ledger-abandon"
+    | "ledger-fenced-place";
   customerId?: string;
   quoteId?: string;
   faultBeforeLedgerComplete?: boolean;
+  fenced?: boolean;
+  /** Default 10_000 when not fenced; pass 0 to leave wallet unfunded. */
+  provisionMinor?: number;
 };
 
 function wrapDbAfterDebitOrderFault(
@@ -108,14 +116,17 @@ export class SimulatedWalletStorageHarness extends DurableObject {
     return inner;
   }
 
-  private ledger(customerId: string) {
+  private ledger(customerId: string, fenced = false) {
     const db = this.dbForLedger();
+    const wallet = fenced
+      ? createFencedSimulatedWalletLedgerSlice(db, customerId)
+      : { orderProvider: createSimulatedWalletOrderProvider(db, customerId) };
     return createMerchantLedger(
       db,
       {
         customerAccount: createFixtureCustomerAccount(),
         verifyCustomerApproval: this.approval,
-        orderProvider: createSimulatedWalletOrderProvider(db, customerId),
+        ...wallet,
       },
       customerId,
     );
@@ -257,8 +268,12 @@ export class SimulatedWalletStorageHarness extends DurableObject {
       const body = (await request.json()) as LedgerRpcBody;
       const cid = body.customerId ?? customerId;
       if (body.op === "ledger-setup-checkout") {
-        const ledger = this.ledger(cid);
-        provisionSimulatedWalletFunds(this.baseDb(), cid, 10_000);
+        const ledger = this.ledger(cid, body.fenced === true);
+        const provisionMinor =
+          body.provisionMinor ?? (body.fenced === true ? 0 : 10_000);
+        if (provisionMinor > 0) {
+          provisionSimulatedWalletFunds(this.baseDb(), cid, provisionMinor);
+        }
         const cart = ledger.createCart(agent);
         ledger.updateCart(cart.id, agent, [
           { productId: "mug", quantity: 1, priceMinor: 1800, currency: "USD" },
@@ -277,7 +292,7 @@ export class SimulatedWalletStorageHarness extends DurableObject {
         }
         this.blockLedgerCompletion = body.faultBeforeLedgerComplete === true;
         try {
-          const ledger = this.ledger(cid);
+          const ledger = this.ledger(cid, body.fenced === true);
           const result = await ledger.executeQuote(body.quoteId, agent);
           return Response.json({
             result,
@@ -302,13 +317,71 @@ export class SimulatedWalletStorageHarness extends DurableObject {
         if (!body.quoteId) {
           return new Response("quoteId required", { status: 400 });
         }
-        const ledger = this.ledger(cid);
+        const ledger = this.ledger(cid, body.fenced === true);
         const before = readSimulatedWalletBalanceMinor(this.baseDb(), cid);
         const result = await ledger.reconcileQuote(body.quoteId, agent);
         return Response.json({
           result,
           balanceBefore: before,
           balanceAfter: readSimulatedWalletBalanceMinor(this.baseDb(), cid),
+        });
+      }
+      if (body.op === "ledger-abandon") {
+        if (!body.quoteId) {
+          return new Response("quoteId required", { status: 400 });
+        }
+        const ledger = this.ledger(cid, body.fenced === true);
+        const before = readSimulatedWalletBalanceMinor(this.baseDb(), cid);
+        const result = await ledger.abandonQuote(body.quoteId, agent);
+        const db = this.baseDb();
+        const providerKey = (
+          db
+            .exec(
+              "SELECT provider_key FROM checkout_executions WHERE quote_id = ?",
+              body.quoteId,
+            )
+            .one() as { provider_key: string } | null
+        )?.provider_key;
+        return Response.json({
+          result,
+          balanceBefore: before,
+          balanceAfter: readSimulatedWalletBalanceMinor(db, cid),
+          walletPeek: providerKey
+            ? peekSimulatedWalletOrder(db, providerKey)
+            : null,
+        });
+      }
+      if (body.op === "ledger-fenced-place") {
+        if (!body.quoteId) {
+          return new Response("quoteId required", { status: 400 });
+        }
+        const db = this.baseDb();
+        const slice = createFencedSimulatedWalletLedgerSlice(db, cid);
+        const record = db
+          .exec("SELECT data FROM quotes WHERE id = ?", body.quoteId)
+          .one();
+        if (!record) return new Response("quote missing", { status: 404 });
+        const quote = JSON.parse(record.data as string);
+        const providerKey = (
+          db
+            .exec(
+              "SELECT provider_key FROM checkout_executions WHERE quote_id = ?",
+              body.quoteId,
+            )
+            .one() as { provider_key: string } | null
+        )?.provider_key;
+        if (!providerKey) {
+          return new Response("execution missing", { status: 409 });
+        }
+        const before = readSimulatedWalletBalanceMinor(db, cid);
+        const placed = await slice.orderProvider.place({
+          quote,
+          idempotencyKey: providerKey,
+        });
+        return Response.json({
+          placed,
+          balanceBefore: before,
+          balanceAfter: readSimulatedWalletBalanceMinor(db, cid),
         });
       }
       return new Response("unknown ledger op", { status: 400 });
