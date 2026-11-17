@@ -734,13 +734,18 @@ export function createMerchantLedger(
     // in the same transaction may provide atomicAbandonAbsent on ports.
     /**
      * Trusted-host-only: atomically consume an approved CIBA challenge and record ledger approval.
-     * Does not call verifyCustomerApproval; challenge + quote rows in this DB are the proof boundary.
+     * Does not call verifyCustomerApproval or re-poll the CIBA provider.
+     *
+     * `purchase_ciba_challenges.status = 'approved'` is trusted internal state written exclusively
+     * by the CIBA coordinator after a verified direct provider poll (proof bound from the token
+     * response). Call only from the host seam after poll success — never from a public transition.
+     * Do not nest inside another ledger `db.transaction`; the bridge opens its own transaction.
      */
     recordCustomerApprovalFromCibaChallenge(
       challengeId: string,
       actor: HumanActor,
       quote: Quote,
-      options?: RecordCibaLedgerApprovalOptions,
+      options: RecordCibaLedgerApprovalOptions,
     ) {
       validateActor(actor);
       if (actor.kind !== "human") fail();

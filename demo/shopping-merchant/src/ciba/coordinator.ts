@@ -328,7 +328,13 @@ export async function pollPurchaseCibaChallenge(
   return sanitize(approved.challenge);
 }
 
-/** Single-use consumption gate before any ledger write (coordinator does not touch ledger). */
+/**
+ * Single-use consumption gate for coordinator-only flows (does not touch ledger).
+ *
+ * @deprecated For ledger integration use `recordApprovalWithConsumedChallenge` only.
+ * Calling this before the ledger bridge sets `consumed_at_ms` and leaves the bridge with
+ * `challenge_already_consumed` and no ledger approval.
+ */
 export async function consumeApprovedPurchaseCibaChallenge(
   store: PurchaseCibaChallengeStore,
   challengeId: string,

@@ -214,7 +214,7 @@ test("expired quote rejects bridge and leaves challenge unconsumed", async () =>
         challengeId,
         quote,
         actor: human,
-      }),
+      }, { nowMs, merchantDisplayName: MERCHANT }),
     /stale_quote/,
   );
   const row = db
@@ -313,19 +313,20 @@ test("concurrent bridge calls yield one approval", async () => {
   ]);
   const quote = await ledger.createQuote(cart.id, agent, "fixture-home");
   const challengeId = await seedApprovedChallenge(db, quote, nowMs);
+  const bridgeOpts = { nowMs, merchantDisplayName: MERCHANT };
   const attempts = await Promise.allSettled([
     (async () =>
       recordApprovalWithConsumedChallenge(db, CUSTOMER, {
         challengeId,
         quote,
         actor: human,
-      }))(),
+      }, bridgeOpts))(),
     (async () =>
       recordApprovalWithConsumedChallenge(db, CUSTOMER, {
         challengeId,
         quote,
         actor: human,
-      }))(),
+      }, bridgeOpts))(),
   ]);
   const fulfilled = attempts.filter((r) => r.status === "fulfilled");
   const rejected = attempts.filter((r) => r.status === "rejected");
@@ -333,6 +334,132 @@ test("concurrent bridge calls yield one approval", async () => {
   assert.equal(rejected.length, 1);
   const completed = await ledger.executeQuote(quote.id, agent);
   assert.equal(completed.status, "completed");
+  raw.close();
+});
+
+test("bridge requires merchantDisplayName", async () => {
+  const { raw, db } = openDb();
+  const ledger = ledgerWithoutVerifier(db);
+  const nowMs = 1_900_000_085_000;
+  const cart = ledger.createCart(agent);
+  ledger.updateCart(cart.id, agent, [
+    { productId: "mug", quantity: 1, priceMinor: 1800, currency: "USD" },
+  ]);
+  const quote = await ledger.createQuote(cart.id, agent, "fixture-home");
+  const challengeId = await seedApprovedChallenge(db, quote, nowMs);
+  assert.throws(
+    () =>
+      ledger.recordCustomerApprovalFromCibaChallenge(challengeId, human, quote, {
+        nowMs,
+        merchantDisplayName: "",
+      }),
+    /merchant_display_name_required/,
+  );
+  assert.throws(
+    () =>
+      recordApprovalWithConsumedChallenge(
+        db,
+        CUSTOMER,
+        { challengeId, quote, actor: human },
+        { nowMs, merchantDisplayName: "   " },
+      ),
+    /merchant_display_name_required/,
+  );
+  raw.close();
+});
+
+test("altered merchant display name rejects bridge without consuming", async () => {
+  const { raw, db } = openDb();
+  const ledger = ledgerWithoutVerifier(db);
+  const nowMs = 1_900_000_086_000;
+  const cart = ledger.createCart(agent);
+  ledger.updateCart(cart.id, agent, [
+    { productId: "mug", quantity: 1, priceMinor: 1800, currency: "USD" },
+  ]);
+  const quote = await ledger.createQuote(cart.id, agent, "fixture-home");
+  const challengeId = await seedApprovedChallenge(db, quote, nowMs);
+  assert.throws(
+    () =>
+      ledger.recordCustomerApprovalFromCibaChallenge(challengeId, human, quote, {
+        nowMs,
+        merchantDisplayName: "Spoofed Merchant",
+      }),
+    /challenge_terms_mismatch/,
+  );
+  const row = db
+    .exec(
+      "SELECT consumed_at_ms FROM purchase_ciba_challenges WHERE id = ?",
+      challengeId,
+    )
+    .one();
+  assert.equal(row?.consumed_at_ms, null);
+  raw.close();
+});
+
+test("quote routing hint spoof fails closed", async () => {
+  const { raw, db } = openDb();
+  const ledger = ledgerWithoutVerifier(db);
+  const nowMs = 1_900_000_087_000;
+  const cart = ledger.createCart(agent);
+  ledger.updateCart(cart.id, agent, [
+    { productId: "mug", quantity: 1, priceMinor: 1800, currency: "USD" },
+  ]);
+  const quote = await ledger.createQuote(cart.id, agent, "fixture-home");
+  const challengeId = await seedApprovedChallenge(db, quote, nowMs);
+  const spoofedHint = {
+    ...quote,
+    operationId: `${quote.operationId}-spoof`,
+  };
+  assert.throws(
+    () =>
+      recordApprovalWithConsumedChallenge(
+        db,
+        CUSTOMER,
+        { challengeId, quote: spoofedHint, actor: human },
+        { nowMs, merchantDisplayName: MERCHANT },
+      ),
+    /challenge_quote_mismatch/,
+  );
+  const row = db
+    .exec(
+      "SELECT consumed_at_ms FROM purchase_ciba_challenges WHERE id = ?",
+      challengeId,
+    )
+    .one();
+  assert.equal(row?.consumed_at_ms, null);
+  raw.close();
+});
+
+test("expired challenge rejects bridge without consuming", async () => {
+  const { raw, db } = openDb();
+  const ledger = ledgerWithoutVerifier(db);
+  const nowMs = 1_900_000_088_000;
+  const cart = ledger.createCart(agent);
+  ledger.updateCart(cart.id, agent, [
+    { productId: "mug", quantity: 1, priceMinor: 1800, currency: "USD" },
+  ]);
+  const quote = await ledger.createQuote(cart.id, agent, "fixture-home");
+  const challengeId = await seedApprovedChallenge(db, quote, nowMs);
+  db.exec(
+    "UPDATE purchase_ciba_challenges SET challenge_expires_at_ms = ? WHERE id = ?",
+    nowMs - 1,
+    challengeId,
+  );
+  assert.throws(
+    () =>
+      ledger.recordCustomerApprovalFromCibaChallenge(challengeId, human, quote, {
+        nowMs,
+        merchantDisplayName: MERCHANT,
+      }),
+    /challenge_expired/,
+  );
+  const row = db
+    .exec(
+      "SELECT consumed_at_ms FROM purchase_ciba_challenges WHERE id = ?",
+      challengeId,
+    )
+    .one();
+  assert.equal(row?.consumed_at_ms, null);
   raw.close();
 });
 

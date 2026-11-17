@@ -108,23 +108,39 @@ export type RecordCibaLedgerApprovalResult = {
 
 export type RecordCibaLedgerApprovalOptions = {
   nowMs?: number;
-  /** When set, current quote must still encode to the challenge's authorization_details fingerprint. */
-  merchantDisplayName?: string;
+  /** Host-configured merchant label; recomputed Guardian RAR must match the challenge fingerprint. */
+  merchantDisplayName: string;
 };
+
+function requireMerchantDisplayName(
+  options: RecordCibaLedgerApprovalOptions | undefined,
+): string {
+  const name = options?.merchantDisplayName?.trim();
+  if (!nonempty(name)) throw new Error("merchant_display_name_required");
+  return name;
+}
 
 /**
  * Atomically consumes an approved, unconsumed CIBA challenge and inserts a ledger customer approval.
  * Must run inside the same customer DO SQLite database as the merchant ledger (single transaction, no await).
+ *
+ * Call only from a non-transactional host seam — do not invoke inside another `db.transaction` callback;
+ * nested `BEGIN` without savepoints leaves rollback semantics undefined.
+ *
+ * Trust boundary: `purchase_ciba_challenges.status = 'approved'` is internal state set only by the CIBA
+ * coordinator after a verified direct provider poll (proof from the token response, not caller JSON).
+ * This function does not re-run JWT/RAR verification; hosts must call it only after poll success.
  */
 export function recordApprovalWithConsumedChallenge(
   db: SqlDatabase,
   customerId: string,
   input: RecordCibaLedgerApprovalInput,
-  options?: RecordCibaLedgerApprovalOptions,
+  options: RecordCibaLedgerApprovalOptions,
 ): RecordCibaLedgerApprovalResult {
   if (!nonempty(customerId)) throw new Error("customer_id_required");
   validateHumanActor(input.actor, customerId);
-  const nowMs = options?.nowMs ?? Date.now();
+  const merchantDisplayName = requireMerchantDisplayName(options);
+  const nowMs = options.nowMs ?? Date.now();
 
   return db.transaction(() => {
     const raw = db
@@ -208,18 +224,16 @@ export function recordApprovalWithConsumedChallenge(
       throw new Error("stale_quote");
     }
 
-    if (options?.merchantDisplayName) {
-      const details = buildGuardianPurchaseAuthorizationDetails({
-        quote: currentQuote,
-        merchantDisplayName: options.merchantDisplayName,
-        nowMs,
-      });
-      if (
-        canonicalAuthorizationDetailsJson(details) !==
-        challenge.canonicalAuthorizationDetailsJson
-      ) {
-        throw new Error("challenge_terms_mismatch");
-      }
+    const details = buildGuardianPurchaseAuthorizationDetails({
+      quote: currentQuote,
+      merchantDisplayName,
+      nowMs,
+    });
+    if (
+      canonicalAuthorizationDetailsJson(details) !==
+      challenge.canonicalAuthorizationDetailsJson
+    ) {
+      throw new Error("challenge_terms_mismatch");
     }
 
     db.exec(
@@ -268,15 +282,15 @@ export type CustomerApprovalLedgerBridge = {
 export function createCustomerApprovalLedgerBridge(
   db: SqlDatabase,
   customerId: string,
-  options?: Omit<RecordCibaLedgerApprovalOptions, "nowMs"> & {
+  options: Omit<RecordCibaLedgerApprovalOptions, "nowMs"> & {
     now?: () => number;
   },
 ): CustomerApprovalLedgerBridge {
   return {
     async recordApprovalWithConsumedChallenge(input) {
       return recordApprovalWithConsumedChallenge(db, customerId, input, {
-        merchantDisplayName: options?.merchantDisplayName,
-        nowMs: options?.now?.() ?? Date.now(),
+        merchantDisplayName: options.merchantDisplayName,
+        nowMs: options.now?.() ?? Date.now(),
       });
     },
   };
