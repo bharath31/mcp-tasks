@@ -77,6 +77,8 @@ jobs:
       - run: npm --prefix demo/shopping-merchant test
       - run: npm --prefix demo/shopping-agent run typecheck
       - run: npm --prefix demo/shopping-agent test
+      - run: npm --prefix demo/shopping-agent-orchestration run typecheck
+      - run: npm --prefix demo/shopping-agent-orchestration test
       - run: npm --prefix demo/shopping-live/web run build
       - run: npm --prefix demo/shopping-live/web test
       - run: npm --prefix demo/shopping-live/worker run build

@@ -1,0 +1,25 @@
+{
+  "name": "@nominee/shopping-agent-orchestration",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Owner-bound DO orchestration for shopping agent runs (Workers AI + Browser Run); shopping-only, no approval or execution.",
+  "scripts": {
+    "build": "tsc -p tsconfig.json --noEmit && tsc -p tsconfig.tests.json --noEmit",
+    "typecheck": "tsc -p tsconfig.json --noEmit && tsc -p tsconfig.tests.json --noEmit",
+    "test": "node --import tsx --test --test-concurrency=1 tests/*.test.ts"
+  },
+  "dependencies": {
+    "@nominee/shopping-agent": "file:../shopping-agent",
+    "zod": "4.6.7"
+  },
+  "devDependencies": {
+    "@cloudflare/workers-types": "4.20251117.0",
+    "@types/node": "22.19.1",
+    "tsx": "4.20.6",
+    "typescript": "5.9.3"
+  },
+  "engines": {
+    "node": ">=22"
+  }
+}
