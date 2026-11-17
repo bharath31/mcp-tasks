@@ -1,0 +1,21 @@
+{
+  "name": "@nominee/shopping-agent",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Bounded browser-shopping agent core: Workers AI plans host-owned storefront actions on Cloudflare Browser Run.",
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "typecheck": "tsc -p tsconfig.json",
+    "test": "node --import tsx --test --test-concurrency=1 tests/*.test.ts"
+  },
+  "dependencies": {
+    "@cloudflare/puppeteer": "1.4.0",
+    "zod": "4.6.7"
+  },
+  "devDependencies": {
+    "@cloudflare/workers-types": "4.20251117.0",
+    "tsx": "4.20.6",
+    "typescript": "5.9.3"
+  }
+}
