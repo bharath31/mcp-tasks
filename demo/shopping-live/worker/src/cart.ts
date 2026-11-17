@@ -3,6 +3,8 @@ import type {
   Quote as MerchantQuote,
 } from "../../../shopping-merchant/src/types.js";
 import { hostCatalogProduct } from "./catalog.js";
+import { merchantQuoteToClient } from "./client-quote.js";
+import { setActiveQuoteId } from "./checkout-session.js";
 import { customerStateRpc, customerStateStub } from "./customer-state-do.js";
 import { merchantLedgerRpc } from "./merchant-client.js";
 import { agentBrowserCartActor, browserShoppingActor } from "./actor.js";
@@ -23,6 +25,12 @@ export type ClientCart = {
   version?: number;
 };
 
+export type ClientQuoteDestination = {
+  id: string;
+  label: string;
+  detailsJson: string;
+};
+
 export type ClientQuote = {
   id: string;
   cartId: string;
@@ -35,6 +43,7 @@ export type ClientQuote = {
   currency: string;
   expiresAt: string;
   verified: boolean;
+  destination: ClientQuoteDestination;
 };
 
 function enrichCart(cart: Cart): ClientCart {
@@ -273,23 +282,37 @@ export async function createCustomerQuote(
     throw new Error(err.error ?? "quote_failed");
   }
   const quote = (await quoteRes.json()) as MerchantQuote;
-  return {
-    id: quote.id,
-    cartId: quote.cartId,
-    revision: quote.revision,
-    items: quote.items.map((item) => ({
-      productId: item.productId,
-      quantity: item.quantity,
-      name: item.name,
-      priceMinor: item.priceMinor,
-      currency: item.currency,
-    })),
-    subtotalMinor: quote.subtotalMinor,
-    taxMinor: quote.taxMinor,
-    shippingMinor: quote.shippingMinor,
-    totalMinor: quote.totalMinor,
-    currency: quote.currency,
-    expiresAt: quote.expiresAt,
-    verified: true,
-  };
+  const client = merchantQuoteToClient(
+    quote,
+    env.SHOPPING_MERCHANT_DISPLAY_NAME?.trim() || "Stillroom",
+  );
+  await setActiveQuoteId(env, customer.customerId, quote.id);
+  return client;
+}
+
+export async function readCustomerQuote(
+  env: ShoppingLiveEnv,
+  customer: AuthenticatedCustomer,
+  quoteId: string,
+): Promise<ClientQuote | null> {
+  const trimmed = quoteId.trim();
+  if (!trimmed) return null;
+  const browserSession = await browserSessionId(env, customer.customerId);
+  const actor = browserShoppingActor(env, customer.customerId, browserSession);
+  const quoteRes = await merchantLedgerRpc(env, customer.customerId, {
+    op: "getQuote",
+    actor,
+    quoteId: trimmed,
+  });
+  if (!quoteRes.ok) return null;
+  const quote = (await quoteRes.json()) as MerchantQuote;
+  const client = merchantQuoteToClient(
+    quote,
+    env.SHOPPING_MERCHANT_DISPLAY_NAME?.trim() || "Stillroom",
+  );
+  if (!client.verified) {
+    await setActiveQuoteId(env, customer.customerId, null);
+    return null;
+  }
+  return client;
 }

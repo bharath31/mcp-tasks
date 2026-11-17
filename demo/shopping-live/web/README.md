@@ -21,9 +21,11 @@ Output lands in `dist/`. Serve it as static assets; the Worker must implement th
 | `GET`  | `/api/agent/{id}`     | —                                             | Agent status and **only** server-originated events |
 | `GET`  | `/api/cart`           | —                                             | Cart snapshot for the signed-in customer           |
 | `POST` | `/api/cart/items`     | `{ "productId": string, "quantity": number }` | Add or update a line (UI sends `quantity: 1`)      |
-| `POST` | `/api/quote`          | `{}`                                          | Create or refresh a verified quote                 |
-| `POST` | `/api/approval/start` | `{ "quoteId": string }`                       | Begin Guardian approval                            |
-| `GET`  | `/api/approval/{id}`  | —                                             | Approval status (optional `reviewUrl`)             |
+| `POST` | `/api/quote`          | `{}`                                          | Create a verified quote (full ledger snapshot)     |
+| `GET`  | `/api/quote/{id}`     | —                                             | Re-fetch quote from ledger                         |
+| `GET`  | `/api/checkout/resume`| —                                             | Resume quote / approval / agent after refresh      |
+| `POST` | `/api/approval/start` | `{ "quoteId": string }`                       | Begin Guardian CIBA push approval                  |
+| `GET`  | `/api/approval/{id}`  | —                                             | Approval status (CIBA push; no default review URL) |
 | `POST` | `/api/order/execute`  | `{ "quoteId": string }`                       | Execute after approval                             |
 
 Authentication uses `loginUrl` / `logoutUrl` from `/api/session` only. The client stores no tokens in `localStorage`.

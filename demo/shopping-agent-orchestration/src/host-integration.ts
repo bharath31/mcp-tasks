@@ -8,7 +8,7 @@ export const WRANGLER_AGENT_RUN_SNIPPET = `{
       {
         "name": "AGENT_RUNS",
         "class_name": "ShoppingAgentRunState",
-        "script_name": "shopping-live"
+        "script_name": "nominee-shopping-live"
       }
     ]
   },

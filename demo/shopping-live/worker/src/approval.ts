@@ -1,6 +1,7 @@
 import type { SanitizedChallengeStatus } from "../../../shopping-merchant/src/ciba/challenge-types.js";
 import { shoppingCibaConfigured } from "../../../shopping-merchant/src/ciba/config.js";
 import { browserShoppingActor } from "./actor.js";
+import { setActiveChallengeId } from "./checkout-session.js";
 import { merchantLedgerRpc } from "./merchant-client.js";
 import { customerStateRpc, customerStateStub } from "./customer-state-do.js";
 import type { ShoppingLiveEnv } from "./env.js";
@@ -12,7 +13,10 @@ export type ApprovalRecord = {
   status: "pending" | "approved" | "denied" | "expired" | "failed";
   operationId: string;
   quoteRevision: number;
+  /** Only set when the provider returned a validated review URL (CIBA push has none). */
   reviewUrl?: string;
+  failureCode?: string;
+  delivery: "guardian_push";
 };
 
 function mapChallengeStatus(raw: SanitizedChallengeStatus): ApprovalRecord {
@@ -28,7 +32,21 @@ function mapChallengeStatus(raw: SanitizedChallengeStatus): ApprovalRecord {
     status,
     operationId: raw.operationId,
     quoteRevision: raw.quoteRevision,
+    delivery: "guardian_push",
+    ...(raw.failureCode ? { failureCode: raw.failureCode } : {}),
   };
+}
+
+async function persistChallengePointer(
+  env: ShoppingLiveEnv,
+  customerId: string,
+  record: ApprovalRecord,
+): Promise<void> {
+  if (record.status === "pending" || record.status === "approved") {
+    await setActiveChallengeId(env, customerId, record.id);
+    return;
+  }
+  await setActiveChallengeId(env, customerId, null);
 }
 
 export async function browserSessionId(
@@ -82,7 +100,9 @@ export async function startCustomerApproval(
   }
   const raw = (await started.json()) as SanitizedChallengeStatus;
   if (!raw.challengeId) throw new Error("approval_start_failed");
-  return mapChallengeStatus(raw);
+  const record = mapChallengeStatus(raw);
+  await persistChallengePointer(env, customer.customerId, record);
+  return record;
 }
 
 export async function pollCustomerApproval(
@@ -129,5 +149,7 @@ export async function pollCustomerApproval(
   }
   const raw = (await polled.json()) as SanitizedChallengeStatus;
   if (!raw.challengeId) throw new Error("approval_poll_failed");
-  return mapChallengeStatus(raw);
+  const record = mapChallengeStatus(raw);
+  await persistChallengePointer(env, customer.customerId, record);
+  return record;
 }

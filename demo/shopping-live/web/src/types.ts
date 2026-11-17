@@ -23,7 +23,14 @@ export type AgentEvent = {
 
 export type AgentRun = {
   id: string;
-  status: "pending" | "running" | "idle" | "failed" | "completed";
+  status:
+    | "pending"
+    | "running"
+    | "completed"
+    | "stopped"
+    | "budget_exhausted"
+    | "failed"
+    | "idle";
   goal?: string;
   events: AgentEvent[];
 };
@@ -42,6 +49,12 @@ export type Cart = {
   version?: number;
 };
 
+export type QuoteDestination = {
+  id: string;
+  label: string;
+  detailsJson: string;
+};
+
 export type Quote = {
   id: string;
   cartId: string;
@@ -54,13 +67,17 @@ export type Quote = {
   currency: string;
   expiresAt: string;
   verified: boolean;
+  destination: QuoteDestination;
 };
 
 export type ApprovalRecord = {
   id: string;
   quoteId: string;
   status: "pending" | "approved" | "denied" | "expired" | "failed";
+  /** Only when the provider returned a validated URL; CIBA push omits this. */
   reviewUrl?: string;
+  failureCode?: string;
+  delivery?: "guardian_push";
 };
 
 export type OrderResult = {

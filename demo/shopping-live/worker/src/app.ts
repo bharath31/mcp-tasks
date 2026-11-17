@@ -20,12 +20,14 @@ import {
 } from "./auth.js";
 import { assertSameOrigin, sessionCsrfToken } from "./csrf.js";
 import { resolveCustomerSession } from "./session.js";
+import { resumeCustomerCheckout } from "./checkout-resume.js";
 import {
   addAgentBrowserCartItem,
   addCartItem,
   createCustomerQuote,
   readAgentBrowserCart,
   readCustomerCart,
+  readCustomerQuote,
 } from "./cart.js";
 import { pollCustomerApproval, startCustomerApproval } from "./approval.js";
 import {
@@ -223,6 +225,24 @@ export function createShoppingApp(deps: AgentHostDeps = {}) {
         }
 
         try {
+          if (path === "/api/checkout/resume" && req.method === "GET") {
+            const resumed = await resumeCustomerCheckout(env, customer);
+            return json(resumed);
+          }
+
+          const quoteRead = path.match(/^\/api\/quote\/([^/]+)$/);
+          if (quoteRead && req.method === "GET") {
+            const quote = await readCustomerQuote(
+              env,
+              customer,
+              decodeURIComponent(quoteRead[1]!),
+            );
+            if (!quote) {
+              return problem(404, "quote_not_found", "Quote is missing or expired.");
+            }
+            return json({ quote });
+          }
+
           if (path === "/api/cart" && req.method === "GET") {
             const cart = await readCustomerCart(env, customer);
             return json({ cart });

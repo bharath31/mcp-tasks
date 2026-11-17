@@ -38,6 +38,8 @@ export type SanitizedChallengeStatus = {
   quoteId: string;
   operationId: string;
   quoteRevision: number;
+  /** Present for terminal failures; never includes secrets. */
+  failureCode?: string;
 };
 
 export type TrustedChallengeContext = {

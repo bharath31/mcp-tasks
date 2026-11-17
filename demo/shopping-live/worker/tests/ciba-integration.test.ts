@@ -325,6 +325,46 @@ test("CIBA denial surfaces terminal denied poll (not endless pending)", async ()
   assert.equal(polled.status, "denied");
 });
 
+test("checkout resume rehydrates quote and pending approval after refresh", async () => {
+  const { cookie, csrf } = await harness.login("auth0|ciba-resume");
+  const { quoteId } = await cartQuote(cookie, csrf);
+  const started = await apiJson<{
+    id: string;
+    status: string;
+    delivery?: string;
+  }>(harness.mf, "/api/approval/start", {
+    method: "POST",
+    headers: {
+      "content-type": "application/json",
+      origin: ORIGIN,
+      "x-nominee-csrf": csrf,
+    },
+    cookie,
+    body: JSON.stringify({ quoteId }),
+  });
+  assert.equal(started.status, 200);
+  assert.equal(started.body.status, "pending");
+  assert.equal(started.body.delivery, "guardian_push");
+
+  const resumed = await apiJson<{
+    quote?: { id: string; destination: { detailsJson: string } };
+    approval?: { id: string; status: string };
+  }>(harness.mf, "/api/checkout/resume", { cookie });
+  assert.equal(resumed.status, 200);
+  assert.equal(resumed.body.quote?.id, quoteId);
+  assert.ok(resumed.body.quote?.destination.detailsJson);
+  assert.equal(resumed.body.approval?.id, started.body.id);
+  assert.equal(resumed.body.approval?.status, "pending");
+
+  const duplicatePoll = await apiJson<{ status?: string }>(
+    harness.mf,
+    `/api/approval/${encodeURIComponent(started.body.id)}`,
+    { cookie },
+  );
+  assert.equal(duplicatePoll.status, 200);
+  assert.equal(duplicatePoll.body.status, "pending");
+});
+
 test("modified cart after quote rejects approval restart (stale quote)", async () => {
   const { cookie, csrf } = await harness.login("auth0|ciba-stale");
   const { quoteId } = await cartQuote(cookie, csrf);

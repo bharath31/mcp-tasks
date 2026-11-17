@@ -22,6 +22,8 @@ import {
 import { customerStateRpc, customerStateStub } from "./customer-state-do.js";
 import type { ShoppingLiveEnv } from "./env.js";
 import { json, problem, serviceUnavailable } from "./http.js";
+import { merchantOriginConfigured } from "./merchant-origin.js";
+import { setActiveAgentRunId } from "./checkout-session.js";
 import type { AuthenticatedCustomer } from "./session.js";
 
 export type AgentHostDeps = CustomerAccessTokenDeps & {
@@ -37,7 +39,7 @@ export function agentIntegrationConfigured(
     env.AGENT_RUNS &&
     env.AI &&
     env.BROWSER &&
-    env.MERCHANT_ORIGIN?.startsWith("http"),
+    merchantOriginConfigured(env.MERCHANT_ORIGIN),
   );
 }
 
@@ -187,6 +189,7 @@ export async function handleAgentStart(
     );
   }
 
+  await setActiveAgentRunId(env, customer.customerId, run.id);
   return json(run);
 }
 

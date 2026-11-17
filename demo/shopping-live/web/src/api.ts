@@ -213,6 +213,13 @@ export const shoppingApi = {
       method: "POST",
       body: JSON.stringify({ quoteId }),
     }),
+
+  checkoutResume: () =>
+    request<{
+      quote: Quote | null;
+      approval: ApprovalRecord | null;
+      agent: AgentRun | null;
+    }>("/checkout/resume"),
 };
 
 export type ShoppingApi = typeof shoppingApi;

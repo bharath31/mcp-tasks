@@ -19,6 +19,7 @@ Set these before a real deploy (never commit values):
 
 Optional vars (see `wrangler.jsonc`):
 
+- `MERCHANT_ORIGIN` — **required** for agent runs and Browser Run capability cookies. Set to the deployed Worker HTTPS origin (`https://<worker>.<your-subdomain>.workers.dev`) or a custom domain such as `https://shopping.nominee.dev`. Do **not** use the invalid two-label placeholder `https://nominee-shopping-live.workers.dev` (omits the account subdomain). Agent runs stay **503** until this is set.
 - `SHOPPING_PUBLIC_ORIGIN` — canonical origin when the Worker sits behind multiple hostnames (defaults to request origin)
 - `SHOPPING_MERCHANT_SHIPPING_ADDRESS_ID` — merchant-owned simulated destination id (must exist in the account port)
 - `SHOPPING_BROWSER_AGENT_ID` — server-assigned agent id for human browser carts (not client-supplied)
@@ -37,8 +38,10 @@ Optional vars (see `wrangler.jsonc`):
 | `GET /api/session`         | optional       | Login/logout URLs, wallet metadata                                                                                                   |
 | `GET /api/cart`            | session        | Merchant cart snapshot                                                                                                               |
 | `POST /api/cart/items`     | session + CSRF | Prices from server catalog only                                                                                                      |
-| `POST /api/quote`          | session + CSRF | Merchant-owned shipping address id                                                                                                   |
-| `POST /api/approval/start` | session + CSRF | Requires pinned CIBA env; **503** when unconfigured                                                                                  |
+| `POST /api/quote`          | session + CSRF | Merchant-owned shipping address id; returns full ledger snapshot (items, totals, ship-to)                                            |
+| `GET /api/quote/:id`       | session        | Re-read a persisted quote from the ledger (404 when expired)                                                                         |
+| `GET /api/checkout/resume` | session        | Session-bound quote, approval, and optional agent run pointers for page refresh                                                      |
+| `POST /api/approval/start` | session + CSRF | Guardian CIBA push; **503** when unconfigured                                                                                        |
 | `GET /api/approval/:id`    | session        | Poll + ledger bridge via production merchant DO                                                                                      |
 | `POST /api/order/execute`  | session + CSRF | **503** unless `SHOPPING_GUARDIAN_EXECUTE_ENABLED` is explicitly set after operator confirms live Guardian rendering and Auth0 proof |
 

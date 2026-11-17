@@ -18,8 +18,8 @@ Every purchase requires **direct customer approval** (`requirement` is always `c
 
 ## Layout
 
-- `src/identity/` — **unwired** Auth0 customer access-token verification and revocable agent session grants (no HTTP routes)
-- `src/ciba/` — **unwired** server-side Auth0 CIBA client, durable challenge coordination, and proof verification (no ledger wiring)
+- `src/identity/` — Auth0 customer access-token verification and revocable agent session grants (used by `demo/shopping-live`; no standalone HTTP routes in this package)
+- `src/ciba/` — server-side Auth0 CIBA client, durable challenge coordination, and proof verification (wired through `demo/shopping-live/worker` → merchant DO RPC)
 - `src/ledger.ts` — domain logic (Worker-compatible; no Node imports)
 - `src/sql.ts` — `SqlDatabase` adapter for DO `SqlStorage` and a Node test double
 - `src/merchant-do.ts` — `CustomerMerchantLedger` Durable Object (internal POST RPC only)
@@ -40,7 +40,7 @@ Host-only approval into DO state uses `hostInjectCustomerApproval` after the sam
 
 **`trustedForAgentCheckout` on ship-to addresses** is snapshotted on each quote (see `fixture-alternate` in tests). It records whether the address was marked low-friction for agent checkout in the address book; **every purchase still requires direct customer approval** (`requirement` is always `customer_verification`), so untrusted addresses do not bypass human approval.
 
-## Customer and agent identity (unwired)
+## Customer and agent identity (shopping-live)
 
 `src/identity/` provides Worker-safe building blocks only; nothing here is mounted on a public route.
 
@@ -58,12 +58,8 @@ Host-only approval into DO state uses `hostInjectCustomerApproval` after the sam
 
 ## Remaining integration work
 
-- Bind `src/identity` into a Worker entrypoint (customer login → grant session → forward `TrustedActor` to DO RPC)
-- Implement `AgentSessionStore` on a Durable Object with the documented atomic revoke semantics
-- Implement `CustomerApprovalLedgerBridge` and atomically consume approved CIBA challenges when recording ledger approval
-- Wire `src/ciba` into a Worker entrypoint and bind a durable `PurchaseCibaChallengeStore`
-- Wire Auth0 / Task Authority (or CIBA) into `verifyCustomerApproval` with operation-bound proof
-- Attach a real Worker entrypoint, wrangler bindings, and northstar storefront (out of scope for this slice)
+- Live Auth0 / Guardian CIBA push and Guardian transaction display on a production tenant (Miniflare uses mock outbound only)
+- Implement `AgentSessionStore` on a Durable Object with the documented atomic revoke semantics (shopping-live uses host session cookies today)
 - Replace `createFixtureOrderProvider` with a restart-durable provider that honors idempotency keys
 - Atomic coordination between address book mutations and open quotes (same gap as `packages/commerce`)
 - Hyperdrive or external account service if addresses leave the DO

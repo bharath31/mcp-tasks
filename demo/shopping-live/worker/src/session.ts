@@ -136,6 +136,9 @@ export async function clearSessionCookie(
       op: "revokeAgentCapabilitiesForSession",
       innerSid: session.innerSid,
     });
+    await customerStateRpc(stub, session.customerId, {
+      op: "clearCheckoutPointers",
+    });
   }
   const { clearAgentCapabilityCookie } = await import("./agent-capability.js");
   const clearCap = clearAgentCapabilityCookie(origin);

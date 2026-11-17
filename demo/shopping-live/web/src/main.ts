@@ -101,9 +101,46 @@ function el<K extends keyof HTMLElementTagNameMap>(
   return node;
 }
 
+function capabilitySummary(session: SessionResponse): string {
+  const caps = session.capabilities ?? {};
+  const parts: string[] = [];
+  parts.push(
+    caps.agentRuns
+      ? "Agent runs: configured"
+      : "Agent runs: not configured (Workers AI / Browser / MERCHANT_ORIGIN)",
+  );
+  parts.push(
+    caps.guardianApproval
+      ? "Guardian approval: configured"
+      : "Guardian approval: not configured",
+  );
+  parts.push(
+    caps.orderExecute
+      ? "Order execute: enabled"
+      : "Order execute: disabled until operator enables",
+  );
+  return parts.join(" · ");
+}
+
 function statusBanner(): HTMLElement {
   const connected = sessionVerified(ui.session);
   const wallet = ui.session?.merchant;
+  const children: HTMLElement[] = [
+    el("p", {}, [
+      connected
+        ? `Signed in · ${wallet?.label ?? "Merchant wallet"} (${wallet?.mode ?? "unknown"} until the API reports it). Checkout uses the merchant ledger quote and Guardian push approval — nothing is simulated in the browser.`
+        : ui.apiAvailable
+          ? "Shopping API is reachable but you are not signed in. Browser shopping, simulated wallet debits, and Guardian approval stay inactive until you authenticate."
+          : "No shopping API on this origin yet. This page is static UI only — no cart sync, agent runs, quotes, approvals, or orders are simulated locally.",
+    ]),
+  ];
+  if (connected && ui.session) {
+    children.push(
+      el("p", { className: "muted small", "data-nominee-capabilities": "true" }, [
+        capabilitySummary(ui.session),
+      ]),
+    );
+  }
   return el(
     "div",
     {
@@ -111,16 +148,80 @@ function statusBanner(): HTMLElement {
       "data-nominee-connection": connected ? "verified" : "unavailable",
       role: "status",
     },
-    [
-      el("p", {}, [
-        connected
-          ? `Signed in · ${wallet?.label ?? "Merchant wallet"} (${wallet?.mode ?? "unknown"} until the API reports it). Real browser shopping and Guardian approval apply only on a connected Nominee deployment.`
-          : ui.apiAvailable
-            ? "Shopping API is reachable but you are not signed in. Browser shopping, simulated wallet debits, and Guardian approval stay inactive until you authenticate."
-            : "No shopping API on this origin yet. This page is static UI only — no cart sync, agent runs, quotes, approvals, or orders are simulated locally.",
-      ]),
-    ],
+    children,
   );
+}
+
+function approvalStatusMessage(approval: ApprovalRecord): string {
+  switch (approval.status) {
+    case "pending":
+      return "Waiting for your response on an enrolled Guardian device (push). There is no in-browser review link for this CIBA flow.";
+    case "approved":
+      return "Guardian approval recorded on the merchant ledger.";
+    case "denied":
+      return "Guardian denied this purchase.";
+    case "expired":
+      return "The Guardian approval request expired.";
+    case "failed":
+      return approval.failureCode
+        ? `Guardian approval failed (${approval.failureCode}).`
+        : "Guardian approval failed.";
+  }
+}
+
+function quoteDetailsPanel(quote: Quote): HTMLElement {
+  const list = el("ul", { className: "quote-lines" });
+  for (const item of quote.items) {
+    list.append(
+      el("li", {}, [
+        `${item.name ?? item.productId} · qty ${item.quantity} · ${formatMoney(item.priceMinor ?? 0, item.currency ?? quote.currency)} each`,
+      ]),
+    );
+  }
+  return el("article", { className: "quote-detail", "data-nominee-quote": quote.id }, [
+    el("h4", {}, ["Merchant quote (ledger)"]),
+    list,
+    el("dl", { className: "quote-dl" }, [
+      el("div", {}, [
+        el("dt", {}, ["Subtotal"]),
+        el("dd", {}, [formatMoney(quote.subtotalMinor, quote.currency)]),
+      ]),
+      el("div", {}, [
+        el("dt", {}, ["Tax"]),
+        el("dd", {}, [formatMoney(quote.taxMinor, quote.currency)]),
+      ]),
+      el("div", {}, [
+        el("dt", {}, ["Shipping"]),
+        el("dd", {}, [formatMoney(quote.shippingMinor, quote.currency)]),
+      ]),
+      el("div", {}, [
+        el("dt", {}, ["Total"]),
+        el("dd", {}, [formatMoney(quote.totalMinor, quote.currency)]),
+      ]),
+      el("div", {}, [
+        el("dt", {}, ["Currency"]),
+        el("dd", {}, [quote.currency]),
+      ]),
+      el("div", {}, [
+        el("dt", {}, ["Expires"]),
+        el("dd", {}, [new Date(quote.expiresAt).toLocaleString()]),
+      ]),
+      el("div", {}, [
+        el("dt", {}, ["Ship-to"]),
+        el("dd", {}, [
+          `${quote.destination.label} (${quote.destination.id})`,
+        ]),
+      ]),
+      el("div", {}, [
+        el("dt", {}, ["Destination"]),
+        el("dd", { className: "mono small" }, [quote.destination.detailsJson]),
+      ]),
+      el("div", {}, [
+        el("dt", {}, ["Verified"]),
+        el("dd", {}, [quote.verified ? "Yes" : "No"]),
+      ]),
+    ]),
+  ]);
 }
 
 function authControls(): HTMLElement {
@@ -330,19 +431,7 @@ function checkoutPanel(): HTMLElement {
   );
 
   if (ui.quote) {
-    section.append(
-      el("dl", { className: "quote-dl", "data-nominee-quote": ui.quote.id }, [
-        el("div", {}, [el("dt", {}, ["Quote"]), el("dd", {}, [ui.quote.id])]),
-        el("div", {}, [
-          el("dt", {}, ["Total"]),
-          el("dd", {}, [formatMoney(ui.quote.totalMinor, ui.quote.currency)]),
-        ]),
-        el("div", {}, [
-          el("dt", {}, ["Verified"]),
-          el("dd", {}, [ui.quote.verified ? "Yes" : "No"]),
-        ]),
-      ]),
-    );
+    section.append(quoteDetailsPanel(ui.quote));
   }
   if (ui.quoteError) {
     section.append(
@@ -383,12 +472,15 @@ function checkoutPanel(): HTMLElement {
               rel: "noopener noreferrer",
               "data-nominee-action": "approval-open",
             },
-            ["Open Guardian review"],
+            ["Open provider review"],
           )
         : null;
     section.append(
       el("p", { "data-nominee-approval-status": ui.approval.status }, [
         `Approval ${ui.approval.id}: ${ui.approval.status}`,
+      ]),
+      el("p", { className: "hint", "data-nominee-approval-hint": "true" }, [
+        approvalStatusMessage(ui.approval),
       ]),
       ...(review ? [review] : []),
     );
@@ -777,6 +869,26 @@ async function pollAgent(id: string, generation: number): Promise<void> {
   render();
 }
 
+async function resumeCheckoutState(): Promise<void> {
+  if (!sessionVerified(ui.session)) return;
+  const result = await shoppingApi.checkoutResume();
+  if (!result.ok) return;
+  const { quote, approval, agent } = result.data;
+  if (quote) ui.quote = quote;
+  if (approval) {
+    ui.approval = approval;
+    if (approval.status === "pending") {
+      await pollApproval(approval.id, pollGeneration);
+    }
+  }
+  if (agent) {
+    ui.agent = agent;
+    if (agent.status === "running" || agent.status === "pending") {
+      scheduleAgentPoll(agent.id);
+    }
+  }
+}
+
 async function bootstrap(): Promise<void> {
   cancelPolls();
   ui.quote = null;
@@ -791,6 +903,7 @@ async function bootstrap(): Promise<void> {
     setAgentBrowserCsrfToken(null);
   }
   await refreshCart();
+  await resumeCheckoutState();
   render();
 }
 

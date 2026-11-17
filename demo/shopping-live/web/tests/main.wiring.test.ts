@@ -25,9 +25,16 @@ test("main clears aria-busy after render", () => {
   assert.match(mainSrc, /setAttribute\("aria-busy", "false"\)/);
 });
 
-test("Guardian review links use noopener noreferrer", () => {
+test("Guardian review links use noopener noreferrer when provider URL exists", () => {
   assert.match(mainSrc, /rel: "noopener noreferrer"/);
   assert.match(mainSrc, /safeNavHref\(\s*ui\.approval\.reviewUrl/s);
+});
+
+test("main documents Guardian push approval honestly", () => {
+  assert.match(mainSrc, /enrolled Guardian device/);
+  assert.match(mainSrc, /checkoutResume/);
+  assert.match(mainSrc, /resumeCheckoutState/);
+  assert.match(mainSrc, /quoteDetailsPanel/);
 });
 
 test("auth links validate URLs before href", () => {

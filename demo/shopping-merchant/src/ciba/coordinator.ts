@@ -39,12 +39,17 @@ function sanitize(challenge: PurchaseCibaChallenge): SanitizedChallengeStatus {
   else if (challenge.status === "denied") status = "denied";
   else if (challenge.status === "expired") status = "expired";
   else status = "unavailable";
+  const failureCode =
+    status === "pending" || status === "approved"
+      ? undefined
+      : challenge.failureCode ?? undefined;
   return {
     challengeId: challenge.id,
     status,
     quoteId: challenge.quoteId,
     operationId: challenge.operationId,
     quoteRevision: challenge.quoteRevision,
+    ...(failureCode ? { failureCode } : {}),
   };
 }
 

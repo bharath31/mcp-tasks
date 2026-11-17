@@ -20,6 +20,11 @@ const authed: SessionResponse = {
   loginUrl: "/login",
   logoutUrl: "/logout",
   merchant: { mode: "simulated", label: "Stillroom wallet" },
+  capabilities: {
+    agentRuns: true,
+    guardianApproval: true,
+    orderExecute: true,
+  },
 };
 
 const cart: Cart = {
@@ -39,12 +44,18 @@ const quote: Quote = {
   currency: "USD",
   expiresAt: "2030-01-01T00:00:00Z",
   verified: true,
+  destination: {
+    id: "addr_1",
+    label: "Home",
+    detailsJson: '{"country":"US"}',
+  },
 };
 
 const pending: ApprovalRecord = {
   id: "a1",
   quoteId: "q1",
   status: "pending",
+  delivery: "guardian_push",
 };
 
 const approved: ApprovalRecord = { ...pending, status: "approved" };
@@ -80,4 +91,38 @@ test("checkout gates fail closed without server state", () => {
   assert.equal(canExecuteOrder(authed, quote, null), "no_approval");
   assert.equal(canExecuteOrder(authed, quote, pending), "approval_pending");
   assert.equal(canExecuteOrder(authed, quote, approved), "ok");
+});
+
+test("capability flags gate agent, approval, and execute", () => {
+  const noAgent: SessionResponse = {
+    ...authed,
+    capabilities: {
+      agentRuns: false,
+      guardianApproval: true,
+      orderExecute: true,
+    },
+  };
+  const noGuardian: SessionResponse = {
+    ...authed,
+    capabilities: {
+      agentRuns: true,
+      guardianApproval: false,
+      orderExecute: true,
+    },
+  };
+  assert.equal(canStartAgent(noAgent), "agent_unavailable");
+  assert.equal(canStartApproval(noGuardian, quote), "guardian_unavailable");
+  assert.equal(
+    canExecuteOrder(noGuardian, quote, approved),
+    "guardian_unavailable",
+    "execute checks approval path first",
+  );
+  assert.equal(
+    canExecuteOrder(
+      { ...authed, capabilities: { ...authed.capabilities!, orderExecute: false } },
+      quote,
+      approved,
+    ),
+    "order_execute_unavailable",
+  );
 });

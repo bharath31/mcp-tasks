@@ -7,6 +7,9 @@ const BROWSER_SESSION_KEY = "nominee:browser_session_id";
 const CART_KEY = "nominee:cart_id";
 const SESSIONS_KEY = "nominee:sessions";
 const AGENT_CAPS_KEY = "nominee:agent_capabilities";
+const QUOTE_POINTER_KEY = "nominee:active_quote_id";
+const CHALLENGE_POINTER_KEY = "nominee:active_challenge_id";
+const AGENT_RUN_POINTER_KEY = "nominee:active_agent_run_id";
 
 type SessionRecord = {
   accessToken: string;
@@ -44,7 +47,12 @@ type CustomerStateRpc =
   | { op: "revokeAgentCapability"; runId: string }
   | { op: "revokeAgentCapabilitiesExcept"; keepRunId: string }
   | { op: "revokeAgentCapabilitiesForSession"; innerSid: string }
-  | { op: "revokeAllAgentCapabilities" };
+  | { op: "revokeAllAgentCapabilities" }
+  | { op: "setActiveQuoteId"; quoteId: string | null }
+  | { op: "setActiveChallengeId"; challengeId: string | null }
+  | { op: "setActiveAgentRunId"; agentRunId: string | null }
+  | { op: "getCheckoutPointers" }
+  | { op: "clearCheckoutPointers" };
 
 export class CustomerHostState extends DurableObject<ShoppingLiveEnv> {
   private sessionsLoaded = false;
@@ -253,6 +261,45 @@ export class CustomerHostState extends DurableObject<ShoppingLiveEnv> {
         case "revokeAllAgentCapabilities": {
           this.agentCaps.clear();
           await this.persistAgentCaps();
+          return Response.json({ ok: true });
+        }
+        case "setActiveQuoteId": {
+          if (body.quoteId) {
+            await this.ctx.storage.put(QUOTE_POINTER_KEY, body.quoteId);
+          } else {
+            await this.ctx.storage.delete(QUOTE_POINTER_KEY);
+          }
+          return Response.json({ ok: true });
+        }
+        case "setActiveChallengeId": {
+          if (body.challengeId) {
+            await this.ctx.storage.put(CHALLENGE_POINTER_KEY, body.challengeId);
+          } else {
+            await this.ctx.storage.delete(CHALLENGE_POINTER_KEY);
+          }
+          return Response.json({ ok: true });
+        }
+        case "setActiveAgentRunId": {
+          if (body.agentRunId) {
+            await this.ctx.storage.put(AGENT_RUN_POINTER_KEY, body.agentRunId);
+          } else {
+            await this.ctx.storage.delete(AGENT_RUN_POINTER_KEY);
+          }
+          return Response.json({ ok: true });
+        }
+        case "getCheckoutPointers": {
+          const quoteId =
+            (await this.ctx.storage.get<string>(QUOTE_POINTER_KEY)) ?? null;
+          const challengeId =
+            (await this.ctx.storage.get<string>(CHALLENGE_POINTER_KEY)) ?? null;
+          const agentRunId =
+            (await this.ctx.storage.get<string>(AGENT_RUN_POINTER_KEY)) ?? null;
+          return Response.json({ quoteId, challengeId, agentRunId });
+        }
+        case "clearCheckoutPointers": {
+          await this.ctx.storage.delete(QUOTE_POINTER_KEY);
+          await this.ctx.storage.delete(CHALLENGE_POINTER_KEY);
+          await this.ctx.storage.delete(AGENT_RUN_POINTER_KEY);
           return Response.json({ ok: true });
         }
         default:
