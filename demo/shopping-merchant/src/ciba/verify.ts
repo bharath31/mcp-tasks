@@ -93,15 +93,6 @@ export async function verifyCibaApprovalProof(
     );
   }
   if (
-    Array.isArray(payload.authorization_details) &&
-    payload.authorization_details.length > 0
-  ) {
-    throw new CibaProofRejected(
-      "details_mismatch",
-      "Refusing JWT-embedded authorization_details; require top-level OAuth response.",
-    );
-  }
-  if (
     !authorizationDetailsExactlyMatch(
       input.expectedDetailsJson,
       input.topLevelAuthorizationDetails,
@@ -110,6 +101,19 @@ export async function verifyCibaApprovalProof(
     throw new CibaProofRejected(
       "details_mismatch",
       "Top-level authorization_details do not match the saved challenge.",
+    );
+  }
+  if (
+    Array.isArray(payload.authorization_details) &&
+    payload.authorization_details.length > 0 &&
+    !authorizationDetailsExactlyMatch(
+      input.expectedDetailsJson,
+      payload.authorization_details,
+    )
+  ) {
+    throw new CibaProofRejected(
+      "details_mismatch",
+      "JWT-embedded authorization_details disagree with the saved challenge.",
     );
   }
   try {

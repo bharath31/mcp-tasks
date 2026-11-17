@@ -26,10 +26,13 @@ export {
 } from "./coordinator.js";
 export {
   normalizeShoppingCiba,
+  pinAuth0CibaEndpoint,
   shoppingCibaConfigured,
   type ShoppingCibaConfig,
   type ShoppingCibaEnv,
 } from "./config.js";
+export { initCibaChallengeSchema } from "./schema.js";
+export { createSqlCibaChallengeStore } from "./sql-ciba-challenge-store.js";
 export {
   CibaProofRejected,
   verifyCibaApprovalProof,

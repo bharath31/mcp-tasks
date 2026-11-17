@@ -172,6 +172,9 @@ export type PollPurchaseCibaInput = {
   quoteRevision: number;
   operationId: string;
   customerId: string;
+  /** Trusted host actor binding — must match values stored at challenge start. */
+  agentId: string | null;
+  sessionId: string | null;
 };
 
 export async function pollPurchaseCibaChallenge(
@@ -194,7 +197,9 @@ export async function pollPurchaseCibaChallenge(
     existing.quoteId !== input.quoteId ||
     existing.quoteRevision !== input.quoteRevision ||
     existing.operationId !== input.operationId ||
-    existing.customerId !== input.customerId
+    existing.customerId !== input.customerId ||
+    existing.agentId !== input.agentId ||
+    existing.sessionId !== input.sessionId
   ) {
     return {
       challengeId: input.challengeId,

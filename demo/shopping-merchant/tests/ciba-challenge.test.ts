@@ -109,6 +109,8 @@ describe("shopping CIBA challenge coordinator (mock provider, memory store)", ()
       quoteRevision: quote.revision,
       operationId: quote.operationId,
       customerId: TEST_CUSTOMER,
+      agentId: "agent-1",
+      sessionId: "sess-1",
     });
     assert.equal(pending.status, "pending");
 
@@ -120,6 +122,8 @@ describe("shopping CIBA challenge coordinator (mock provider, memory store)", ()
       quoteRevision: quote.revision,
       operationId: quote.operationId,
       customerId: TEST_CUSTOMER,
+      agentId: "agent-1",
+      sessionId: "sess-1",
     });
     assert.equal(approved.status, "approved");
     const consumed = await consumeApprovedPurchaseCibaChallenge(
@@ -153,6 +157,8 @@ describe("shopping CIBA challenge coordinator (mock provider, memory store)", ()
       quoteRevision: quote.revision,
       operationId: quote.operationId,
       customerId: "auth0|other",
+      agentId: null,
+      sessionId: null,
     });
     assert.equal(badCustomer.status, "unavailable");
     const badRevision = await pollPurchaseCibaChallenge(deps, {
@@ -161,8 +167,43 @@ describe("shopping CIBA challenge coordinator (mock provider, memory store)", ()
       quoteRevision: 99,
       operationId: quote.operationId,
       customerId: TEST_CUSTOMER,
+      agentId: null,
+      sessionId: null,
     });
     assert.equal(badRevision.status, "unavailable");
+  });
+
+  test("rejects agent and session mismatches on poll", async () => {
+    const deps = coordinatorDeps();
+    const quote = fakeQuote();
+    const started = await startPurchaseCibaChallenge(deps, {
+      customerId: TEST_CUSTOMER,
+      agentId: "agent-1",
+      sessionId: "sess-1",
+      quote,
+      merchantDisplayName: MERCHANT,
+      nowMs,
+    });
+    const badAgent = await pollPurchaseCibaChallenge(deps, {
+      challengeId: started.challengeId,
+      quoteId: quote.id,
+      quoteRevision: quote.revision,
+      operationId: quote.operationId,
+      customerId: TEST_CUSTOMER,
+      agentId: "agent-other",
+      sessionId: "sess-1",
+    });
+    assert.equal(badAgent.status, "unavailable");
+    const badSession = await pollPurchaseCibaChallenge(deps, {
+      challengeId: started.challengeId,
+      quoteId: quote.id,
+      quoteRevision: quote.revision,
+      operationId: quote.operationId,
+      customerId: TEST_CUSTOMER,
+      agentId: "agent-1",
+      sessionId: "sess-other",
+    });
+    assert.equal(badSession.status, "unavailable");
   });
 
   test("records denial without fabricating approval", async () => {
@@ -186,6 +227,8 @@ describe("shopping CIBA challenge coordinator (mock provider, memory store)", ()
       quoteRevision: quote.revision,
       operationId: quote.operationId,
       customerId: TEST_CUSTOMER,
+      agentId: null,
+      sessionId: null,
     });
     assert.equal(denied.status, "denied");
   });
@@ -271,6 +314,8 @@ describe("shopping CIBA challenge coordinator (mock provider, memory store)", ()
       quoteRevision: quote.revision,
       operationId: quote.operationId,
       customerId: TEST_CUSTOMER,
+      agentId: null,
+      sessionId: null,
     });
     assert.equal(result.status, "unavailable");
   });
@@ -296,6 +341,8 @@ describe("shopping CIBA challenge coordinator (mock provider, memory store)", ()
       quoteRevision: quote.revision,
       operationId: quote.operationId,
       customerId: TEST_CUSTOMER,
+      agentId: null,
+      sessionId: null,
     };
     const [a, b] = await Promise.all([
       pollPurchaseCibaChallenge(deps, input),
@@ -307,18 +354,58 @@ describe("shopping CIBA challenge coordinator (mock provider, memory store)", ()
     assert.equal(approvedCount, 1);
   });
 
-  test("verifyCibaApprovalProof rejects JWT-embedded authorization_details", async () => {
+  test("verifyCibaApprovalProof accepts matching JWT-embedded authorization_details", async () => {
     const detail = {
       type: GUARDIAN_PURCHASE_AUTHORIZATION_DETAILS_TYPE,
       instruction: "x",
       properties: {},
     };
     const req = {
-      authReqId: "jwt-only",
+      authReqId: "jwt-also",
       customerSubject: TEST_CUSTOMER,
       authorizationDetails: [detail],
       status: "approved" as const,
-      detailsInJwtOnly: true,
+      detailsInJwtAlso: true,
+    };
+    const token = await mock.mintAccessToken(req);
+    await verifyCibaApprovalProof(
+      {
+        config: {
+          bcAuthorizeUrl: mock.bcAuthorizeUrl,
+          tokenUrl: mock.tokenUrl,
+          clientId: "x",
+          clientSecret: "y",
+          issuer: mock.issuer,
+          audience: mock.audience,
+          jwksDomain: new URL(mock.issuer).hostname,
+          timeoutMs: 5000,
+        },
+        testVerifyKey: mock.verifyKey,
+      },
+      {
+        accessToken: token,
+        topLevelAuthorizationDetails: [detail],
+        expectedDetailsJson: JSON.stringify(detail),
+        expectedCustomerId: TEST_CUSTOMER,
+        quote: fakeQuote(),
+        nowMs,
+      },
+    );
+  });
+
+  test("verifyCibaApprovalProof rejects inconsistent JWT authorization_details", async () => {
+    const detail = {
+      type: GUARDIAN_PURCHASE_AUTHORIZATION_DETAILS_TYPE,
+      instruction: "x",
+      properties: {},
+    };
+    const req = {
+      authReqId: "jwt-mismatch",
+      customerSubject: TEST_CUSTOMER,
+      authorizationDetails: [detail],
+      status: "approved" as const,
+      detailsInJwtAlso: true,
+      jwtDetailsMismatch: true,
     };
     const token = await mock.mintAccessToken(req);
     await assert.rejects(
@@ -346,7 +433,42 @@ describe("shopping CIBA challenge coordinator (mock provider, memory store)", ()
             nowMs,
           },
         ),
-      (e: unknown) => e instanceof Error && e.name === "CibaProofRejected",
+      (e: unknown) =>
+        e instanceof Error &&
+        e.name === "CibaProofRejected" &&
+        "code" in e &&
+        (e as { code: string }).code === "details_mismatch",
     );
+  });
+
+  test("missing top-level authorization_details fails closed at poll", async () => {
+    const store = createMemoryCibaChallengeStore();
+    const deps = coordinatorDeps(store);
+    const quote = fakeQuote();
+    const started = await startPurchaseCibaChallenge(deps, {
+      customerId: TEST_CUSTOMER,
+      agentId: null,
+      sessionId: null,
+      quote,
+      merchantDisplayName: MERCHANT,
+      nowMs,
+    });
+    const row = (await store.get(started.challengeId))!;
+    const req = mock.requests.get(row.authReqId!)!;
+    req.omitTopLevelDetails = true;
+    mock.decide(row.authReqId!, true);
+    nowMs += 2_000;
+    const result = await pollPurchaseCibaChallenge(deps, {
+      challengeId: started.challengeId,
+      quoteId: quote.id,
+      quoteRevision: quote.revision,
+      operationId: quote.operationId,
+      customerId: TEST_CUSTOMER,
+      agentId: null,
+      sessionId: null,
+    });
+    assert.equal(result.status, "unavailable");
+    const after = await store.get(started.challengeId);
+    assert.equal(after?.status, "uncertain");
   });
 });

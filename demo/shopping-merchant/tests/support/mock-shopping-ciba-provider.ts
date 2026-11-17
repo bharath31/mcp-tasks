@@ -13,8 +13,12 @@ export type MockCibaRequest = {
   status: "pending" | "approved" | "denied";
   /** When true, token response omits top-level authorization_details (Auth0-negative test). */
   omitTopLevelDetails?: boolean;
-  /** When set, embed authorization_details only in the JWT (must be rejected). */
+  /** When set, embed authorization_details only in the JWT (top-level omitted). */
   detailsInJwtOnly?: boolean;
+  /** When set, duplicate authorization_details in JWT and top-level OAuth body. */
+  detailsInJwtAlso?: boolean;
+  /** When set with detailsInJwtAlso, JWT carries different details than top-level. */
+  jwtDetailsMismatch?: boolean;
 };
 
 export type MockShoppingCibaProvider = {
@@ -44,8 +48,11 @@ export async function createMockShoppingCibaProvider(): Promise<MockShoppingCiba
   const mintAccessToken = async (req: MockCibaRequest) => {
     const now = Math.floor(Date.now() / 1000);
     const body: Record<string, unknown> = { scope: "openid" };
-    if (req.detailsInJwtOnly) {
-      body.authorization_details = req.authorizationDetails;
+    if (req.detailsInJwtOnly || req.detailsInJwtAlso) {
+      const details = req.jwtDetailsMismatch
+        ? [{ type: "wrong", instruction: "mismatch" }]
+        : req.authorizationDetails;
+      body.authorization_details = details;
     }
     return new SignJWT(body)
       .setProtectedHeader({ alg: "RS256", kid: "ciba-mock" })
@@ -130,7 +137,7 @@ export async function createMockShoppingCibaProvider(): Promise<MockShoppingCiba
         token_type: "Bearer",
         expires_in: 300,
       };
-      if (!req.omitTopLevelDetails && !req.detailsInJwtOnly) {
+      if (!req.omitTopLevelDetails) {
         json.authorization_details = req.authorizationDetails;
       }
       return new Response(JSON.stringify(json), {

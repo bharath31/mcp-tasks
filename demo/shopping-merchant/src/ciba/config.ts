@@ -47,13 +47,44 @@ function nonEmptySecret(raw: string | undefined): string | null {
   return trimmed;
 }
 
+/** Auth0 CIBA URLs must share the configured tenant origin and fixed paths. */
+export function pinAuth0CibaEndpoint(
+  raw: string | undefined,
+  auth0Domain: string,
+  path: "/bc-authorize" | "/oauth/token",
+): string | null {
+  const pinned = pinnedHttpsUrl(raw);
+  if (!pinned) return null;
+  try {
+    const url = new URL(pinned);
+    if (url.hostname !== auth0Domain) return null;
+    const normalizedPath =
+      url.pathname.length > 1 && url.pathname.endsWith("/")
+        ? url.pathname.slice(0, -1)
+        : url.pathname;
+    if (normalizedPath !== path) return null;
+    if (url.search || url.hash) return null;
+    return `https://${auth0Domain}${path}`;
+  } catch {
+    return null;
+  }
+}
+
 export function normalizeShoppingCiba(
   env: Partial<ShoppingCibaEnv>,
 ): ShoppingCibaConfig | null {
   const identity = normalizeShoppingIdentity(env);
   if (!identity) return null;
-  const bcAuthorizeUrl = pinnedHttpsUrl(env.SHOPPING_CIBA_BC_AUTHORIZE_URL);
-  const tokenUrl = pinnedHttpsUrl(env.SHOPPING_CIBA_TOKEN_URL);
+  const bcAuthorizeUrl = pinAuth0CibaEndpoint(
+    env.SHOPPING_CIBA_BC_AUTHORIZE_URL,
+    identity.SHOPPING_AUTH0_DOMAIN,
+    "/bc-authorize",
+  );
+  const tokenUrl = pinAuth0CibaEndpoint(
+    env.SHOPPING_CIBA_TOKEN_URL,
+    identity.SHOPPING_AUTH0_DOMAIN,
+    "/oauth/token",
+  );
   const clientId = nonEmptySecret(env.SHOPPING_CIBA_CLIENT_ID);
   const clientSecret = nonEmptySecret(env.SHOPPING_CIBA_CLIENT_SECRET);
   if (!bcAuthorizeUrl || !tokenUrl || !clientId || !clientSecret) return null;
