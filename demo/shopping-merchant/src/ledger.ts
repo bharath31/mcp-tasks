@@ -138,6 +138,38 @@ export function createMerchantLedger(
       .one();
   }
 
+  function executionSnapshot(quoteId: string, actor: TrustedActor) {
+    const record = requireRow(
+      db.exec("SELECT * FROM quotes WHERE id = ?", quoteId).one(),
+    );
+    const quote = quoteView(record.data as string);
+    const cartRow = requireRow(getCartRow(record.cart_id as string));
+    executionActor(cartRow, actor);
+    if (quote.customerId !== customerId) fail();
+    if (actor.customerId !== undefined && actor.customerId !== customerId) {
+      fail();
+    }
+    const execution = db
+      .exec(
+        `SELECT * FROM checkout_executions
+         WHERE operation_id = ? AND quote_id = ? AND customer_id = ?`,
+        quote.operationId,
+        quoteId,
+        customerId,
+      )
+      .one();
+    if (
+      execution &&
+      (execution.provider_key !== quote.operationId ||
+        !["processing", "completed", "abandoned"].includes(
+          execution.status as string,
+        ))
+    ) {
+      throw new Error("invalid_execution");
+    }
+    return { quote, execution };
+  }
+
   function cartView(row: SqlRow): Cart {
     return {
       id: row.id as string,
@@ -598,6 +630,7 @@ export function createMerchantLedger(
             order: JSON.parse(claim.row.order_data as string) as OrderSnapshot,
           };
         }
+        if (claim.row.status === "abandoned") return { status: "abandoned" };
         return { status: "processing" };
       }
 
@@ -691,6 +724,40 @@ export function createMerchantLedger(
         quote.operationId,
       );
       return { status: "completed", order: snapshot };
+    },
+
+    // Only an adapter that atomically fences all dispatch and updates this ledger
+    // in the same transaction may provide atomicAbandonAbsent on ports.
+    async abandonQuote(
+      quoteId: string,
+      actor: TrustedActor,
+    ): Promise<CompletionResult> {
+      const { quote, execution } = executionSnapshot(quoteId, actor);
+      if (!execution) throw new Error("checkout_not_started");
+      if (execution.status === "completed") {
+        return {
+          status: "completed",
+          order: JSON.parse(execution.order_data as string) as OrderSnapshot,
+        };
+      }
+      if (execution.status === "abandoned") return { status: "abandoned" };
+      if (typeof ports.atomicAbandonAbsent !== "function") {
+        throw new Error("safe_abandon_unavailable");
+      }
+      await ports.atomicAbandonAbsent({
+        quote: structuredClone(quote),
+        idempotencyKey: execution.provider_key as string,
+      });
+      const latest = executionSnapshot(quoteId, actor).execution;
+      if (!latest) throw new Error("checkout_not_started");
+      if (latest.status === "completed") {
+        return {
+          status: "completed",
+          order: JSON.parse(latest.order_data as string) as OrderSnapshot,
+        };
+      }
+      if (latest.status === "abandoned") return { status: "abandoned" };
+      return { status: "processing" };
     },
   };
 }

@@ -118,8 +118,18 @@ export type CustomerApprovalVerifier = (input: {
   quote: Quote;
 }) => Promise<boolean>;
 
+/**
+ * Security-critical: must atomically fence every late provider submission for the key
+ * and mark the same execution abandoned in one durable transaction with the ledger it updates.
+ */
+export type AtomicAbandonAbsent = (input: {
+  quote: Quote;
+  idempotencyKey: string;
+}) => Promise<void>;
+
 export type MerchantLedgerPorts = {
   customerAccount: CustomerAccountPort;
   verifyCustomerApproval: CustomerApprovalVerifier;
   orderProvider: OrderProviderPort;
+  atomicAbandonAbsent?: AtomicAbandonAbsent;
 };
