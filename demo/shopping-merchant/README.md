@@ -19,6 +19,7 @@ Every purchase requires **direct customer approval** (`requirement` is always `c
 ## Layout
 
 - `src/identity/` — **unwired** Auth0 customer access-token verification and revocable agent session grants (no HTTP routes)
+- `src/ciba/` — **unwired** server-side Auth0 CIBA client, durable challenge coordination, and proof verification (no ledger wiring)
 - `src/ledger.ts` — domain logic (Worker-compatible; no Node imports)
 - `src/sql.ts` — `SqlDatabase` adapter for DO `SqlStorage` and a Node test double
 - `src/merchant-do.ts` — `CustomerMerchantLedger` Durable Object (internal POST RPC only)
@@ -59,6 +60,8 @@ Host-only approval into DO state uses `hostInjectCustomerApproval` after the sam
 
 - Bind `src/identity` into a Worker entrypoint (customer login → grant session → forward `TrustedActor` to DO RPC)
 - Implement `AgentSessionStore` on a Durable Object with the documented atomic revoke semantics
+- Implement `CustomerApprovalLedgerBridge` and atomically consume approved CIBA challenges when recording ledger approval
+- Wire `src/ciba` into a Worker entrypoint and bind a durable `PurchaseCibaChallengeStore`
 - Wire Auth0 / Task Authority (or CIBA) into `verifyCustomerApproval` with operation-bound proof
 - Attach a real Worker entrypoint, wrangler bindings, and northstar storefront (out of scope for this slice)
 - Replace `createFixtureOrderProvider` with a restart-durable provider that honors idempotency keys
