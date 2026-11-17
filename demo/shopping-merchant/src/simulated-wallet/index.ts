@@ -1,7 +1,12 @@
 export {
   createSimulatedWalletOrderProvider,
   peekSimulatedWalletOrder,
+  placeSimulatedWalletOrderWithinTransaction,
 } from "./provider.js";
+export {
+  createFencedSimulatedWalletLedgerSlice,
+  ledgerAllowsFencedWalletPlace,
+} from "./fenced-ledger-adapter.js";
 export {
   provisionSimulatedWalletFunds,
   readSimulatedWalletBalanceMinor,
